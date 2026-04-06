@@ -134,15 +134,33 @@ MCP Server (6 tools)
 Storage: SQLite (FTS5 + vector BLOBs + graph edges)
 ```
 
+## Free vs Pro
+
+The core code search MCP is **free and open source** (MIT). Use it forever, no limits.
+
+**codesearch-mcp Pro** (coming soon) adds:
+- Session memory — decisions, preferences, patterns that persist across sessions
+- Memory quality scoring — confidence levels, staleness detection, contradiction resolution
+- Git-state linked memories — know what the code looked like when a decision was made
+- Cross-project pattern transfer — your coding style follows you
+- Larger embedding models for better search quality
+
+**codesearch-mcp Team** (coming soon) adds:
+- Shared team memory — architectural decisions, coding conventions
+- Cross-developer AI coordination
+- On-prem deployment
+- Admin dashboard
+
 ## Roadmap
 
 - [ ] Tree-sitter WASM for more accurate AST parsing
 - [ ] Cross-repository search
-- [ ] Session memory (decisions, preferences, patterns)
-- [ ] Team shared knowledge
-- [ ] Git history integration (who changed what and why)
 - [ ] npm publish (`npx codesearch-mcp`)
+- [ ] Pro: Session memory with quality scoring
+- [ ] Pro: Git-state linked memories
+- [ ] Team: Shared team knowledge layer
+- [ ] Team: On-prem deployment
 
 ## License
 
-MIT
+MIT — free for personal and commercial use.

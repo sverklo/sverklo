@@ -1,12 +1,17 @@
 {
-  "name": "@nicenemo/codesearch-mcp",
+  "name": "codesearch-mcp",
   "version": "0.1.0",
-  "description": "Local-first code search MCP server with AST parsing, semantic search, and PageRank ranking",
+  "description": "Local-first code search MCP server with AST parsing, semantic search, and PageRank ranking. Gives AI coding agents deep codebase understanding.",
   "type": "module",
   "bin": {
     "codesearch-mcp": "./dist/bin/codesearch-mcp.js"
   },
   "main": "./dist/src/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -19,26 +24,30 @@
   "keywords": [
     "mcp",
     "code-search",
-    "tree-sitter",
     "semantic-search",
+    "codebase-indexing",
+    "pagerank",
     "claude-code",
     "cursor",
-    "ai-coding"
+    "ai-coding",
+    "developer-tools",
+    "code-intelligence"
   ],
+  "homepage": "https://github.com/nicenemo/codesearch-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicenemo/codesearch-mcp.git"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "better-sqlite3": "^11.7.0",
     "chokidar": "^4.0.0",
     "ignore": "^7.0.0",
-    "onnxruntime-node": "^1.21.0",
-    "web-tree-sitter": "^0.24.7",
-    "xxhash-wasm": "^1.1.0",
-    "gpt-tokenizer": "^2.8.0"
+    "onnxruntime-node": "^1.21.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
