@@ -1,7 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 
 export const forgetTool = {
-  name: "forget",
+  name: "sverklo_forget",
   description: "Remove a memory by ID.",
   inputSchema: {
     type: "object" as const,

@@ -1,10 +1,10 @@
 {
   "name": "sverklo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sverklo — local-first code intelligence MCP server. Hybrid search, PageRank ranking, semantic embeddings. Zero config.",
   "type": "module",
   "bin": {
-    "sverklo": "./dist/bin/sverklo.js"
+    "sverklo": "dist/bin/sverklo.js"
   },
   "main": "./dist/src/index.js",
   "files": [
@@ -37,7 +37,7 @@
   "homepage": "https://github.com/nicenemo/sverklo",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicenemo/sverklo.git"
+    "url": "git+https://github.com/nicenemo/sverklo.git"
   },
   "license": "MIT",
   "engines": {

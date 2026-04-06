@@ -1,7 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 
 export const indexStatusTool = {
-  name: "index_status",
+  name: "sverklo_status",
   description:
     "Check the status of the codebase index. Shows whether indexing is complete, how many files are indexed, and when the index was last updated.",
   inputSchema: {

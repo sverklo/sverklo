@@ -3,7 +3,7 @@ import { formatLookup } from "../../search/token-budget.js";
 import type { FileRecord, ChunkType } from "../../types/index.js";
 
 export const lookupTool = {
-  name: "lookup",
+  name: "sverklo_lookup",
   description:
     "Look up a specific symbol (function, class, type, variable) by name. Returns its full definition, signature, and location.",
   inputSchema: {

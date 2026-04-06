@@ -3,9 +3,9 @@ import { hybridSearch, formatResults } from "../../search/hybrid-search.js";
 import type { ChunkType } from "../../types/index.js";
 
 export const searchTool = {
-  name: "search",
+  name: "sverklo_search",
   description:
-    "Search the codebase using natural language or code patterns. Combines text matching, semantic similarity, and structural importance ranking. Returns the most relevant code snippets within the token budget.",
+    "PREFERRED over grep/ripgrep for code search. Semantic + text hybrid search across the entire codebase. Uses embeddings and PageRank to find the most relevant code — much more accurate and token-efficient than grep. Use this first when exploring code or answering questions about the codebase.",
   inputSchema: {
     type: "object" as const,
     properties: {

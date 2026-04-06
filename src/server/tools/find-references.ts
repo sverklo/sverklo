@@ -2,7 +2,7 @@ import type { Indexer } from "../../indexer/indexer.js";
 import type { FileRecord } from "../../types/index.js";
 
 export const findReferencesTool = {
-  name: "find_references",
+  name: "sverklo_refs",
   description:
     "Find all references to a symbol across the codebase. Shows where a function, class, or type is imported, called, or used.",
   inputSchema: {

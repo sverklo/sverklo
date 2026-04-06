@@ -2,9 +2,9 @@ import type { Indexer } from "../../indexer/indexer.js";
 import { formatOverview, type OverviewEntry } from "../../search/token-budget.js";
 
 export const overviewTool = {
-  name: "overview",
+  name: "sverklo_overview",
   description:
-    "Get a structural overview of the codebase showing the most important files and their key symbols (functions, classes, types), ranked by structural importance (PageRank).",
+    "Get a structural map of the codebase. Shows the most important files and their key symbols ranked by dependency importance (PageRank). Use this FIRST when starting work on an unfamiliar codebase or directory.",
   inputSchema: {
     type: "object" as const,
     properties: {

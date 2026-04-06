@@ -2,7 +2,7 @@ import type { Indexer } from "../../indexer/indexer.js";
 import type { FileRecord } from "../../types/index.js";
 
 export const dependenciesTool = {
-  name: "dependencies",
+  name: "sverklo_deps",
   description:
     "Show what a file imports/depends on and what depends on it. Helps understand the impact of changing a file.",
   inputSchema: {

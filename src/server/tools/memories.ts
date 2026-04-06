@@ -2,7 +2,7 @@ import type { Indexer } from "../../indexer/indexer.js";
 import type { Memory, MemoryCategory } from "../../types/index.js";
 
 export const memoriesTool = {
-  name: "memories",
+  name: "sverklo_memories",
   description:
     "List all memories for the current project. Shows memory health: staleness, confidence, access frequency.",
   inputSchema: {

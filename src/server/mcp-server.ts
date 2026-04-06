@@ -73,7 +73,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     const { name, arguments: args } = request.params;
 
     // Ensure index is ready for search operations
-    if (name !== "index_status") {
+    if (name !== "sverklo_status") {
       await indexPromise;
     }
 
@@ -81,34 +81,34 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       let result: string;
 
       switch (name) {
-        case "search":
+        case "sverklo_search":
           result = await handleSearch(indexer, args || {});
           break;
-        case "overview":
+        case "sverklo_overview":
           result = handleOverview(indexer, args || {});
           break;
-        case "lookup":
+        case "sverklo_lookup":
           result = handleLookup(indexer, args || {});
           break;
-        case "find_references":
+        case "sverklo_refs":
           result = handleFindReferences(indexer, args || {});
           break;
-        case "dependencies":
+        case "sverklo_deps":
           result = handleDependencies(indexer, args || {});
           break;
-        case "index_status":
+        case "sverklo_status":
           result = handleIndexStatus(indexer);
           break;
-        case "remember":
+        case "sverklo_remember":
           result = await handleRemember(indexer, args || {});
           break;
-        case "recall":
+        case "sverklo_recall":
           result = await handleRecall(indexer, args || {});
           break;
-        case "forget":
+        case "sverklo_forget":
           result = handleForget(indexer, args || {});
           break;
-        case "memories":
+        case "sverklo_memories":
           result = handleMemories(indexer, args || {});
           break;
         default:

@@ -4,7 +4,7 @@ import { getGitState } from "../../memory/git-state.js";
 import type { MemoryCategory } from "../../types/index.js";
 
 export const rememberTool = {
-  name: "remember",
+  name: "sverklo_remember",
   description:
     "Save a decision, preference, pattern, or important context as a persistent memory. Memories are searchable semantically and linked to the current git state.",
   inputSchema: {

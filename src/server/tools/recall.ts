@@ -6,7 +6,7 @@ import type { Memory, MemoryCategory } from "../../types/index.js";
 const RRF_K = 60;
 
 export const recallTool = {
-  name: "recall",
+  name: "sverklo_recall",
   description:
     "Search memories semantically. Finds past decisions, preferences, and patterns relevant to a query.",
   inputSchema: {
