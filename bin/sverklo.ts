@@ -11,25 +11,49 @@ if (command === "setup" || command === "install") {
   process.exit(0);
 }
 
+if (command === "ui" || command === "dashboard") {
+  const projectPath = resolve(args[1] || process.cwd());
+  const { existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { homedir } = await import("node:os");
+  const modelDir = join(homedir(), ".sverklo", "models");
+  if (!existsSync(join(modelDir, "model.onnx"))) {
+    console.log("Downloading embedding model (~90MB)...");
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { startHttpServer } = await import("../src/server/http-server.js");
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+  startHttpServer(indexer);
+  const port = 3847;
+  console.log(`\nSverklo Dashboard: http://localhost:${port}\n`);
+  // Open browser
+  const { exec } = await import("node:child_process");
+  exec(`open http://localhost:${port} 2>/dev/null || xdg-open http://localhost:${port} 2>/dev/null`);
+  // Keep alive
+  process.on("SIGINT", () => { indexer.close(); process.exit(0); });
+  await new Promise(() => {}); // block forever
+}
+
 if (command === "--help" || command === "-h") {
   console.log(`
 sverklo — code intelligence for AI agents
 
 Usage:
   sverklo [project-path]    Start the MCP server (stdio transport)
+  sverklo ui [project-path] Open the web dashboard
   sverklo setup             Download the embedding model (~90MB)
   sverklo --help            Show this help
 
-MCP Tools:
-  search          Hybrid text + semantic code search
-  overview        Structural codebase map ranked by importance
-  lookup          Direct symbol lookup by name
-  find_references Find all references to a symbol
-  dependencies    Show file dependency graph
-  index_status    Check index health
-
-Add to Claude Code:
-  claude mcp add sverklo -- npx sverklo .
+Add to your AI agent:
+  Claude Code:  claude mcp add sverklo -- npx sverklo .
+  Cursor:       Add to .cursor/mcp.json
+  Windsurf:     Add to ~/.windsurf/mcp.json
+  VS Code:      Add to .vscode/mcp.json
 
 Environment:
   SVERKLO_DEBUG=1   Enable debug logging to stderr

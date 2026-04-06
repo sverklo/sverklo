@@ -29,6 +29,7 @@ import { rememberTool, handleRemember } from "./tools/remember.js";
 import { recallTool, handleRecall } from "./tools/recall.js";
 import { forgetTool, handleForget } from "./tools/forget.js";
 import { memoriesTool, handleMemories } from "./tools/memories.js";
+import { startHttpServer } from "./http-server.js";
 
 export async function startMcpServer(rootPath: string): Promise<void> {
   const config = getProjectConfig(rootPath);
@@ -38,6 +39,9 @@ export async function startMcpServer(rootPath: string): Promise<void> {
   const indexPromise = indexer.index().catch((err) => {
     logError("Initial indexing failed", err);
   });
+
+  // Start dashboard HTTP server alongside MCP
+  startHttpServer(indexer);
 
   // Start file watcher
   startWatcher(indexer, rootPath);
