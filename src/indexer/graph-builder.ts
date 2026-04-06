@@ -80,12 +80,18 @@ function resolveImport(
 ): number | undefined {
   const resolved = join(fromDir, importPath);
 
-  for (const ext of EXTENSIONS) {
-    const candidate = resolved + ext;
-    // Normalize path separators
-    const normalized = candidate.replace(/\\/g, "/");
-    const id = pathToId.get(normalized);
-    if (id !== undefined) return id;
+  // Strip JS-family extensions so we can re-resolve to .ts, .tsx, etc.
+  const stripped = resolved.replace(/\.(m?jsx?|cjs)$/, "");
+  const bases = stripped !== resolved ? [stripped, resolved] : [resolved];
+
+  for (const base of bases) {
+    for (const ext of EXTENSIONS) {
+      const candidate = base + ext;
+      // Normalize path separators
+      const normalized = candidate.replace(/\\/g, "/");
+      const id = pathToId.get(normalized);
+      if (id !== undefined) return id;
+    }
   }
 
   return undefined;
