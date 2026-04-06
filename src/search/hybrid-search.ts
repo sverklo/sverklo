@@ -43,10 +43,13 @@ export async function hybridSearch(
     }
   }
 
-  // Add chunks from top PageRank files (structurally important)
+  // Add chunks from top PageRank files (structurally important), cap total candidates
+  const MAX_CANDIDATES = 500;
   const topFiles = indexer.fileStore.getAll().slice(0, 20); // already sorted by pagerank DESC
   for (const f of topFiles) {
+    if (candidateChunkIds.size >= MAX_CANDIDATES) break;
     for (const chunk of indexer.chunkStore.getByFile(f.id)) {
+      if (candidateChunkIds.size >= MAX_CANDIDATES) break;
       candidateChunkIds.add(chunk.id);
     }
   }
@@ -128,7 +131,7 @@ export function packResults(
     if (cost <= remaining) {
       results.push(candidate);
       remaining -= cost;
-    } else if (remaining < 100) {
+    } else {
       break;
     }
   }

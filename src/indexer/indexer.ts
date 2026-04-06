@@ -28,6 +28,7 @@ export class Indexer {
   public memoryEmbeddingStore: MemoryEmbeddingStore;
   private indexing = false;
   private progress = { done: 0, total: 0 };
+  private lastIndexedTime: number | null = null;
 
   constructor(private config: ProjectConfig) {
     this.db = createDatabase(config.dbPath);
@@ -169,7 +170,8 @@ export class Indexer {
       buildGraph(fileImports, this.fileStore, this.graphStore, this.config.rootPath);
 
       // 8. Update project metadata
-      const elapsed = Date.now() - startTime;
+      this.lastIndexedTime = Date.now();
+      const elapsed = this.lastIndexedTime - startTime;
       log(
         `Indexing complete: ${this.fileStore.count()} files, ` +
           `${this.chunkStore.count()} chunks in ${elapsed}ms`
@@ -239,7 +241,7 @@ export class Indexer {
       fileCount: this.fileStore.count(),
       chunkCount: this.chunkStore.count(),
       languages: this.fileStore.getLanguages(),
-      lastIndexedAt: Date.now(),
+      lastIndexedAt: this.lastIndexedTime,
       indexing: this.indexing,
       progress: this.indexing ? this.progress : undefined,
     };

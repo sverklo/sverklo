@@ -22,6 +22,13 @@ if (command === "--version" || command === "-v" || command === "-V") {
   process.exit(0);
 }
 
+if (command === "init") {
+  const projectPath = resolve(args[1] || process.cwd());
+  const { initProject } = await import("../src/init.js");
+  initProject(projectPath);
+  process.exit(0);
+}
+
 if (command === "setup" || command === "install") {
   const { setupModels } = await import("../src/indexer/setup.js");
   await setupModels();
@@ -61,16 +68,16 @@ if (command === "--help" || command === "-h") {
 sverklo — code intelligence for AI agents
 
 Usage:
+  sverklo init              Set up sverklo in your project (CLAUDE.md + hooks + MCP config)
   sverklo [project-path]    Start the MCP server (stdio transport)
   sverklo ui [project-path] Open the web dashboard
   sverklo setup             Download the embedding model (~90MB)
   sverklo --help            Show this help
 
-Add to your AI agent:
-  Claude Code:  claude mcp add sverklo -- npx sverklo .
-  Cursor:       Add to .cursor/mcp.json
-  Windsurf:     Add to ~/.windsurf/mcp.json
-  VS Code:      Add to .vscode/mcp.json
+Quick start:
+  npm install -g sverklo
+  cd your-project && sverklo init
+  claude   # start coding — sverklo tools are preferred automatically
 
 Environment:
   SVERKLO_DEBUG=1   Enable debug logging to stderr

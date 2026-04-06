@@ -27,5 +27,6 @@ export function handleForget(
   }
 
   indexer.memoryStore.delete(id);
+  indexer.memoryEmbeddingStore.delete(id);
   return `Deleted memory #${id} (${memory.category}): "${memory.content.slice(0, 80)}${memory.content.length > 80 ? "..." : ""}"`;
 }
