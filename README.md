@@ -84,12 +84,27 @@ Add to `.cursor/mcp.json`:
 }
 ```
 
+### Windsurf
+Add to `~/.windsurf/mcp.json` (same format as Cursor).
+
+### VS Code (Copilot)
+Add to `.vscode/mcp.json` (same format as Cursor).
+
+### JetBrains
+Settings → Tools → MCP Servers → Add → command: `npx`, args: `sverklo .`
+
 ### Any MCP Client
 ```bash
 npx sverklo /path/to/your/project
 ```
 
-The ONNX model (~90MB) downloads automatically on first run. No setup needed.
+### Dashboard
+```bash
+npx sverklo ui .
+```
+Opens a web dashboard at `localhost:3847` — browse indexed files, search playground, memory viewer, dependency graph.
+
+> **First run:** The ONNX embedding model (~90MB) downloads automatically. Takes ~30 seconds on first launch, then instant.
 
 ## Performance
 
