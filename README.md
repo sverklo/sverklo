@@ -5,10 +5,11 @@
 One command gives Claude Code, Cursor, or any MCP agent deep codebase understanding — semantic search, dependency ranking, and persistent memory. Everything runs locally. No API keys. No cloud.
 
 ```bash
-claude mcp add sverklo -- npx sverklo .
+npm install -g sverklo
+cd your-project && sverklo init
 ```
 
-That's it. Your agent now has 10 new tools for code search and memory.
+That's it. `sverklo init` sets up everything — MCP server config, CLAUDE.md instructions, and hooks that ensure Claude uses sverklo tools over built-in grep.
 
 ---
 
@@ -66,19 +67,20 @@ Agent query → BM25 text search ──┐
 
 ## Quick Start
 
-### Claude Code
+### Claude Code (recommended)
 ```bash
-claude mcp add sverklo -- npx sverklo .
+sverklo init
 ```
+This creates `.claude/mcp.json`, adds a SessionStart hook, and appends sverklo instructions to your `CLAUDE.md`. Safe to run multiple times.
 
-### Cursor
-Add to `.cursor/mcp.json`:
+### Cursor / Windsurf / VS Code
+Add to `.cursor/mcp.json` (or `.windsurf/mcp.json` / `.vscode/mcp.json`):
 ```json
 {
   "mcpServers": {
     "sverklo": {
-      "command": "npx",
-      "args": ["sverklo", "."]
+      "command": "sverklo",
+      "args": ["."]
     }
   }
 }
