@@ -26,13 +26,29 @@ export async function initEmbedder(): Promise<void> {
   const tokenizerPath = findFile("tokenizer.json");
 
   if (!modelPath || !tokenizerPath) {
-    logError(
-      "Model files not found. Falling back to lightweight embeddings.\n" +
-        "For better search quality, place model.onnx and tokenizer.json in ~/.sverklo/models/"
-    );
+    // Try auto-downloading
+    try {
+      log("Model not found, downloading...");
+      const { setupModels } = await import("./setup.js");
+      await setupModels();
+      // Retry finding files after download
+      const retryModel = findFile("model.onnx");
+      const retryTokenizer = findFile("tokenizer.json");
+      if (retryModel && retryTokenizer) {
+        return initEmbedderWithFiles(retryModel, retryTokenizer);
+      }
+    } catch {
+      // Download failed, fall back
+    }
+    log("Using lightweight embeddings (no ONNX model). Run 'npx sverklo setup' for better quality.");
     initialized = true;
     return;
   }
+
+  return initEmbedderWithFiles(modelPath, tokenizerPath);
+}
+
+async function initEmbedderWithFiles(modelPath: string, tokenizerPath: string): Promise<void> {
 
   try {
     // Load ONNX runtime

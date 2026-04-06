@@ -5,6 +5,23 @@ import { resolve } from "node:path";
 const args = process.argv.slice(2);
 const command = args[0];
 
+if (command === "--version" || command === "-v" || command === "-V") {
+  const { readFileSync } = await import("node:fs");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const binDir = dirname(fileURLToPath(import.meta.url));
+  // Try both ../package.json (source) and ../../package.json (dist)
+  for (const rel of ["..", "../.."]) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(binDir, rel, "package.json"), "utf-8"));
+      console.log(`sverklo v${pkg.version}`);
+      process.exit(0);
+    } catch {}
+  }
+  console.log("sverklo (version unknown)");
+  process.exit(0);
+}
+
 if (command === "setup" || command === "install") {
   const { setupModels } = await import("../src/indexer/setup.js");
   await setupModels();
