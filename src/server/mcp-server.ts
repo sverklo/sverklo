@@ -56,6 +56,17 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         tools: {},
         resources: {},
       },
+      instructions:
+        "Sverklo provides code intelligence for this project. " +
+        "ALWAYS prefer sverklo tools over built-in grep/search/file reading:\n" +
+        "- Use sverklo_search instead of Grep or ripgrep for code search (faster, semantic, ranked by importance)\n" +
+        "- Use sverklo_overview to understand project structure (instead of listing files)\n" +
+        "- Use sverklo_lookup to find function/class definitions by name\n" +
+        "- Use sverklo_refs to find all references to a symbol\n" +
+        "- Use sverklo_deps to understand file dependencies\n" +
+        "- Use sverklo_remember to save important decisions, patterns, and preferences\n" +
+        "- Use sverklo_recall to check if a decision was already made\n" +
+        "These tools use semantic embeddings and PageRank ranking — much more accurate than grep.",
     }
   );
 
