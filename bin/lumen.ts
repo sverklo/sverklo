@@ -13,14 +13,14 @@ if (command === "setup" || command === "install") {
 
 if (command === "--help" || command === "-h") {
   console.log(`
-codesearch-mcp — Local-first code search MCP server
+lumen — code intelligence for AI agents
 
 Usage:
-  codesearch-mcp [project-path]    Start the MCP server (stdio transport)
-  codesearch-mcp setup             Download the embedding model (~90MB)
-  codesearch-mcp --help            Show this help
+  lumen [project-path]    Start the MCP server (stdio transport)
+  lumen setup             Download the embedding model (~90MB)
+  lumen --help            Show this help
 
-MCP Tools provided:
+MCP Tools:
   search          Hybrid text + semantic code search
   overview        Structural codebase map ranked by importance
   lookup          Direct symbol lookup by name
@@ -29,10 +29,10 @@ MCP Tools provided:
   index_status    Check index health
 
 Add to Claude Code:
-  claude mcp add codesearch-mcp -- node /path/to/codesearch-mcp/dist/bin/codesearch-mcp.js .
+  claude mcp add lumen -- npx lumen-code .
 
 Environment:
-  CODESEARCH_DEBUG=1   Enable debug logging to stderr
+  LUMEN_DEBUG=1   Enable debug logging to stderr
 `);
   process.exit(0);
 }
@@ -41,6 +41,6 @@ const rootPath = resolve(command || process.cwd());
 
 const { startMcpServer } = await import("../src/index.js");
 startMcpServer(rootPath).catch((err) => {
-  console.error("Failed to start codesearch-mcp:", err);
+  console.error("Failed to start lumen:", err);
   process.exit(1);
 });

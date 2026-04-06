@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import type { ProjectConfig } from "../types/index.js";
 
-const DATA_ROOT = join(homedir(), ".codesearch");
+const DATA_ROOT = join(homedir(), ".lumen");
 
 export function getProjectConfig(rootPath: string): ProjectConfig {
   const hash = createHash("sha256").update(rootPath).digest("hex").slice(0, 12);
