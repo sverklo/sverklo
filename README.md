@@ -1,132 +1,141 @@
 # Sverklo
 
-Code intelligence for AI agents. Local-first, zero config, semantic search.
+**Your AI agent wastes 70% of tokens reading irrelevant files.** Sverklo fixes that.
 
-Sverklo gives AI coding agents (Claude Code, Cursor, any MCP client) deep codebase understanding through hybrid text + semantic search, structural analysis, and dependency-aware ranking.
-
-## Why
-
-AI coding agents waste tokens reading irrelevant files. Claude Code has no built-in codebase indexing. Existing solutions are either cloud-dependent (Augment, Greptile) or incomplete (CocoIndex lacks graph ranking, Aider lacks MCP).
-
-Sverklo fills the gap:
-- **AST-aware parsing** — extracts functions, classes, types, interfaces from 10 languages
-- **PageRank ranking** — structurally important files surface first
-- **Semantic embeddings** — all-MiniLM-L6-v2 via ONNX, runs locally, no API keys
-- **Hybrid search** — BM25 text + vector similarity + Reciprocal Rank Fusion
-- **Token-budgeted** — returns exactly what fits in your context window
-- **Incremental** — watches for file changes, updates in real-time
-- **Zero config** — auto-detects project, auto-indexes, respects .gitignore
-
-## Quick Start
+One command gives Claude Code, Cursor, or any MCP agent deep codebase understanding — semantic search, dependency ranking, and persistent memory. Everything runs locally. No API keys. No cloud.
 
 ```bash
-# 1. Install
-git clone https://github.com/nicenemo/sverklo
-cd sverklo
-npm install && npm run build
-
-# 2. Download the embedding model (~90MB, one-time)
-npx sverklo setup
-
-# 3. Add to Claude Code
-claude mcp add sverklo -- node /path/to/sverklo/dist/bin/sverklo.js .
+claude mcp add sverklo -- npx sverklo .
 ```
 
-## MCP Tools
+That's it. Your agent now has 10 new tools for code search and memory.
 
-### `search`
-Hybrid text + semantic code search with PageRank boosting.
+---
 
+## Before & After
+
+**Without Sverklo** — agent greps for "auth", reads 15 files, burns 50K tokens, misses the relevant one:
 ```
-query: "authentication middleware that validates JWT tokens"
-token_budget: 4000    # max tokens to return
-scope: "src/api/"     # limit to path prefix
-language: "typescript" # filter by language
-type: "function"      # filter by symbol type
-```
-
-### `overview`
-Structural codebase map. Shows most important files and their symbols, ranked by PageRank.
-
-```
-path: "src/"          # directory to overview
-token_budget: 4000
+> How does auth work?
+Searched for 3 patterns...
+This project doesn't have any auth middleware.   # Wrong
 ```
 
-### `lookup`
-Direct symbol lookup by name. Returns full definitions.
-
+**With Sverklo** — semantic search finds the right code in <50ms:
 ```
-symbol: "createRouter"
-type: "function"      # function, class, type, interface, method, variable
-```
-
-### `find_references`
-Find all references to a symbol across the codebase.
-
-```
-symbol: "UserService"
-token_budget: 3000
+> How does auth work?
+Called sverklo_search with query "authentication"
+Found validateToken() in src/middleware/auth.ts   # Correct
 ```
 
-### `dependencies`
-Show a file's import graph — what it depends on and what depends on it.
+---
 
-```
-path: "src/api/router.ts"
-direction: "both"     # imports, importers, or both
-depth: 2              # traversal depth
-```
+## What It Does
 
-### `index_status`
-Check index health — file count, chunk count, languages, indexing progress.
-
-## Supported Languages
-
-TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP
+| Tool | What |
+|------|------|
+| `sverklo_search` | Hybrid semantic + text search across entire codebase |
+| `sverklo_overview` | Structural codebase map ranked by PageRank importance |
+| `sverklo_lookup` | Find any function, class, or type by name |
+| `sverklo_refs` | Find all references to a symbol |
+| `sverklo_deps` | Show file dependency graph (imports + importers) |
+| `sverklo_status` | Index health check |
+| `sverklo_remember` | Save decisions, preferences, patterns with git state |
+| `sverklo_recall` | Semantic search over saved memories |
+| `sverklo_forget` | Delete a memory |
+| `sverklo_memories` | List all memories with health metrics |
 
 ## How It Works
 
-1. **File discovery** — walks the project, respects .gitignore and .sverkloignore
-2. **AST parsing** — structural extraction of functions, classes, types, imports
-3. **NL descriptions** — generates natural language descriptions from code metadata (embed descriptions, not raw code)
-4. **Embeddings** — all-MiniLM-L6-v2 ONNX model, 384d vectors, fully local
-5. **Dependency graph** — resolves imports, builds file-level graph, computes PageRank
-6. **Hybrid search** — BM25 + cosine similarity + PageRank via Reciprocal Rank Fusion
-7. **Token budgeting** — packs results to fit within the specified budget
+```
+Your code → Parse (10 languages) → Embed (ONNX, local)
+                                  → Build dependency graph
+                                  → Compute PageRank
+                                        ↓
+Agent query → BM25 text search ──┐
+            → Vector similarity ──┼→ RRF fusion → Token-budgeted response
+            → PageRank boost ────┘
+```
+
+1. **Parses** your codebase into functions, classes, types (TS, JS, Python, Go, Rust, Java, C, C++, Ruby, PHP)
+2. **Embeds** code using all-MiniLM-L6-v2 ONNX model (384d vectors, fully local)
+3. **Builds** a dependency graph and computes PageRank (structurally important files rank higher)
+4. **Searches** using hybrid BM25 + vector similarity + PageRank, fused via Reciprocal Rank Fusion
+5. **Remembers** decisions and patterns across sessions, linked to git state
+6. **Watches** for file changes and updates incrementally
+
+## Quick Start
+
+### Claude Code
+```bash
+claude mcp add sverklo -- npx sverklo .
+```
+
+### Cursor
+Add to `.cursor/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "sverklo": {
+      "command": "npx",
+      "args": ["sverklo", "."]
+    }
+  }
+}
+```
+
+### Any MCP Client
+```bash
+npx sverklo /path/to/your/project
+```
+
+The ONNX model (~90MB) downloads automatically on first run. No setup needed.
 
 ## Performance
 
-On a 30-file TypeScript codebase (71 code chunks):
-- Indexing: **681ms** (including ONNX embedding generation)
-- Search: **<50ms** per query
-- Memory: **~200MB** (ONNX runtime + cached vectors)
+| Metric | Value |
+|--------|-------|
+| Index 38 files | 640ms |
+| Search query | <50ms |
+| Memory footprint | ~200MB |
+| Languages | 10 |
+| Dependencies | zero config |
+
+## Why Not...
+
+| Alternative | Gap |
+|-------------|-----|
+| **Built-in grep** | No semantic understanding. Burns tokens reading irrelevant files. |
+| **Augment** | Cloud-only, closed source, $20-200/mo |
+| **Greptile** | Cloud-only, $30/dev/mo, no memory |
+| **CocoIndex** | No PageRank ranking, no hybrid search, no memory |
+| **Aider repo-map** | No MCP, no semantic search, no memory |
+| **claude-mem** | Memory only, no code search, ChromaDB overhead |
+
+Sverklo is the only tool that combines **code search + memory + dependency graph** in one local-first MCP server.
 
 ## Configuration
 
 | Setting | Location |
 |---------|----------|
-| Model files | `~/.sverklo/models/model.onnx` and `tokenizer.json` |
-| Index database | `~/.sverklo/<project-hash>/index.db` |
+| Model files | `~/.sverklo/models/` (auto-downloaded) |
+| Index database | `~/.sverklo/<project>/index.db` |
 | Custom ignores | `.sverkloignore` in project root |
 | Debug logging | `SVERKLO_DEBUG=1` |
 
-## Free vs Pro
+## Open Source, Open Core
 
-The core is **free and open source** (MIT). Use it forever, no limits.
+The full MCP server is **free and open source** (MIT). All 10 tools, no limits.
 
-**Sverklo Pro** (coming soon):
-- Session memory — decisions, preferences, patterns across sessions
-- Memory quality scoring — confidence levels, staleness detection
-- Git-state linked memories — what the code looked like when a decision was made
-- Cross-project pattern transfer
-- Better embedding models
+**Sverklo Pro** (coming soon) adds smart auto-capture, cross-project patterns, and better models.
 
-**Sverklo Team** (coming soon):
-- Shared team memory — architectural decisions, conventions
-- Cross-developer AI coordination
-- On-prem deployment
-- Admin dashboard
+**Sverklo Team** (coming soon) adds shared team memory and on-prem deployment.
+
+## Links
+
+- [Website](https://sverklo.com)
+- [npm](https://www.npmjs.com/package/sverklo)
+- [Issues](https://github.com/sverklo/sverklo/issues)
 
 ## License
 
