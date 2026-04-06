@@ -3,6 +3,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Indexer } from "../indexer/indexer.js";
 import { startWatcher } from "../indexer/watcher.js";
@@ -48,9 +50,63 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     {
       capabilities: {
         tools: {},
+        resources: {},
       },
     }
   );
+
+  // Resources — auto-injected context at session start
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [
+      {
+        uri: "sverklo://context",
+        name: "Sverklo Project Context",
+        description:
+          "Key memories and codebase overview. Read this at session start to understand the project.",
+        mimeType: "text/plain",
+      },
+    ],
+  }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    if (request.params.uri === "sverklo://context") {
+      await indexPromise;
+
+      const parts: string[] = [];
+
+      // Top memories (most accessed, highest confidence)
+      const memories = indexer.memoryStore.getAll(5);
+      if (memories.length > 0) {
+        parts.push("## Key Memories");
+        for (const m of memories) {
+          const stale = m.is_stale ? " [STALE]" : "";
+          parts.push(`- [${m.category}]${stale} ${m.content}`);
+        }
+        parts.push("");
+      }
+
+      // Index summary
+      const status = indexer.getStatus();
+      parts.push(`## Codebase: ${status.projectName}`);
+      parts.push(`${status.fileCount} files, ${status.chunkCount} chunks indexed`);
+      parts.push(`Languages: ${status.languages.join(", ") || "none"}`);
+      parts.push("");
+      parts.push("Use sverklo_search for semantic code search (preferred over grep).");
+      parts.push("Use sverklo_remember to save important decisions.");
+
+      return {
+        contents: [
+          {
+            uri: "sverklo://context",
+            mimeType: "text/plain",
+            text: parts.join("\n"),
+          },
+        ],
+      };
+    }
+
+    return { contents: [] };
+  });
 
   // List tools
   server.setRequestHandler(ListToolsRequestSchema, async () => ({

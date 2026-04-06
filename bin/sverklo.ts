@@ -39,6 +39,19 @@ Environment:
 
 const rootPath = resolve(command || process.cwd());
 
+// Auto-download model if missing (no separate setup step needed)
+const { existsSync } = await import("node:fs");
+const { join } = await import("node:path");
+const { homedir } = await import("node:os");
+const modelDir = join(homedir(), ".sverklo", "models");
+if (!existsSync(join(modelDir, "model.onnx"))) {
+  process.stderr.write("[sverklo] First run — downloading embedding model (~90MB)...\n");
+  const { setupModels } = await import("../src/indexer/setup.js");
+  await setupModels().catch(() => {
+    process.stderr.write("[sverklo] Model download failed. Search will use lightweight embeddings.\n");
+  });
+}
+
 const { startMcpServer } = await import("../src/index.js");
 startMcpServer(rootPath).catch((err) => {
   console.error("Failed to start sverklo:", err);

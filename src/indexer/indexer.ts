@@ -60,11 +60,11 @@ export class Indexer {
       log(`Discovered ${files.length} files`);
 
       // 2. Determine which files need (re)indexing
+      // Use mtime for fast change detection (avoid reading file content twice)
       const toIndex = files.filter((f) => {
         const existing = this.fileStore.getByPath(f.relativePath);
         if (!existing) return true;
-        const contentHash = hashFile(f.absolutePath);
-        return existing.hash !== contentHash;
+        return existing.last_modified !== f.lastModified;
       });
 
       // 3. Remove files that no longer exist
@@ -94,7 +94,7 @@ export class Indexer {
         for (const file of toIndex) {
           try {
             const content = readFileSync(file.absolutePath, "utf-8");
-            const contentHash = hashFile(file.absolutePath);
+            const contentHash = createHash("sha256").update(content).digest("hex").slice(0, 16);
 
             // Upsert file record
             const fileId = this.fileStore.upsert(
@@ -182,8 +182,9 @@ export class Indexer {
   async reindexFile(relativePath: string, absolutePath: string, language: string): Promise<void> {
     try {
       const content = readFileSync(absolutePath, "utf-8");
-      const contentHash = hashFile(absolutePath);
-      const stat = require("node:fs").statSync(absolutePath);
+      const contentHash = createHash("sha256").update(content).digest("hex").slice(0, 16);
+      const { statSync } = await import("node:fs");
+      const stat = statSync(absolutePath);
 
       const fileId = this.fileStore.upsert(
         relativePath,
@@ -196,6 +197,12 @@ export class Indexer {
       this.chunkStore.deleteByFile(fileId);
 
       const result = parseFile(content, language);
+
+      // Rebuild dependency edges for this file
+      this.graphStore.deleteBySourceFile(fileId);
+      const fileImports = new Map<string, ImportRef[]>();
+      fileImports.set(relativePath, result.imports);
+      buildGraph(fileImports, this.fileStore, this.graphStore, this.config.rootPath);
 
       for (const chunk of result.chunks) {
         const description = describeChunk(chunk, relativePath, language);

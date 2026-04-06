@@ -24,13 +24,39 @@ export async function hybridSearch(
   const ftsResults = indexer.chunkStore.searchFts(query, 50);
 
   // Signal B: Vector similarity search
+  // Optimization: only scan vectors for FTS candidate files + top PageRank files
+  // instead of ALL embeddings (O(n) brute force)
   const [queryVector] = await embed([query]);
-  const allEmbeddings = indexer.embeddingStore.getAll();
-  const vectorScores: { chunkId: number; score: number }[] = [];
 
-  for (const [chunkId, vec] of allEmbeddings) {
-    const score = cosineSimilarity(queryVector, vec);
-    vectorScores.push({ chunkId, score });
+  const candidateChunkIds = new Set<number>();
+
+  // Add all FTS result chunk IDs
+  for (const r of ftsResults) candidateChunkIds.add(r.id);
+
+  // Add chunks from same files as FTS results (sibling functions matter)
+  const ftsFileIds = new Set(ftsResults.map((r) => r.file_id));
+  if (ftsFileIds.size > 0) {
+    for (const fileId of ftsFileIds) {
+      for (const chunk of indexer.chunkStore.getByFile(fileId)) {
+        candidateChunkIds.add(chunk.id);
+      }
+    }
+  }
+
+  // Add chunks from top PageRank files (structurally important)
+  const topFiles = indexer.fileStore.getAll().slice(0, 20); // already sorted by pagerank DESC
+  for (const f of topFiles) {
+    for (const chunk of indexer.chunkStore.getByFile(f.id)) {
+      candidateChunkIds.add(chunk.id);
+    }
+  }
+
+  // Only compute cosine similarity for candidate chunks (~100-500 vs thousands)
+  const vectorScores: { chunkId: number; score: number }[] = [];
+  for (const chunkId of candidateChunkIds) {
+    const vec = indexer.embeddingStore.get(chunkId);
+    if (!vec) continue;
+    vectorScores.push({ chunkId, score: cosineSimilarity(queryVector, vec) });
   }
 
   vectorScores.sort((a, b) => b.score - a.score);
