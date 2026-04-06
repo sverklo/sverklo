@@ -1,0 +1,51 @@
+import type { Indexer } from "../../indexer/indexer.js";
+import { hybridSearch, formatResults } from "../../search/hybrid-search.js";
+import type { ChunkType } from "../../types/index.js";
+
+export const searchTool = {
+  name: "search",
+  description:
+    "Search the codebase using natural language or code patterns. Combines text matching, semantic similarity, and structural importance ranking. Returns the most relevant code snippets within the token budget.",
+  inputSchema: {
+    type: "object" as const,
+    properties: {
+      query: {
+        type: "string",
+        description: "Natural language query or code pattern",
+      },
+      token_budget: {
+        type: "number",
+        description: "Max tokens to return (default: 4000)",
+      },
+      scope: {
+        type: "string",
+        description: "Limit to path prefix, e.g. 'src/api/'",
+      },
+      language: {
+        type: "string",
+        description: "Filter by language, e.g. 'typescript'",
+      },
+      type: {
+        type: "string",
+        enum: ["function", "class", "type", "interface", "method", "any"],
+        description: "Filter by symbol type (default: any)",
+      },
+    },
+    required: ["query"],
+  },
+};
+
+export async function handleSearch(
+  indexer: Indexer,
+  args: Record<string, unknown>
+): Promise<string> {
+  const results = await hybridSearch(indexer, {
+    query: args.query as string,
+    tokenBudget: (args.token_budget as number) || 4000,
+    scope: args.scope as string | undefined,
+    language: args.language as string | undefined,
+    type: (args.type as ChunkType | "any") || "any",
+  });
+
+  return formatResults(results);
+}

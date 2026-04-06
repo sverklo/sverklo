@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.db
+*.db-journal
+.env
+grammars/
+models/
+.DS_Store
