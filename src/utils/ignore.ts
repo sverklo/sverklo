@@ -68,7 +68,7 @@ export function createIgnoreFilter(rootPath: string): Ignore {
     ig.add(readFileSync(gitignorePath, "utf-8"));
   }
 
-  const customIgnorePath = join(rootPath, ".lumenignore");
+  const customIgnorePath = join(rootPath, ".sverkloignore");
   if (existsSync(customIgnorePath)) {
     ig.add(readFileSync(customIgnorePath, "utf-8"));
   }

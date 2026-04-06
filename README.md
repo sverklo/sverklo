@@ -1,14 +1,14 @@
-# Lumen
+# Sverklo
 
 Code intelligence for AI agents. Local-first, zero config, semantic search.
 
-Lumen gives AI coding agents (Claude Code, Cursor, any MCP client) deep codebase understanding through hybrid text + semantic search, structural analysis, and dependency-aware ranking.
+Sverklo gives AI coding agents (Claude Code, Cursor, any MCP client) deep codebase understanding through hybrid text + semantic search, structural analysis, and dependency-aware ranking.
 
 ## Why
 
 AI coding agents waste tokens reading irrelevant files. Claude Code has no built-in codebase indexing. Existing solutions are either cloud-dependent (Augment, Greptile) or incomplete (CocoIndex lacks graph ranking, Aider lacks MCP).
 
-Lumen fills the gap:
+Sverklo fills the gap:
 - **AST-aware parsing** — extracts functions, classes, types, interfaces from 10 languages
 - **PageRank ranking** — structurally important files surface first
 - **Semantic embeddings** — all-MiniLM-L6-v2 via ONNX, runs locally, no API keys
@@ -21,15 +21,15 @@ Lumen fills the gap:
 
 ```bash
 # 1. Install
-git clone https://github.com/nicenemo/lumen
-cd lumen
+git clone https://github.com/nicenemo/sverklo
+cd sverklo
 npm install && npm run build
 
 # 2. Download the embedding model (~90MB, one-time)
-npx lumen-code setup
+npx sverklo setup
 
 # 3. Add to Claude Code
-claude mcp add lumen -- node /path/to/lumen/dist/bin/lumen.js .
+claude mcp add sverklo -- node /path/to/sverklo/dist/bin/sverklo.js .
 ```
 
 ## MCP Tools
@@ -87,7 +87,7 @@ TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP
 
 ## How It Works
 
-1. **File discovery** — walks the project, respects .gitignore and .lumenignore
+1. **File discovery** — walks the project, respects .gitignore and .sverkloignore
 2. **AST parsing** — structural extraction of functions, classes, types, imports
 3. **NL descriptions** — generates natural language descriptions from code metadata (embed descriptions, not raw code)
 4. **Embeddings** — all-MiniLM-L6-v2 ONNX model, 384d vectors, fully local
@@ -106,23 +106,23 @@ On a 30-file TypeScript codebase (71 code chunks):
 
 | Setting | Location |
 |---------|----------|
-| Model files | `~/.lumen/models/model.onnx` and `tokenizer.json` |
-| Index database | `~/.lumen/<project-hash>/index.db` |
-| Custom ignores | `.lumenignore` in project root |
-| Debug logging | `LUMEN_DEBUG=1` |
+| Model files | `~/.sverklo/models/model.onnx` and `tokenizer.json` |
+| Index database | `~/.sverklo/<project-hash>/index.db` |
+| Custom ignores | `.sverkloignore` in project root |
+| Debug logging | `SVERKLO_DEBUG=1` |
 
 ## Free vs Pro
 
 The core is **free and open source** (MIT). Use it forever, no limits.
 
-**Lumen Pro** (coming soon):
+**Sverklo Pro** (coming soon):
 - Session memory — decisions, preferences, patterns across sessions
 - Memory quality scoring — confidence levels, staleness detection
 - Git-state linked memories — what the code looked like when a decision was made
 - Cross-project pattern transfer
 - Better embedding models
 
-**Lumen Team** (coming soon):
+**Sverklo Team** (coming soon):
 - Shared team memory — architectural decisions, conventions
 - Cross-developer AI coordination
 - On-prem deployment

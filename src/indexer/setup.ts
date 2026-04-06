@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { log, logError } from "../utils/logger.js";
 
-const MODEL_DIR = join(homedir(), ".lumen", "models");
+const MODEL_DIR = join(homedir(), ".sverklo", "models");
 const MODEL_URL =
   "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx";
 const TOKENIZER_URL =

@@ -13,12 +13,12 @@ if (command === "setup" || command === "install") {
 
 if (command === "--help" || command === "-h") {
   console.log(`
-lumen — code intelligence for AI agents
+sverklo — code intelligence for AI agents
 
 Usage:
-  lumen [project-path]    Start the MCP server (stdio transport)
-  lumen setup             Download the embedding model (~90MB)
-  lumen --help            Show this help
+  sverklo [project-path]    Start the MCP server (stdio transport)
+  sverklo setup             Download the embedding model (~90MB)
+  sverklo --help            Show this help
 
 MCP Tools:
   search          Hybrid text + semantic code search
@@ -29,10 +29,10 @@ MCP Tools:
   index_status    Check index health
 
 Add to Claude Code:
-  claude mcp add lumen -- npx lumen-code .
+  claude mcp add sverklo -- npx sverklo .
 
 Environment:
-  LUMEN_DEBUG=1   Enable debug logging to stderr
+  SVERKLO_DEBUG=1   Enable debug logging to stderr
 `);
   process.exit(0);
 }
@@ -41,6 +41,6 @@ const rootPath = resolve(command || process.cwd());
 
 const { startMcpServer } = await import("../src/index.js");
 startMcpServer(rootPath).catch((err) => {
-  console.error("Failed to start lumen:", err);
+  console.error("Failed to start sverklo:", err);
   process.exit(1);
 });

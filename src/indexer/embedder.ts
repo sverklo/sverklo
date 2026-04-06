@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { log, logError } from "../utils/logger.js";
 
-const MODEL_DIR = join(homedir(), ".lumen", "models");
+const MODEL_DIR = join(homedir(), ".sverklo", "models");
 const BUNDLED_MODEL_DIR = join(import.meta.dirname ?? ".", "..", "..", "models");
 
 const MODEL_DIM = 384;
@@ -28,7 +28,7 @@ export async function initEmbedder(): Promise<void> {
   if (!modelPath || !tokenizerPath) {
     logError(
       "Model files not found. Falling back to lightweight embeddings.\n" +
-        "For better search quality, place model.onnx and tokenizer.json in ~/.lumen/models/"
+        "For better search quality, place model.onnx and tokenizer.json in ~/.sverklo/models/"
     );
     initialized = true;
     return;
@@ -63,7 +63,7 @@ export async function initEmbedder(): Promise<void> {
 }
 
 function findFile(filename: string): string | null {
-  // Check ~/.lumen/models/ first, then bundled
+  // Check ~/.sverklo/models/ first, then bundled
   const userPath = join(MODEL_DIR, filename);
   if (existsSync(userPath)) return userPath;
   const bundledPath = join(BUNDLED_MODEL_DIR, filename);

@@ -1,10 +1,10 @@
 {
-  "name": "lumen-code",
+  "name": "sverklo",
   "version": "0.1.0",
-  "description": "Lumen — local-first code intelligence MCP server. Hybrid search, PageRank ranking, semantic embeddings. Zero config.",
+  "description": "Sverklo — local-first code intelligence MCP server. Hybrid search, PageRank ranking, semantic embeddings. Zero config.",
   "type": "module",
   "bin": {
-    "lumen": "./dist/bin/lumen.js"
+    "sverklo": "./dist/bin/sverklo.js"
   },
   "main": "./dist/src/index.js",
   "files": [
@@ -15,14 +15,14 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/bin/lumen.js",
+    "start": "node dist/bin/sverklo.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "lumen",
+    "sverklo",
     "mcp",
     "code-search",
     "semantic-search",
@@ -34,10 +34,10 @@
     "developer-tools",
     "code-intelligence"
   ],
-  "homepage": "https://github.com/nicenemo/lumen",
+  "homepage": "https://github.com/nicenemo/sverklo",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicenemo/lumen.git"
+    "url": "https://github.com/nicenemo/sverklo.git"
   },
   "license": "MIT",
   "engines": {

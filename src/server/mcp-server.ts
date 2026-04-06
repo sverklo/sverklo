@@ -38,7 +38,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
 
   const server = new Server(
     {
-      name: "lumen",
+      name: "sverklo",
       version: "0.1.0",
     },
     {
