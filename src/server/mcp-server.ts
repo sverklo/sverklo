@@ -23,6 +23,10 @@ import {
   indexStatusTool,
   handleIndexStatus,
 } from "./tools/index-status.js";
+import { rememberTool, handleRemember } from "./tools/remember.js";
+import { recallTool, handleRecall } from "./tools/recall.js";
+import { forgetTool, handleForget } from "./tools/forget.js";
+import { memoriesTool, handleMemories } from "./tools/memories.js";
 
 export async function startMcpServer(rootPath: string): Promise<void> {
   const config = getProjectConfig(rootPath);
@@ -57,6 +61,10 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       findReferencesTool,
       dependenciesTool,
       indexStatusTool,
+      rememberTool,
+      recallTool,
+      forgetTool,
+      memoriesTool,
     ],
   }));
 
@@ -90,6 +98,18 @@ export async function startMcpServer(rootPath: string): Promise<void> {
           break;
         case "index_status":
           result = handleIndexStatus(indexer);
+          break;
+        case "remember":
+          result = await handleRemember(indexer, args || {});
+          break;
+        case "recall":
+          result = await handleRecall(indexer, args || {});
+          break;
+        case "forget":
+          result = handleForget(indexer, args || {});
+          break;
+        case "memories":
+          result = handleMemories(indexer, args || {});
           break;
         default:
           result = `Unknown tool: ${name}`;

@@ -1,0 +1,17 @@
+# Source & config
+src/
+bin/
+test/
+tsconfig.json
+.github/
+
+# Large binary assets (downloaded at runtime via `sverklo setup`)
+models/
+
+# Dev / local
+*.db
+*.db-journal
+.env
+.gitignore
+.DS_Store
+grammars/

@@ -6,6 +6,8 @@ import { FileStore } from "../storage/file-store.js";
 import { ChunkStore } from "../storage/chunk-store.js";
 import { EmbeddingStore } from "../storage/embedding-store.js";
 import { GraphStore } from "../storage/graph-store.js";
+import { MemoryStore } from "../storage/memory-store.js";
+import { MemoryEmbeddingStore } from "../storage/memory-embedding-store.js";
 import { discoverFiles } from "./file-discovery.js";
 import { parseFile } from "./parser.js";
 import { describeChunk } from "./describer.js";
@@ -22,6 +24,8 @@ export class Indexer {
   public chunkStore: ChunkStore;
   public embeddingStore: EmbeddingStore;
   public graphStore: GraphStore;
+  public memoryStore: MemoryStore;
+  public memoryEmbeddingStore: MemoryEmbeddingStore;
   private indexing = false;
   private progress = { done: 0, total: 0 };
 
@@ -31,6 +35,12 @@ export class Indexer {
     this.chunkStore = new ChunkStore(this.db);
     this.embeddingStore = new EmbeddingStore(this.db);
     this.graphStore = new GraphStore(this.db);
+    this.memoryStore = new MemoryStore(this.db);
+    this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
+  }
+
+  get rootPath(): string {
+    return this.config.rootPath;
   }
 
   async index(): Promise<void> {

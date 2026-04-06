@@ -70,6 +70,53 @@ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
   VALUES (new.id, new.name, new.content, new.description);
 END;
 
+-- Session memories
+CREATE TABLE IF NOT EXISTS memories (
+  id INTEGER PRIMARY KEY,
+  category TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tags TEXT,
+  confidence REAL DEFAULT 1.0,
+  git_sha TEXT,
+  git_branch TEXT,
+  related_files TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  last_accessed INTEGER NOT NULL,
+  access_count INTEGER DEFAULT 0,
+  is_stale INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS memory_embeddings (
+  memory_id INTEGER PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
+  vector BLOB NOT NULL
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+  content,
+  tags,
+  content=memories,
+  content_rowid=id,
+  tokenize='porter unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+  INSERT INTO memories_fts(rowid, content, tags)
+  VALUES (new.id, new.content, new.tags);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+  INSERT INTO memories_fts(memories_fts, rowid, content, tags)
+  VALUES ('delete', old.id, old.content, old.tags);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+  INSERT INTO memories_fts(memories_fts, rowid, content, tags)
+  VALUES ('delete', old.id, old.content, old.tags);
+  INSERT INTO memories_fts(rowid, content, tags)
+  VALUES (new.id, new.content, new.tags);
+END;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 CREATE INDEX IF NOT EXISTS idx_files_language ON files(language);
@@ -78,6 +125,9 @@ CREATE INDEX IF NOT EXISTS idx_chunks_name ON chunks(name);
 CREATE INDEX IF NOT EXISTS idx_chunks_type ON chunks(type);
 CREATE INDEX IF NOT EXISTS idx_deps_source ON dependencies(source_file_id);
 CREATE INDEX IF NOT EXISTS idx_deps_target ON dependencies(target_file_id);
+CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
+CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_stale ON memories(is_stale);
 `;
 
 export function createDatabase(dbPath: string): Database.Database {

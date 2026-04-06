@@ -52,6 +52,24 @@ export interface DependencyEdge {
   reference_count: number;
 }
 
+export type MemoryCategory = "decision" | "preference" | "pattern" | "context" | "todo";
+
+export interface Memory {
+  id: number;
+  category: MemoryCategory;
+  content: string;
+  tags: string | null;
+  confidence: number;
+  git_sha: string | null;
+  git_branch: string | null;
+  related_files: string | null;
+  created_at: number;
+  updated_at: number;
+  last_accessed: number;
+  access_count: number;
+  is_stale: number;
+}
+
 export interface IndexStatus {
   projectName: string;
   rootPath: string;
