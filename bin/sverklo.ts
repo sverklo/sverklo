@@ -23,13 +23,14 @@ if (command === "--version" || command === "-v" || command === "-V") {
 }
 
 if (command === "init") {
-  // Parse flags: --auto-capture
+  // Parse flags: --auto-capture, --mine-chats
   const flags = args.filter((a) => a.startsWith("--"));
   const positional = args.filter((a) => !a.startsWith("--"));
   const autoCapture = flags.includes("--auto-capture");
+  const mineChats = flags.includes("--mine-chats");
   const projectPath = resolve(positional[1] || process.cwd());
   const { initProject } = await import("../src/init.js");
-  await initProject(projectPath, { autoCapture });
+  await initProject(projectPath, { autoCapture, mineChats });
   process.exit(0);
 }
 
@@ -110,6 +111,28 @@ Usage:
   process.exit(0);
 }
 
+if (command === "wakeup" || command === "wake-up") {
+  const projectPath = resolve(args[1] || process.cwd());
+  const { existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { homedir } = await import("node:os");
+  const modelDir = join(homedir(), ".sverklo", "models");
+  if (!existsSync(join(modelDir, "model.onnx"))) {
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { generateWakeup } = await import("../src/server/tools/wakeup.js");
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  // Use existing index — don't re-run
+  const output = generateWakeup(indexer, { maxTokens: 500 });
+  indexer.close();
+  console.log(output);
+  process.exit(0);
+}
+
 if (command === "setup" || command === "install") {
   const { setupModels } = await import("../src/indexer/setup.js");
   await setupModels();
@@ -152,6 +175,7 @@ Usage:
   sverklo init              Set up sverklo in your project (CLAUDE.md + hooks + MCP config)
   sverklo [project-path]    Start the MCP server (stdio transport)
   sverklo ui [project-path] Open the web dashboard
+  sverklo wakeup            Print compressed project context (for system-prompt injection)
   sverklo setup             Download the embedding model (~90MB)
   sverklo --help            Show this help
 

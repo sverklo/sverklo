@@ -40,7 +40,8 @@ const ADR_DIRS = [
 
 export async function importExistingMemories(
   indexer: Indexer,
-  projectPath: string
+  projectPath: string,
+  options: { mineChats?: boolean } = {}
 ): Promise<{ imported: number; skipped: number; sources: string[] }> {
   const allMemories: { source: string; memories: ExtractedMemory[] }[] = [];
 
@@ -101,6 +102,22 @@ export async function importExistingMemories(
     const gitLogMemories = importGitLog(projectPath, 50);
     if (gitLogMemories.length > 0) {
       allMemories.push({ source: "git log", memories: gitLogMemories });
+    }
+  }
+
+  // Optionally mine Claude Code conversation transcripts
+  if (options.mineChats) {
+    try {
+      const { mineClaudeCodeChats } = await import("./mine-chats.js");
+      const result = mineClaudeCodeChats(projectPath);
+      if (result.memories.length > 0) {
+        allMemories.push({
+          source: `claude-code chats (${result.filesScanned} files)`,
+          memories: result.memories,
+        });
+      }
+    } catch (err) {
+      log("Failed to mine Claude Code chats");
     }
   }
 

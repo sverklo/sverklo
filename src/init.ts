@@ -58,7 +58,7 @@ function buildHooksConfig(autoCapture: boolean) {
   return base;
 }
 
-export async function initProject(projectPath: string, options: { autoCapture?: boolean } = {}): Promise<void> {
+export async function initProject(projectPath: string, options: { autoCapture?: boolean; mineChats?: boolean } = {}): Promise<void> {
   console.log("Initializing Sverklo in", projectPath);
   console.log("");
   const HOOKS_CONFIG = buildHooksConfig(options.autoCapture ?? false);
@@ -158,7 +158,9 @@ export async function initProject(projectPath: string, options: { autoCapture?: 
 
       const config = getProjectConfig(projectPath);
       const indexer = new Indexer(config);
-      const result = await importExistingMemories(indexer, projectPath);
+      const result = await importExistingMemories(indexer, projectPath, {
+        mineChats: options.mineChats ?? false,
+      });
       indexer.close();
 
       if (result.imported > 0) {
@@ -170,7 +172,10 @@ export async function initProject(projectPath: string, options: { autoCapture?: 
           console.log(`  (${result.skipped} duplicates skipped)`);
         }
       } else {
-        console.log("  no CLAUDE.md, .cursorrules, or ADRs found — skipping");
+        const hint = options.mineChats
+          ? "  no CLAUDE.md, .cursorrules, ADRs, or matching Claude Code chats found — skipping"
+          : "  no CLAUDE.md, .cursorrules, or ADRs found — skipping";
+        console.log(hint);
       }
     } else {
       console.log("  model not yet downloaded — memories will be imported on first run");
