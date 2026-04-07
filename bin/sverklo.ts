@@ -25,7 +25,7 @@ if (command === "--version" || command === "-v" || command === "-V") {
 if (command === "init") {
   const projectPath = resolve(args[1] || process.cwd());
   const { initProject } = await import("../src/init.js");
-  initProject(projectPath);
+  await initProject(projectPath);
   process.exit(0);
 }
 

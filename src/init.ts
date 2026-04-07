@@ -33,7 +33,7 @@ const HOOKS_CONFIG = {
   },
 };
 
-export function initProject(projectPath: string): void {
+export async function initProject(projectPath: string): Promise<void> {
   console.log("Initializing Sverklo in", projectPath);
   console.log("");
 
@@ -105,6 +105,43 @@ export function initProject(projectPath: string): void {
     };
     writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + "\n");
     console.log("  .claude/mcp.json — added sverklo MCP server");
+  }
+
+  // 4. Import existing memories from CLAUDE.md, ADRs, etc.
+  console.log("");
+  console.log("Scanning for existing project knowledge...");
+  try {
+    const { existsSync: fsExists } = await import("node:fs");
+    const { join: pjoin } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const modelDir = pjoin(homedir(), ".sverklo", "models");
+
+    if (fsExists(pjoin(modelDir, "model.onnx"))) {
+      const { getProjectConfig } = await import("./utils/config.js");
+      const { Indexer } = await import("./indexer/indexer.js");
+      const { importExistingMemories } = await import("./memory/import.js");
+
+      const config = getProjectConfig(projectPath);
+      const indexer = new Indexer(config);
+      const result = await importExistingMemories(indexer, projectPath);
+      indexer.close();
+
+      if (result.imported > 0) {
+        console.log(`  imported ${result.imported} memories from:`);
+        for (const src of result.sources) {
+          console.log(`    · ${src}`);
+        }
+        if (result.skipped > 0) {
+          console.log(`  (${result.skipped} duplicates skipped)`);
+        }
+      } else {
+        console.log("  no CLAUDE.md, .cursorrules, or ADRs found — skipping");
+      }
+    } else {
+      console.log("  model not yet downloaded — memories will be imported on first run");
+    }
+  } catch (err) {
+    console.log("  (memory import skipped)");
   }
 
   console.log("");
