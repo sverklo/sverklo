@@ -1023,7 +1023,26 @@ async function renderMemories() {
   document.getElementById('mem-stats').textContent = total + ' memories · ' + stale + ' stale';
 
   if (total === 0) {
-    document.getElementById('memories-list').innerHTML = '<div class="inspector-empty" style="padding:32px 0;">no memories yet — use sverklo_remember to save decisions</div>';
+    document.getElementById('memories-list').innerHTML =
+      '<div style="padding: 32px; font-family: \\'JetBrains Mono\\', monospace; font-size: 13px; color: var(--text-2); line-height: 1.8;">' +
+      '<div class="inspector-title" style="margin-bottom: 16px;">no memories yet</div>' +
+      '<div style="margin-bottom: 24px;">Ask your AI agent to remember something:</div>' +
+      '<div style="padding: 16px; background: var(--bg-2); border: 1px solid var(--rule); color: var(--text);">' +
+      '<span style="color: var(--accent);">&gt;</span> "remember we use Prisma for the ORM because of TypeScript types"' +
+      '</div>' +
+      '<div style="margin-top: 16px; color: var(--text-3);">' +
+      'Claude will call sverklo_remember with the content, category, and current git state.<br>' +
+      'Later, asking "what did we decide about the ORM?" triggers sverklo_recall.' +
+      '</div>' +
+      '<div class="inspector-title" style="margin-top: 32px; margin-bottom: 12px;">memory categories</div>' +
+      '<div style="display: grid; grid-template-columns: 80px 1fr; gap: 8px 16px;">' +
+      '<div style="color: var(--accent);">decision</div><div>architectural choices with trade-offs</div>' +
+      '<div style="color: var(--accent);">preference</div><div>coding conventions, style choices</div>' +
+      '<div style="color: var(--accent);">pattern</div><div>reusable approaches to common problems</div>' +
+      '<div style="color: var(--accent);">context</div><div>background info about the project</div>' +
+      '<div style="color: var(--accent);">todo</div><div>reminders for future work</div>' +
+      '</div>' +
+      '</div>';
     return;
   }
 
