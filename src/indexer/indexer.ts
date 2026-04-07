@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { createDatabase } from "../storage/database.js";
@@ -8,11 +8,13 @@ import { EmbeddingStore } from "../storage/embedding-store.js";
 import { GraphStore } from "../storage/graph-store.js";
 import { MemoryStore } from "../storage/memory-store.js";
 import { MemoryEmbeddingStore } from "../storage/memory-embedding-store.js";
+import { SymbolRefStore } from "../storage/symbol-ref-store.js";
 import { discoverFiles } from "./file-discovery.js";
 import { parseFile } from "./parser.js";
 import { describeChunk } from "./describer.js";
 import { embed, initEmbedder } from "./embedder.js";
 import { buildGraph } from "./graph-builder.js";
+import { extractReferences } from "./symbol-extractor.js";
 import { createIgnoreFilter } from "../utils/ignore.js";
 import { estimateTokens } from "../utils/tokens.js";
 import { log, logError } from "../utils/logger.js";
@@ -26,6 +28,7 @@ export class Indexer {
   public graphStore: GraphStore;
   public memoryStore: MemoryStore;
   public memoryEmbeddingStore: MemoryEmbeddingStore;
+  public symbolRefStore: SymbolRefStore;
   private indexing = false;
   private progress = { done: 0, total: 0 };
   private lastIndexedTime: number | null = null;
@@ -38,6 +41,7 @@ export class Indexer {
     this.graphStore = new GraphStore(this.db);
     this.memoryStore = new MemoryStore(this.db);
     this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
+    this.symbolRefStore = new SymbolRefStore(this.db);
   }
 
   get rootPath(): string {
@@ -134,6 +138,16 @@ export class Indexer {
                 tokenCount
               );
 
+              // Extract symbol references (calls + constructors) for impact analysis
+              const refs = extractReferences(chunk.content, chunk.name);
+              for (const ref of refs) {
+                this.symbolRefStore.insert(
+                  chunkId,
+                  ref.name,
+                  chunk.startLine + ref.line
+                );
+              }
+
               // Queue for embedding
               const embText =
                 description + "\n" + chunk.content.slice(0, 512);
@@ -221,6 +235,16 @@ export class Indexer {
           tokenCount
         );
 
+        // Extract symbol references for impact analysis
+        const refs = extractReferences(chunk.content, chunk.name);
+        for (const ref of refs) {
+          this.symbolRefStore.insert(
+            chunkId,
+            ref.name,
+            chunk.startLine + ref.line
+          );
+        }
+
         const embText = description + "\n" + chunk.content.slice(0, 512);
         const [vector] = await embed([embText]);
         this.embeddingStore.insert(chunkId, vector);
@@ -249,6 +273,47 @@ export class Indexer {
 
   close(): void {
     this.db.close();
+  }
+
+  /**
+   * Delete the index database entirely and reinitialize empty stores.
+   * Caller is responsible for triggering a reindex afterwards if desired.
+   */
+  clearIndex(): void {
+    // Close existing connection
+    try {
+      this.db.close();
+    } catch {
+      // already closed
+    }
+
+    // Delete the .db file (and sqlite sidecars if present)
+    const dbPath = this.config.dbPath;
+    for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+      const p = dbPath + suffix;
+      if (existsSync(p)) {
+        try {
+          unlinkSync(p);
+        } catch (err) {
+          logError(`Failed to delete ${p}`, err);
+        }
+      }
+    }
+
+    // Reinitialize a fresh database and stores
+    this.db = createDatabase(dbPath);
+    this.fileStore = new FileStore(this.db);
+    this.chunkStore = new ChunkStore(this.db);
+    this.embeddingStore = new EmbeddingStore(this.db);
+    this.graphStore = new GraphStore(this.db);
+    this.memoryStore = new MemoryStore(this.db);
+    this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
+    this.symbolRefStore = new SymbolRefStore(this.db);
+
+    // Reset state
+    this.indexing = false;
+    this.progress = { done: 0, total: 0 };
+    this.lastIndexedTime = null;
   }
 }
 

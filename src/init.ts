@@ -15,27 +15,53 @@ When sverklo MCP server is connected, **always prefer sverklo tools over built-i
 - \`sverklo_recall\` — check past decisions before making new ones
 `;
 
-const HOOKS_CONFIG = {
-  hooks: {
-    SessionStart: [
+function buildHooksConfig(autoCapture: boolean) {
+  const base: {
+    hooks: Record<string, unknown[]>;
+  } = {
+    hooks: {
+      SessionStart: [
+        {
+          matcher: "",
+          hooks: [
+            {
+              type: "command",
+              command:
+                "echo 'Sverklo is connected. Use sverklo_search for code search (semantic, ranked by importance — better than grep). Use sverklo_remember to save decisions. Use sverklo_recall to check past decisions.'",
+              timeout: 5,
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  if (autoCapture) {
+    // PostToolUse hook — nudge Claude to capture decisions after meaningful tool calls.
+    // This runs after every tool call; Claude sees the output and decides whether to call
+    // sverklo_remember. Cheap, non-blocking, model-driven (no heuristic false positives).
+    base.hooks.PostToolUse = [
       {
-        matcher: "",
+        matcher: "Edit|Write|NotebookEdit",
         hooks: [
           {
             type: "command",
             command:
-              "echo 'Sverklo is connected. Use sverklo_search for code search (semantic, ranked by importance — better than grep). Use sverklo_remember to save decisions. Use sverklo_recall to check past decisions.'",
-            timeout: 5,
+              "echo 'If this edit represents a design decision, architectural choice, or pattern worth remembering, call sverklo_remember to save it. Skip if it is a routine fix.'",
+            timeout: 3,
           },
         ],
       },
-    ],
-  },
-};
+    ];
+  }
 
-export async function initProject(projectPath: string): Promise<void> {
+  return base;
+}
+
+export async function initProject(projectPath: string, options: { autoCapture?: boolean } = {}): Promise<void> {
   console.log("Initializing Sverklo in", projectPath);
   console.log("");
+  const HOOKS_CONFIG = buildHooksConfig(options.autoCapture ?? false);
 
   // 1. Add CLAUDE.md snippet
   const claudeMdPath = join(projectPath, "CLAUDE.md");
@@ -80,8 +106,17 @@ export async function initProject(projectPath: string): Promise<void> {
     if (!settings.hooks) settings.hooks = {};
     if (!settings.hooks.SessionStart) settings.hooks.SessionStart = [];
     settings.hooks.SessionStart.push(...HOOKS_CONFIG.hooks.SessionStart);
+
+    // Optionally add PostToolUse auto-capture hook
+    if (options.autoCapture && HOOKS_CONFIG.hooks.PostToolUse) {
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      settings.hooks.PostToolUse.push(...(HOOKS_CONFIG.hooks.PostToolUse as unknown[]));
+      console.log("  .claude/settings.local.json — added SessionStart + PostToolUse (auto-capture) hooks");
+    } else {
+      console.log("  .claude/settings.local.json — added SessionStart hook");
+    }
+
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-    console.log("  .claude/settings.local.json — added SessionStart hook");
   }
 
   // 3. Add MCP server config if not present

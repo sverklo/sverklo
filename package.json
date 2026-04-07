@@ -1,6 +1,6 @@
 {
   "name": "sverklo",
-  "version": "0.1.10",
+  "version": "0.2.0",
   "description": "Sverklo — local-first code intelligence MCP server. Hybrid search, PageRank ranking, semantic embeddings. Zero config.",
   "type": "module",
   "bin": {

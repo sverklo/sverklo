@@ -672,7 +672,13 @@ footer.status .spacer { flex: 1; }
         <div>
           <div class="view-title">memories</div>
         </div>
-        <div class="view-subtitle" id="mem-stats"></div>
+        <div style="display:flex;gap:16px;align-items:center;">
+          <div style="display:flex;gap:0;font-family:'JetBrains Mono',monospace;font-size:11px;">
+            <div class="graph-chip on" id="mem-view-list" onclick="switchMemView('list')">list</div>
+            <div class="graph-chip" id="mem-view-timeline" onclick="switchMemView('timeline')">timeline</div>
+          </div>
+          <div class="view-subtitle" id="mem-stats"></div>
+        </div>
       </div>
       <div class="memories-list" id="memories-list"></div>
     </div>
@@ -1014,7 +1020,21 @@ async function renderFiles() {
 }
 
 // ────────── MEMORIES ──────────
+let memViewMode = 'list';
+
+function switchMemView(mode) {
+  memViewMode = mode;
+  document.getElementById('mem-view-list').classList.toggle('on', mode === 'list');
+  document.getElementById('mem-view-timeline').classList.toggle('on', mode === 'timeline');
+  state.memories = []; // force reload
+  state.memTimeline = null;
+  renderMemories();
+}
+
 async function renderMemories() {
+  if (memViewMode === 'timeline') {
+    return renderMemoryTimeline();
+  }
   if (state.memories.length === 0) {
     state.memories = await api('/api/memories');
   }
@@ -1051,6 +1071,55 @@ async function renderMemories() {
     const git = m.git_sha ? '<div class="git">' + esc(m.git_branch || '?') + '@' + m.git_sha.slice(0,7) + '</div>' : '';
     return '<div class="memory' + (m.is_stale ? ' stale' : '') + '"><div class="memory-meta"><div class="cat">' + m.category + '</div><div>' + formatAge(m.created_at) + ' ago</div>' + git + '</div><div class="memory-content">' + esc(m.content) + '<div style="margin-top:6px;font-size:11px;">' + tags + '</div></div><div class="memory-stats">conf ' + m.confidence + '<br>used ' + m.access_count + 'x</div></div>';
   }).join('');
+  document.getElementById('memories-list').innerHTML = html;
+}
+
+async function renderMemoryTimeline() {
+  if (!state.memTimeline) {
+    state.memTimeline = await api('/api/memories/timeline');
+  }
+  const all = state.memTimeline || [];
+  const total = all.length;
+  const active = all.filter(m => !m.invalidated).length;
+  const invalidated = all.filter(m => m.invalidated).length;
+  document.getElementById('mem-stats').textContent = active + ' active · ' + invalidated + ' superseded · ' + total + ' total';
+
+  if (total === 0) {
+    document.getElementById('memories-list').innerHTML = '<div style="padding:32px;font-family:\\'JetBrains Mono\\',monospace;font-size:13px;color:var(--text-2);">no memories yet</div>';
+    return;
+  }
+
+  // Group by git SHA for the timeline gutter
+  const bySha = new Map();
+  for (const m of all) {
+    const key = m.git_sha || 'no-sha';
+    if (!bySha.has(key)) bySha.set(key, []);
+    bySha.get(key).push(m);
+  }
+
+  const shaOrder = Array.from(bySha.keys()).sort((a, b) => {
+    const aTime = Math.max(...bySha.get(a).map(m => m.created_at));
+    const bTime = Math.max(...bySha.get(b).map(m => m.created_at));
+    return bTime - aTime;
+  });
+
+  const html = shaOrder.map(sha => {
+    const mems = bySha.get(sha);
+    const first = mems[0];
+    const shaLabel = sha === 'no-sha' ? '(no git)' : (first.git_branch || '?') + '@' + sha.slice(0, 7);
+    const whenLabel = formatAge(first.created_at);
+
+    const memsHtml = mems.map(m => {
+      const tags = (m.tags || []).map(t => '<span style="color:var(--text-3);margin-right:4px;">#' + esc(t) + '</span>').join('');
+      const invalidClass = m.invalidated ? ' style="opacity:0.45;text-decoration:line-through;"' : '';
+      const superseded = m.superseded_by ? '<div style="font-size:10px;color:var(--warn);margin-top:2px;">→ superseded by #' + m.superseded_by + '</div>' : '';
+      const tierBadge = m.tier === 'core' ? '<span style="font-size:10px;padding:1px 6px;background:var(--accent);color:var(--bg);margin-left:6px;">CORE</span>' : '';
+      return '<div' + invalidClass + ' style="margin:8px 0 8px 120px;padding:12px 16px;background:var(--bg-2);border-left:2px solid var(--accent);"><div style="font-family:\\'JetBrains Mono\\',monospace;font-size:11px;color:var(--accent);margin-bottom:4px;">[' + m.category + '] #' + m.id + tierBadge + '</div><div style="font-size:13px;color:var(--text);">' + esc(m.content) + '</div>' + superseded + '<div style="font-size:11px;color:var(--text-3);margin-top:6px;">' + tags + ' · conf ' + m.confidence + ' · used ' + m.access_count + 'x</div></div>';
+    }).join('');
+
+    return '<div style="position:relative;border-bottom:1px solid var(--rule);padding:20px 32px;"><div style="position:absolute;left:32px;top:20px;width:80px;font-family:\\'JetBrains Mono\\',monospace;font-size:11px;color:var(--ok);">' + esc(shaLabel) + '<div style="color:var(--text-3);margin-top:2px;">' + whenLabel + ' ago</div></div>' + memsHtml + '</div>';
+  }).join('');
+
   document.getElementById('memories-list').innerHTML = html;
 }
 

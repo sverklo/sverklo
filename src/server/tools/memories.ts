@@ -10,7 +10,7 @@ export const memoriesTool = {
     properties: {
       category: {
         type: "string",
-        enum: ["decision", "preference", "pattern", "context", "todo", "any"],
+        enum: ["decision", "preference", "pattern", "context", "todo", "procedural", "any"],
         description: "Filter by category (default: 'any')",
       },
       limit: {

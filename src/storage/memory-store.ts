@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { Memory, MemoryCategory } from "../types/index.js";
+import type { Memory, MemoryCategory, MemoryTier } from "../types/index.js";
 
 export class MemoryStore {
   private insertStmt: Database.Statement;
@@ -12,16 +12,21 @@ export class MemoryStore {
   private touchAccessStmt: Database.Statement;
   private markStaleStmt: Database.Statement;
   private getStaleStmt: Database.Statement;
+  private invalidateStmt: Database.Statement;
+  private getCoreStmt: Database.Statement;
+  private setTierStmt: Database.Statement;
+  private getActiveStmt: Database.Statement;
 
   constructor(private db: Database.Database) {
     this.insertStmt = db.prepare(`
-      INSERT INTO memories (category, content, tags, confidence, git_sha, git_branch, related_files, created_at, updated_at, last_accessed)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (category, content, tags, confidence, git_sha, git_branch, related_files, created_at, updated_at, last_accessed, tier, valid_from_sha)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     this.getByIdStmt = db.prepare("SELECT * FROM memories WHERE id = ?");
-    this.getAllStmt = db.prepare("SELECT * FROM memories ORDER BY created_at DESC LIMIT ?");
+    // Active = not invalidated (valid_until_sha IS NULL)
+    this.getAllStmt = db.prepare("SELECT * FROM memories WHERE valid_until_sha IS NULL ORDER BY created_at DESC LIMIT ?");
     this.getByCategoryStmt = db.prepare(
-      "SELECT * FROM memories WHERE category = ? ORDER BY created_at DESC LIMIT ?"
+      "SELECT * FROM memories WHERE category = ? AND valid_until_sha IS NULL ORDER BY created_at DESC LIMIT ?"
     );
     this.deleteStmt = db.prepare("DELETE FROM memories WHERE id = ?");
     this.updateStmt = db.prepare(
@@ -31,7 +36,7 @@ export class MemoryStore {
       SELECT m.*, rank
       FROM memories_fts fts
       JOIN memories m ON m.id = fts.rowid
-      WHERE memories_fts MATCH ?
+      WHERE memories_fts MATCH ? AND m.valid_until_sha IS NULL
       ORDER BY rank
       LIMIT ?
     `);
@@ -42,7 +47,24 @@ export class MemoryStore {
       "UPDATE memories SET is_stale = ? WHERE id = ?"
     );
     this.getStaleStmt = db.prepare(
-      "SELECT * FROM memories WHERE is_stale = 1 ORDER BY created_at DESC"
+      "SELECT * FROM memories WHERE is_stale = 1 AND valid_until_sha IS NULL ORDER BY created_at DESC"
+    );
+    // Bi-temporal: invalidate a memory (mark superseded) instead of deleting
+    this.invalidateStmt = db.prepare(`
+      UPDATE memories
+      SET valid_until_sha = ?, invalidated_at = ?, superseded_by = ?
+      WHERE id = ?
+    `);
+    // Core memories for auto-injection
+    this.getCoreStmt = db.prepare(`
+      SELECT * FROM memories
+      WHERE tier = 'core' AND valid_until_sha IS NULL
+      ORDER BY confidence DESC, access_count DESC
+      LIMIT ?
+    `);
+    this.setTierStmt = db.prepare("UPDATE memories SET tier = ? WHERE id = ?");
+    this.getActiveStmt = db.prepare(
+      "SELECT * FROM memories WHERE valid_until_sha IS NULL ORDER BY created_at DESC LIMIT ?"
     );
   }
 
@@ -53,7 +75,8 @@ export class MemoryStore {
     confidence: number,
     gitSha: string | null,
     gitBranch: string | null,
-    relatedFiles: string[] | null
+    relatedFiles: string[] | null,
+    tier: MemoryTier = "archive"
   ): number {
     const now = Date.now();
     const result = this.insertStmt.run(
@@ -66,7 +89,9 @@ export class MemoryStore {
       relatedFiles ? JSON.stringify(relatedFiles) : null,
       now,
       now,
-      now
+      now,
+      tier,
+      gitSha
     );
     return Number(result.lastInsertRowid);
   }
@@ -86,6 +111,22 @@ export class MemoryStore {
   delete(id: number): boolean {
     const result = this.deleteStmt.run(id);
     return result.changes > 0;
+  }
+
+  /**
+   * Bi-temporal invalidation — marks a memory as superseded rather than deleting it.
+   * Preserves history so users can query "what we believed at commit X".
+   */
+  invalidate(id: number, currentSha: string | null, supersededBy: number | null = null): void {
+    this.invalidateStmt.run(currentSha, Date.now(), supersededBy, id);
+  }
+
+  getCore(limit: number = 10): Memory[] {
+    return this.getCoreStmt.all(limit) as Memory[];
+  }
+
+  setTier(id: number, tier: MemoryTier): void {
+    this.setTierStmt.run(tier, id);
   }
 
   update(id: number, content: string, tags?: string[]): void {
@@ -126,7 +167,16 @@ export class MemoryStore {
 
   count(): number {
     return (
-      this.db.prepare("SELECT COUNT(*) as c FROM memories").get() as { c: number }
+      this.db.prepare("SELECT COUNT(*) as c FROM memories WHERE valid_until_sha IS NULL").get() as { c: number }
     ).c;
+  }
+
+  /**
+   * Returns all memories including invalidated ones, for bi-temporal timeline views.
+   */
+  getTimeline(limit: number = 500): Memory[] {
+    return this.db
+      .prepare("SELECT * FROM memories ORDER BY created_at DESC LIMIT ?")
+      .all(limit) as Memory[];
   }
 }

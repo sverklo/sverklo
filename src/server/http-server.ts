@@ -74,6 +74,15 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
           tags: m.tags ? JSON.parse(m.tags) : [],
           related_files: m.related_files ? JSON.parse(m.related_files) : [],
         })));
+      } else if (url.pathname === "/api/memories/timeline") {
+        // Include invalidated memories for bi-temporal view
+        const allMem = indexer.memoryStore.getTimeline(500);
+        json(res, allMem.map(m => ({
+          ...m,
+          tags: m.tags ? JSON.parse(m.tags) : [],
+          related_files: m.related_files ? JSON.parse(m.related_files) : [],
+          invalidated: m.valid_until_sha !== null,
+        })));
       } else if (url.pathname === "/api/overview") {
         const files = indexer.fileStore.getAll();
         const overview = files.map(f => ({

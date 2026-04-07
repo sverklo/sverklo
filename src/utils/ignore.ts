@@ -68,6 +68,11 @@ export function createIgnoreFilter(rootPath: string): Ignore {
     ig.add(readFileSync(gitignorePath, "utf-8"));
   }
 
+  const aiderIgnorePath = join(rootPath, ".aiderignore");
+  if (existsSync(aiderIgnorePath)) {
+    ig.add(readFileSync(aiderIgnorePath, "utf-8"));
+  }
+
   const customIgnorePath = join(rootPath, ".sverkloignore");
   if (existsSync(customIgnorePath)) {
     ig.add(readFileSync(customIgnorePath, "utf-8"));

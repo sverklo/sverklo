@@ -23,9 +23,90 @@ if (command === "--version" || command === "-v" || command === "-V") {
 }
 
 if (command === "init") {
-  const projectPath = resolve(args[1] || process.cwd());
+  // Parse flags: --auto-capture
+  const flags = args.filter((a) => a.startsWith("--"));
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const autoCapture = flags.includes("--auto-capture");
+  const projectPath = resolve(positional[1] || process.cwd());
   const { initProject } = await import("../src/init.js");
-  await initProject(projectPath);
+  await initProject(projectPath, { autoCapture });
+  process.exit(0);
+}
+
+if (command === "workspace") {
+  const sub = args[1];
+  const {
+    createWorkspace,
+    loadWorkspace,
+    listWorkspaces,
+    addRepoToWorkspace,
+    removeRepoFromWorkspace,
+  } = await import("../src/workspace.js");
+
+  if (sub === "create") {
+    const name = args[2];
+    if (!name) { console.error("Usage: sverklo workspace create <name> [path1] [path2]..."); process.exit(1); }
+    const repos = args.slice(3).length > 0 ? args.slice(3) : [process.cwd()];
+    const ws = createWorkspace(name, repos);
+    console.log(`Created workspace '${name}' with ${ws.repos.length} repo(s):`);
+    for (const r of ws.repos) console.log(`  · ${r.path}`);
+    process.exit(0);
+  }
+
+  if (sub === "list") {
+    const all = listWorkspaces();
+    if (all.length === 0) {
+      console.log("No workspaces. Create one with: sverklo workspace create <name> [paths...]");
+    } else {
+      console.log("Workspaces:");
+      for (const name of all) {
+        const ws = loadWorkspace(name);
+        if (ws) console.log(`  · ${name} (${ws.repos.length} repos)`);
+      }
+    }
+    process.exit(0);
+  }
+
+  if (sub === "add") {
+    const name = args[2];
+    const path = args[3] || process.cwd();
+    if (!name) { console.error("Usage: sverklo workspace add <name> [path]"); process.exit(1); }
+    const ws = addRepoToWorkspace(name, path);
+    console.log(`Workspace '${name}' now has ${ws.repos.length} repos`);
+    process.exit(0);
+  }
+
+  if (sub === "remove") {
+    const name = args[2];
+    const path = args[3];
+    if (!name || !path) { console.error("Usage: sverklo workspace remove <name> <path>"); process.exit(1); }
+    const ws = removeRepoFromWorkspace(name, path);
+    if (ws) console.log(`Workspace '${name}' now has ${ws.repos.length} repos`);
+    else console.error(`Workspace '${name}' not found`);
+    process.exit(0);
+  }
+
+  if (sub === "show") {
+    const name = args[2];
+    if (!name) { console.error("Usage: sverklo workspace show <name>"); process.exit(1); }
+    const ws = loadWorkspace(name);
+    if (!ws) { console.error(`Workspace '${name}' not found`); process.exit(1); }
+    console.log(`Workspace: ${ws.name}`);
+    console.log(`Repos (${ws.repos.length}):`);
+    for (const r of ws.repos) console.log(`  · ${r.alias || ""} ${r.path}`);
+    process.exit(0);
+  }
+
+  console.log(`
+sverklo workspace — manage multi-repo workspaces
+
+Usage:
+  sverklo workspace create <name> [paths...]    Create a workspace
+  sverklo workspace add <name> [path]           Add a repo to a workspace
+  sverklo workspace remove <name> <path>        Remove a repo from a workspace
+  sverklo workspace list                        List all workspaces
+  sverklo workspace show <name>                 Show repos in a workspace
+`);
   process.exit(0);
 }
 

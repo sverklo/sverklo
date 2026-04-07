@@ -83,6 +83,27 @@ export async function importExistingMemories(
     }
   }
 
+  // Import git log commits as memories — only if no git-sourced memories exist yet
+  const existingForGitCheck = indexer.memoryStore.getAll(1000);
+  const hasGitMemories = existingForGitCheck.some((m) => {
+    const rawTags = (m as { tags?: unknown }).tags;
+    if (!rawTags) return false;
+    try {
+      const parsed =
+        typeof rawTags === "string" ? JSON.parse(rawTags) : rawTags;
+      return Array.isArray(parsed) && parsed.includes("git");
+    } catch {
+      return false;
+    }
+  });
+
+  if (!hasGitMemories) {
+    const gitLogMemories = importGitLog(projectPath, 50);
+    if (gitLogMemories.length > 0) {
+      allMemories.push({ source: "git log", memories: gitLogMemories });
+    }
+  }
+
   if (allMemories.length === 0) {
     return { imported: 0, skipped: 0, sources: [] };
   }
@@ -285,6 +306,77 @@ function extractTags(sourceFile: string, text: string): string[] {
   }
 
   return Array.from(tags).slice(0, 5);
+}
+
+// Conventional commit prefixes we care about
+const CONVENTIONAL_PREFIXES = ["feat", "fix", "refactor", "perf", "chore"];
+const DECISION_PREFIXES = new Set(["feat", "fix", "refactor"]);
+
+export function importGitLog(
+  projectPath: string,
+  limit: number = 50
+): ExtractedMemory[] {
+  let raw: string;
+  try {
+    raw = execSync(
+      `git log --format=%H%n%s%n%b%n==END==%n -n ${limit}`,
+      { cwd: projectPath, encoding: "utf-8", timeout: 5000, maxBuffer: 5 * 1024 * 1024 }
+    );
+  } catch {
+    return [];
+  }
+
+  const memories: ExtractedMemory[] = [];
+  const entries = raw.split(/^==END==$/m);
+
+  for (const entry of entries) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const lines = trimmed.split("\n");
+    if (lines.length < 2) continue;
+
+    const sha = lines[0].trim();
+    const subject = (lines[1] || "").trim();
+    const body = lines.slice(2).join("\n").trim();
+
+    if (!sha || !subject) continue;
+
+    // Match conventional commit prefix (allow optional scope and !)
+    const prefixMatch = subject.match(/^([a-z]+)(?:\([^)]+\))?!?:\s*(.+)$/);
+    if (!prefixMatch) continue;
+    const prefix = prefixMatch[1].toLowerCase();
+    if (!CONVENTIONAL_PREFIXES.includes(prefix)) continue;
+
+    // Build content: subject + first sentence of body if present
+    let content = subject;
+    if (body) {
+      const firstSentence = body.split(/(?<=[.!?])\s+|\n\n/)[0].trim();
+      if (firstSentence) {
+        content = `${subject} — ${firstSentence}`;
+      }
+    }
+
+    // Skip too-short or too-long commits
+    if (content.length < 20 || content.length > 500) continue;
+
+    const category: MemoryCategory = DECISION_PREFIXES.has(prefix)
+      ? "decision"
+      : "context";
+
+    const tags = ["git", prefix, ...extractTags("git log", subject + " " + body)]
+      .filter((t, i, a) => a.indexOf(t) === i)
+      .slice(0, 6);
+
+    memories.push({
+      content,
+      category,
+      tags,
+      related_files: [],
+      confidence: 0.7,
+    });
+  }
+
+  return memories;
 }
 
 function getGitState(rootPath: string): { sha: string | null; branch: string | null } {

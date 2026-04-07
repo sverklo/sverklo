@@ -52,7 +52,8 @@ export interface DependencyEdge {
   reference_count: number;
 }
 
-export type MemoryCategory = "decision" | "preference" | "pattern" | "context" | "todo";
+export type MemoryCategory = "decision" | "preference" | "pattern" | "context" | "todo" | "procedural";
+export type MemoryTier = "core" | "archive";
 
 export interface Memory {
   id: number;
@@ -68,6 +69,12 @@ export interface Memory {
   last_accessed: number;
   access_count: number;
   is_stale: number;
+  // Bi-temporal fields
+  tier: MemoryTier;
+  valid_from_sha: string | null;
+  valid_until_sha: string | null;
+  invalidated_at: number | null;
+  superseded_by: number | null;
 }
 
 export interface IndexStatus {
@@ -112,6 +119,16 @@ export const SUPPORTED_LANGUAGES: Record<string, string[]> = {
   cpp: [".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"],
   ruby: [".rb"],
   php: [".php"],
+  kotlin: [".kt", ".kts"],
+  scala: [".scala", ".sc"],
+  swift: [".swift"],
+  dart: [".dart"],
+  elixir: [".ex", ".exs"],
+  lua: [".lua"],
+  zig: [".zig"],
+  haskell: [".hs", ".lhs"],
+  clojure: [".clj", ".cljs", ".cljc", ".edn"],
+  ocaml: [".ml", ".mli"],
 };
 
 export function detectLanguage(filePath: string): string | null {
