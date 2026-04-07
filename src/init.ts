@@ -94,39 +94,67 @@ export async function initProject(
     console.log(`  .mcp.json — added sverklo MCP server (${sverkloBin})`);
   }
 
-  // 3. Optional auto-capture hook in .claude/settings.local.json
-  //    NOTE: We no longer write a fake "Sverklo is connected" SessionStart hook —
-  //    that masked real connection failures. Claude Code's normal MCP loading
-  //    surfaces actual errors when .mcp.json is correct.
-  if (options.autoCapture) {
-    const claudeDir = join(projectPath, ".claude");
-    const settingsPath = join(claudeDir, "settings.local.json");
-    mkdirSync(claudeDir, { recursive: true });
+  // 3. Auto-allow sverklo MCP tools in .claude/settings.local.json so Claude Code
+  //    doesn't prompt for permission every time it calls a sverklo tool.
+  //    Pattern: mcp__sverklo__<tool-name> — wildcard supported.
+  //    Also adds optional auto-capture hook if --auto-capture was passed.
+  const claudeDir = join(projectPath, ".claude");
+  const settingsPath = join(claudeDir, "settings.local.json");
+  mkdirSync(claudeDir, { recursive: true });
 
-    let settings: { hooks?: Record<string, unknown[]> } = {};
-    if (existsSync(settingsPath)) {
-      try {
-        settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-      } catch {
-        settings = {};
-      }
+  type Settings = {
+    permissions?: { allow?: string[]; deny?: string[] };
+    hooks?: Record<string, unknown[]>;
+  };
+
+  let settings: Settings = {};
+  if (existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    } catch {
+      settings = {};
     }
+  }
 
+  // Add sverklo wildcard to permissions.allow (idempotent)
+  if (!settings.permissions) settings.permissions = {};
+  if (!settings.permissions.allow) settings.permissions.allow = [];
+
+  const SVERKLO_PATTERN = "mcp__sverklo__*";
+  const allowList = settings.permissions.allow;
+  const hasSverklo = allowList.some(
+    (p) => p === SVERKLO_PATTERN || p === "mcp__sverklo" || p.startsWith("mcp__sverklo__")
+  );
+
+  let settingsChanged = false;
+  if (!hasSverklo) {
+    allowList.push(SVERKLO_PATTERN);
+    settingsChanged = true;
+  }
+
+  if (options.autoCapture) {
     if (!settings.hooks) settings.hooks = {};
     if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
 
     const existingPost = settings.hooks.PostToolUse as Array<{ hooks?: Array<{ command?: string }> }>;
-    const alreadyHasSverklo = existingPost.some((h) =>
+    const alreadyHasAutoCapture = existingPost.some((h) =>
       h.hooks?.some((hook) => hook.command?.includes("sverklo_remember"))
     );
 
-    if (alreadyHasSverklo) {
-      console.log("  .claude/settings.local.json — auto-capture hook already present, skipping");
-    } else {
+    if (!alreadyHasAutoCapture) {
       existingPost.push(buildAutoCaptureHook() as unknown as { hooks?: Array<{ command?: string }> });
-      writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-      console.log("  .claude/settings.local.json — added PostToolUse auto-capture hook");
+      settingsChanged = true;
     }
+  }
+
+  if (settingsChanged) {
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+    const bits: string[] = [];
+    if (!hasSverklo) bits.push("auto-allow for sverklo tools");
+    if (options.autoCapture) bits.push("PostToolUse auto-capture hook");
+    console.log(`  .claude/settings.local.json — added ${bits.join(" + ")}`);
+  } else {
+    console.log("  .claude/settings.local.json — sverklo permissions already set");
   }
 
   // 4. Migrate legacy .claude/mcp.json if present (from older sverklo versions)

@@ -124,6 +124,48 @@ export function runDoctor(projectPath: string): void {
     });
   }
 
+  // 5b. .claude/settings.local.json — permission auto-allow
+  const settingsPath = join(projectPath, ".claude", "settings.local.json");
+  if (existsSync(settingsPath)) {
+    try {
+      const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      const allow: string[] = settings.permissions?.allow || [];
+      const hasSverklo = allow.some(
+        (p: string) =>
+          p === "mcp__sverklo__*" ||
+          p === "mcp__sverklo" ||
+          p.startsWith("mcp__sverklo__")
+      );
+      if (hasSverklo) {
+        checks.push({
+          name: "permissions auto-allow",
+          status: "ok",
+          message: "sverklo tools won't prompt for approval",
+        });
+      } else {
+        checks.push({
+          name: "permissions auto-allow",
+          status: "warn",
+          message: "Claude Code will prompt before each sverklo tool call",
+          fix: "sverklo init (adds mcp__sverklo__* to allow list)",
+        });
+      }
+    } catch {
+      checks.push({
+        name: "permissions auto-allow",
+        status: "warn",
+        message: "settings.local.json is invalid JSON",
+      });
+    }
+  } else {
+    checks.push({
+      name: "permissions auto-allow",
+      status: "warn",
+      message: "no settings.local.json — Claude Code will prompt for each tool call",
+      fix: "sverklo init",
+    });
+  }
+
   // 6. CLAUDE.md
   const claudeMdPath = join(projectPath, "CLAUDE.md");
   if (existsSync(claudeMdPath)) {
