@@ -146,13 +146,26 @@ function findTranscriptDir(
 
   // First pass: prefix match — projects whose encoded form matches a prefix
   // of the project (handles repos that aren't yet recorded as a discrete dir)
+  // OR projects whose encoded form contains the project encoding (subdir sessions)
   const prefixCandidates = entries.filter(
-    (e) => encoded === e || encoded.startsWith(e + "-")
+    (e) => encoded === e || encoded.startsWith(e + "-") || e.startsWith(encoded + "-")
   );
   // Prefer the longest (most specific) prefix match
   prefixCandidates.sort((a, b) => b.length - a.length);
 
   for (const entry of prefixCandidates) {
+    const full = join(projectsRoot, entry);
+    try {
+      if (!statSync(full).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    if (sampleDirHasCwd(full, absProject)) return full;
+  }
+
+  // Second pass: scan all dirs for a cwd match (expensive but reliable)
+  for (const entry of entries) {
+    if (prefixCandidates.includes(entry)) continue;
     const full = join(projectsRoot, entry);
     try {
       if (!statSync(full).isDirectory()) continue;
@@ -182,7 +195,15 @@ function sampleDirHasCwd(dir: string, absProject: string): boolean {
           const obj = JSON.parse(line);
           if (typeof obj.cwd === "string") {
             const cwd = resolve(obj.cwd);
-            if (cwd === absProject || cwd.startsWith(absProject + "/")) {
+            // Three match directions:
+            // 1. cwd is exactly our project
+            // 2. cwd is inside our project (subdir session)
+            // 3. cwd is a parent of our project (started from above)
+            if (
+              cwd === absProject ||
+              cwd.startsWith(absProject + "/") ||
+              absProject.startsWith(cwd + "/")
+            ) {
               return true;
             }
           }
@@ -241,10 +262,15 @@ function mineFile(filePath: string, absProject: string): ExtractedMemory[] {
       continue;
     }
 
-    // Filter by cwd to make sure this message belongs to our project
+    // Filter by cwd to make sure this message belongs to our project.
+    // Accept if cwd is our project, inside it, or a parent of it.
     if (typeof obj.cwd === "string") {
       const cwd = resolve(obj.cwd);
-      if (cwd !== absProject && !cwd.startsWith(absProject + "/")) {
+      const isOurs =
+        cwd === absProject ||
+        cwd.startsWith(absProject + "/") ||
+        absProject.startsWith(cwd + "/");
+      if (!isOurs) {
         // Wrong project — skip
         continue;
       }

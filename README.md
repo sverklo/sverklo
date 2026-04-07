@@ -1,6 +1,8 @@
 # Sverklo
 
-**Your AI agent wastes 70% of tokens reading irrelevant files.** Sverklo fixes that.
+**Other tools remember your conversations. Sverklo understands your code.**
+
+Local-first code intelligence MCP with hybrid semantic search, symbol-level impact analysis, and bi-temporal memory tied to git state. **5.1× fewer tokens** than grep in benchmarks — roughly **$78–$390/month saved per developer** at Claude API pricing.
 
 One command gives Claude Code, Cursor, or any MCP agent deep codebase understanding — semantic search, dependency ranking, and persistent memory. Everything runs locally. No API keys. No cloud.
 
