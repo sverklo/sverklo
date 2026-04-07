@@ -210,7 +210,16 @@ export async function initProject(
     console.log("  (memory import skipped)");
   }
 
+  // 6. Run doctor to verify everything is set up correctly.
+  //    This catches subtle issues immediately so the user doesn't restart
+  //    Claude Code only to find sverklo isn't loading.
   console.log("");
-  console.log("Done. Restart Claude Code in this directory and sverklo should appear in /mcp.");
-  console.log("If it doesn't load, run `sverklo doctor` to diagnose.");
+  try {
+    const { runDoctor } = await import("./doctor.js");
+    runDoctor(projectPath);
+  } catch {
+    // Doctor failures are non-fatal — init still succeeded
+  }
+
+  console.log("Restart Claude Code in this directory and sverklo will appear in /mcp.");
 }
