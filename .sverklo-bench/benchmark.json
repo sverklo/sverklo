@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-04-07T14:00:16.011Z",
+  "target": "/Users/nikita/projects/research/product/sverklo",
+  "queries": [
+    {
+      "query": "auth_middleware",
+      "grep": {
+        "tokens": 12515,
+        "fileCount": 10,
+        "latencyMs": 16
+      },
+      "sverkloSearch": {
+        "tokens": 5,
+        "resultCount": 0,
+        "latencyMs": 5002
+      },
+      "savings": 100
+    },
+    {
+      "query": "database_queries",
+      "grep": {
+        "tokens": 27110,
+        "fileCount": 10,
+        "latencyMs": 26
+      },
+      "sverkloSearch": {
+        "tokens": 5835,
+        "resultCount": 12,
+        "latencyMs": 5006
+      },
+      "savings": 78
+    },
+    {
+      "query": "error_handling",
+      "grep": {
+        "tokens": 13394,
+        "fileCount": 10,
+        "latencyMs": 21
+      },
+      "sverkloSearch": {
+        "tokens": 5446,
+        "resultCount": 5,
+        "latencyMs": 5011
+      },
+      "savings": 59
+    },
+    {
+      "query": "http_routes",
+      "grep": {
+        "tokens": 26304,
+        "fileCount": 10,
+        "latencyMs": 36
+      },
+      "sverkloSearch": {
+        "tokens": 4606,
+        "resultCount": 3,
+        "latencyMs": 5002
+      },
+      "savings": 82
+    },
+    {
+      "query": "state_management",
+      "grep": {
+        "tokens": 29634,
+        "fileCount": 10,
+        "latencyMs": 22
+      },
+      "sverkloSearch": {
+        "tokens": 5634,
+        "resultCount": 6,
+        "latencyMs": 5003
+      },
+      "savings": 81
+    }
+  ],
+  "totals": {
+    "grep": 108957,
+    "sverklo": 21526,
+    "ratio": "5.1",
+    "savings": 80
+  }
+}

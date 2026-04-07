@@ -31,6 +31,7 @@ import { forgetTool, handleForget } from "./tools/forget.js";
 import { memoriesTool, handleMemories } from "./tools/memories.js";
 import { astGrepTool, handleAstGrep } from "./tools/ast-grep.js";
 import { impactTool, handleImpact } from "./tools/impact.js";
+import { auditTool, handleAudit } from "./tools/audit.js";
 import {
   promoteTool,
   demoteTool,
@@ -230,6 +231,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       promoteTool,
       demoteTool,
       impactTool,
+      auditTool,
       astGrepTool,
       // Zilliz claude-context compatibility aliases
       indexCodebaseTool,
@@ -293,6 +295,9 @@ export async function startMcpServer(rootPath: string): Promise<void> {
           break;
         case "sverklo_impact":
           result = handleImpact(indexer, args || {});
+          break;
+        case "sverklo_audit":
+          result = handleAudit(indexer, args || {});
           break;
         case "sverklo_promote":
           result = handlePromote(indexer, args || {});
