@@ -5,15 +5,22 @@ import { join } from "node:path";
 const CLAUDE_MD_SNIPPET = `
 ## Sverklo — Code Intelligence
 
-When sverklo MCP server is connected, **always prefer sverklo tools over built-in grep/search**:
+Sverklo is a sharper tool for specific kinds of work. Use it where it fits, not as a blanket replacement for Grep/Read.
 
-- \`sverklo_search\` — semantic code search (use instead of Grep/ripgrep)
-- \`sverklo_overview\` — understand project structure (use instead of listing files)
-- \`sverklo_lookup\` — find any function/class/type by name
-- \`sverklo_refs\` — find all references to a symbol
-- \`sverklo_deps\` — show file dependency graph
-- \`sverklo_remember\` — save important decisions and patterns
-- \`sverklo_recall\` — check past decisions before making new ones
+**Use sverklo for:**
+- \`sverklo_search\` — exploratory questions where you don't know the exact symbol ("how does auth work", "find anything related to billing")
+- \`sverklo_impact\` — refactor blast radius (who calls this function)
+- \`sverklo_refs\` — all references to a symbol
+- \`sverklo_deps\` — file dependency graph (imports + importers)
+- \`sverklo_lookup\` — find function/class definitions by name
+- \`sverklo_overview\` — high-level codebase map (PageRank-ranked)
+- \`sverklo_audit\` — god nodes, hub files, dead code candidates
+- \`sverklo_remember\` / \`sverklo_recall\` — persist decisions across sessions
+
+**Prefer Grep/Read for:**
+- Exact string matches and literal patterns
+- Reading specific file contents or line ranges
+- Focused diff review where you know which files matter
 `;
 
 /**

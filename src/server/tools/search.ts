@@ -5,7 +5,7 @@ import type { ChunkType } from "../../types/index.js";
 export const searchTool = {
   name: "sverklo_search",
   description:
-    "PREFERRED over grep/ripgrep for code search. Semantic + text hybrid search across the entire codebase. Uses embeddings and PageRank to find the most relevant code — much more accurate and token-efficient than grep. Use this first when exploring code or answering questions about the codebase.",
+    "Hybrid semantic + text search with PageRank ranking. Best for exploratory questions where you don't know the exact symbol — 'how does auth work', 'find anything related to billing', 'where's the retry logic'. For exact string matches, prefer Grep.",
   inputSchema: {
     type: "object" as const,
     properties: {

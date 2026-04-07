@@ -88,7 +88,7 @@ export function handleIndexStatus(indexer: Indexer): string {
   }
 
   // ─── Performance reminder ───
-  parts.push(`_Sverklo is ~5× more token-efficient than grep + file reads. Prefer sverklo tools for all code search._`);
+  parts.push(`_Use sverklo for exploratory work, refactor blast-radius, and semantic queries. Use Grep/Read for exact-match lookups and focused diff review._`);
 
   return parts.join("\n");
 }

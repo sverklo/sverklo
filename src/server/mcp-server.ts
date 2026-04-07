@@ -153,16 +153,23 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         resources: {},
       },
       instructions:
-        "Sverklo provides code intelligence for this project. " +
-        "ALWAYS prefer sverklo tools over built-in grep/search/file reading:\n" +
-        "- Use sverklo_search instead of Grep or ripgrep for code search (faster, semantic, ranked by importance)\n" +
-        "- Use sverklo_overview to understand project structure (instead of listing files)\n" +
-        "- Use sverklo_lookup to find function/class definitions by name\n" +
-        "- Use sverklo_refs to find all references to a symbol\n" +
-        "- Use sverklo_deps to understand file dependencies\n" +
-        "- Use sverklo_remember to save important decisions, patterns, and preferences\n" +
-        "- Use sverklo_recall to check if a decision was already made\n" +
-        "These tools use semantic embeddings and PageRank ranking — much more accurate than grep.",
+        "Sverklo provides code intelligence for this project. Use it where it fits — " +
+        "not as a replacement for Grep/Read but as a sharper tool for the cases below.\n\n" +
+        "USE SVERKLO FOR:\n" +
+        "- sverklo_search: exploratory questions where you don't know the exact symbol " +
+        "('how does auth work', 'find anything related to billing')\n" +
+        "- sverklo_impact: refactor blast radius — who calls this function\n" +
+        "- sverklo_refs: all references to a symbol with semantic context\n" +
+        "- sverklo_deps: file import graph to understand impact of file changes\n" +
+        "- sverklo_lookup: find a function/class definition by name\n" +
+        "- sverklo_overview: high-level codebase map (PageRank-ranked)\n" +
+        "- sverklo_audit: god nodes, hub files, dead code candidates\n" +
+        "- sverklo_remember / sverklo_recall: persist decisions across sessions, tied to git state\n\n" +
+        "PREFER GREP/READ FOR:\n" +
+        "- Exact string matches and literal pattern checks\n" +
+        "- Reading specific file contents or line ranges\n" +
+        "- Focused diff review where you already know which files matter\n" +
+        "- Build/test verification (Bash)",
     }
   );
 

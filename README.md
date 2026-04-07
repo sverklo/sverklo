@@ -2,34 +2,35 @@
 
 **Other tools remember your conversations. Sverklo understands your code.**
 
-Local-first code intelligence MCP with hybrid semantic search, symbol-level impact analysis, and bi-temporal memory tied to git state. **5.1× fewer tokens** than grep in benchmarks — roughly **$78–$390/month saved per developer** at Claude API pricing.
-
-One command gives Claude Code, Cursor, or any MCP agent deep codebase understanding — semantic search, dependency ranking, and persistent memory. Everything runs locally. No API keys. No cloud.
+Local-first code intelligence MCP with hybrid semantic search, symbol-level impact analysis, and bi-temporal memory tied to git state. Runs entirely on your machine. No API keys. No cloud. No data leaves your laptop.
 
 ```bash
 npm install -g sverklo
 cd your-project && sverklo init
 ```
 
-That's it. `sverklo init` sets up everything — MCP server config, CLAUDE.md instructions, and hooks that ensure Claude uses sverklo tools over built-in grep.
+That's it. `sverklo init` writes `.mcp.json` at your project root, adds sverklo instructions to `CLAUDE.md`, auto-allows the sverklo tools, and runs `sverklo doctor` to verify the setup.
 
 ---
 
-## Before & After
+## When sverklo helps (and when it doesn't)
 
-**Without Sverklo** — agent greps for "auth", reads 15 files, burns 50K tokens, misses the relevant one:
-```
-> How does auth work?
-Searched for 3 patterns...
-This project doesn't have any auth middleware.   # Wrong
-```
+We're honest about this — sverklo isn't a magic 5× speedup. It's a sharper tool for specific kinds of work.
 
-**With Sverklo** — semantic search finds the right code in <50ms:
-```
-> How does auth work?
-Called sverklo_search with query "authentication"
-Found validateToken() in src/middleware/auth.ts   # Correct
-```
+### Sverklo wins on
+- **Exploratory questions** — "what replaced this deleted code?", "how does the auth flow work?", "what's related to billing?"
+- **Refactor blast radius** — `sverklo_impact <symbol>` walks the symbol graph and tells you exactly who calls it. Fewer false positives than grep on common names.
+- **Large interconnected codebases** — when grep returns 200 matches and you don't know which are relevant, semantic ranking + PageRank surfaces the load-bearing code first.
+- **Memory across sessions** — `sverklo_remember`/`sverklo_recall` keeps decisions and patterns alive after context compaction. Tied to git SHA so you know what the code looked like when the decision was made.
+- **Project audits** — `sverklo_audit` surfaces god nodes, hub files, dead code candidates in one call.
+
+### Built-in tools win on
+- **Focused diff review** — for a signature change or a single-file refactor, `git diff` + `Read` + targeted `Grep` is hard to beat.
+- **Exact string matching** — "does this literal string exist anywhere?" → `Grep` is faster and more reliable.
+- **Reading file contents** — only `Read` does this. Sverklo isn't a file reader.
+- **Build and test verification** — only `Bash` runs `npm test` or `gradle check`.
+
+The honest pattern: **sverklo is the right tool when you don't know exactly what to search for**. When you do know, grep is fine.
 
 ---
 

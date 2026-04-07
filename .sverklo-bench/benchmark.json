@@ -1,82 +1,82 @@
 {
-  "timestamp": "2026-04-07T14:00:16.011Z",
+  "timestamp": "2026-04-07T18:50:48.842Z",
   "target": "/Users/nikita/projects/research/product/sverklo",
   "queries": [
     {
       "query": "auth_middleware",
       "grep": {
-        "tokens": 12515,
+        "tokens": 15844,
         "fileCount": 10,
-        "latencyMs": 16
+        "latencyMs": 31
       },
       "sverkloSearch": {
         "tokens": 5,
         "resultCount": 0,
-        "latencyMs": 5002
+        "latencyMs": 5004
       },
       "savings": 100
     },
     {
       "query": "database_queries",
       "grep": {
-        "tokens": 27110,
+        "tokens": 27854,
         "fileCount": 10,
         "latencyMs": 26
       },
       "sverkloSearch": {
         "tokens": 5835,
         "resultCount": 12,
-        "latencyMs": 5006
+        "latencyMs": 5002
       },
-      "savings": 78
+      "savings": 79
     },
     {
       "query": "error_handling",
       "grep": {
-        "tokens": 13394,
+        "tokens": 19099,
         "fileCount": 10,
-        "latencyMs": 21
+        "latencyMs": 20
       },
       "sverkloSearch": {
-        "tokens": 5446,
+        "tokens": 5665,
         "resultCount": 5,
-        "latencyMs": 5011
+        "latencyMs": 5003
       },
-      "savings": 59
+      "savings": 70
     },
     {
       "query": "http_routes",
       "grep": {
-        "tokens": 26304,
+        "tokens": 26541,
         "fileCount": 10,
-        "latencyMs": 36
+        "latencyMs": 24
       },
       "sverkloSearch": {
-        "tokens": 4606,
+        "tokens": 4825,
         "resultCount": 3,
-        "latencyMs": 5002
+        "latencyMs": 5003
       },
       "savings": 82
     },
     {
       "query": "state_management",
       "grep": {
-        "tokens": 29634,
+        "tokens": 28507,
         "fileCount": 10,
-        "latencyMs": 22
+        "latencyMs": 26
       },
       "sverkloSearch": {
-        "tokens": 5634,
-        "resultCount": 6,
-        "latencyMs": 5003
+        "tokens": 5868,
+        "resultCount": 5,
+        "latencyMs": 5001
       },
-      "savings": 81
+      "savings": 79
     }
   ],
   "totals": {
-    "grep": 108957,
-    "sverklo": 21526,
-    "ratio": "5.1",
-    "savings": 80
+    "grep": 117845,
+    "sverklo": 22198,
+    "ratio": "5.3",
+    "savings": 81
   }
 }
