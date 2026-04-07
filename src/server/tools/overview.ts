@@ -14,7 +14,7 @@ export const overviewTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 4000)",
+        description: "Max tokens to return (default: 2000)",
       },
     },
   },
@@ -25,7 +25,7 @@ export function handleOverview(
   args: Record<string, unknown>
 ): string {
   const path = args.path as string | undefined;
-  const tokenBudget = (args.token_budget as number) || 4000;
+  const tokenBudget = (args.token_budget as number) || 2000;
 
   const files = indexer.fileStore.getAll(); // already sorted by pagerank DESC
 

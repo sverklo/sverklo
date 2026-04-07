@@ -124,10 +124,28 @@ export async function startMcpServer(rootPath: string): Promise<void> {
   // Start file watcher
   startWatcher(indexer, rootPath);
 
+  // Read version from package.json so we don't ship a stale string
+  let serverVersion = "0.0.0";
+  try {
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const here = dirname(fileURLToPath(import.meta.url));
+    for (const rel of ["..", "../..", "../../.."]) {
+      try {
+        const pkg = JSON.parse(readFileSync(join(here, rel, "package.json"), "utf-8"));
+        if (pkg.name === "sverklo" && pkg.version) {
+          serverVersion = pkg.version;
+          break;
+        }
+      } catch {}
+    }
+  } catch {}
+
   const server = new Server(
     {
       name: "sverklo",
-      version: "0.1.0",
+      version: serverVersion,
     },
     {
       capabilities: {

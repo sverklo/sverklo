@@ -28,7 +28,7 @@ export const lookupTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 2000)",
+        description: "Max tokens to return (default: 1200)",
       },
     },
     required: ["symbol"],
@@ -41,7 +41,7 @@ export function handleLookup(
 ): string {
   const symbol = args.symbol as string;
   const type = (args.type as ChunkType | "any") || "any";
-  const tokenBudget = (args.token_budget as number) || 2000;
+  const tokenBudget = (args.token_budget as number) || 1200;
 
   let chunks = indexer.chunkStore.getByName(symbol, 20);
 

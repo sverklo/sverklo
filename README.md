@@ -69,33 +69,37 @@ Agent query → BM25 text search ──┐
 
 ## Quick Start
 
-### Claude Code (recommended)
 ```bash
+npm install -g sverklo
+cd your-project
 sverklo init
 ```
-This creates `.claude/mcp.json`, adds a SessionStart hook, and appends sverklo instructions to your `CLAUDE.md`. Safe to run multiple times.
+
+This creates `.mcp.json` at your project root (the only file Claude Code reads for project-scoped MCP servers) and appends sverklo instructions to your `CLAUDE.md`. Safe to re-run.
+
+If sverklo doesn't appear in Claude Code's `/mcp` list after restart, run:
+```bash
+sverklo doctor
+```
+This diagnoses MCP setup issues — checks the binary, the model, the config file location, the handshake, and tells you exactly what's wrong.
 
 ### Cursor / Windsurf / VS Code
-Add to `.cursor/mcp.json` (or `.windsurf/mcp.json` / `.vscode/mcp.json`):
+These IDEs use their own MCP config locations. Use the **full binary path** to avoid PATH resolution issues in spawned subprocesses:
 ```json
 {
   "mcpServers": {
     "sverklo": {
-      "command": "sverklo",
+      "command": "/full/path/to/sverklo",
       "args": ["."]
     }
   }
 }
 ```
-
-### Windsurf
-Add to `~/.windsurf/mcp.json` (same format as Cursor).
-
-### VS Code (Copilot)
-Add to `.vscode/mcp.json` (same format as Cursor).
-
-### JetBrains
-Settings → Tools → MCP Servers → Add → command: `npx`, args: `sverklo .`
+Find the path with `which sverklo`. Add to:
+- **Cursor:** `.cursor/mcp.json`
+- **Windsurf:** `~/.windsurf/mcp.json`
+- **VS Code:** `.vscode/mcp.json`
+- **JetBrains:** Settings → Tools → MCP Servers
 
 ### Any MCP Client
 ```bash

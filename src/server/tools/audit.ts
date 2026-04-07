@@ -24,7 +24,7 @@ interface GodNode {
 }
 
 export function handleAudit(indexer: Indexer, args: Record<string, unknown>): string {
-  const tokenBudget = (args.token_budget as number) || 4000;
+  const tokenBudget = (args.token_budget as number) || 2000;
   const files = indexer.fileStore.getAll();
   const chunkCount = indexer.chunkStore.count();
   const symbolRefCount = indexer.symbolRefStore.count();

@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "sverklo": {
-      "command": "sverklo",
+      "command": "/opt/homebrew/bin/sverklo",
       "args": [
         "."
       ]

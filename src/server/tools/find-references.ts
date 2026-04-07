@@ -14,7 +14,7 @@ export const findReferencesTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 3000)",
+        description: "Max tokens to return (default: 1500)",
       },
     },
     required: ["symbol"],
@@ -26,7 +26,7 @@ export function handleFindReferences(
   args: Record<string, unknown>
 ): string {
   const symbol = args.symbol as string;
-  const tokenBudget = (args.token_budget as number) || 3000;
+  const tokenBudget = (args.token_budget as number) || 1500;
 
   // Use FTS to find all mentions of the symbol
   const ftsResults = indexer.chunkStore.searchFts(symbol, 50);

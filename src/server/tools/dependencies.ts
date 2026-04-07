@@ -23,7 +23,7 @@ export const dependenciesTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 2000)",
+        description: "Max tokens to return (default: 1200)",
       },
     },
     required: ["path"],
@@ -37,7 +37,7 @@ export function handleDependencies(
   const path = args.path as string;
   const direction = (args.direction as string) || "both";
   const depth = (args.depth as number) || 1;
-  const tokenBudget = (args.token_budget as number) || 2000;
+  const tokenBudget = (args.token_budget as number) || 1200;
 
   const file = indexer.fileStore.getByPath(path);
   if (!file) {

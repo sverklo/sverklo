@@ -15,7 +15,7 @@ export const searchTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 4000)",
+        description: "Max tokens to return (default: 2000)",
       },
       scope: {
         type: "string",
@@ -41,7 +41,7 @@ export async function handleSearch(
 ): Promise<string> {
   const results = await hybridSearch(indexer, {
     query: args.query as string,
-    tokenBudget: (args.token_budget as number) || 4000,
+    tokenBudget: (args.token_budget as number) || 2000,
     scope: args.scope as string | undefined,
     language: args.language as string | undefined,
     type: (args.type as ChunkType | "any") || "any",

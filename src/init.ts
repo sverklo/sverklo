@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { join } from "node:path";
 
 const CLAUDE_MD_SNIPPET = `
@@ -15,53 +16,42 @@ When sverklo MCP server is connected, **always prefer sverklo tools over built-i
 - \`sverklo_recall\` — check past decisions before making new ones
 `;
 
-function buildHooksConfig(autoCapture: boolean) {
-  const base: {
-    hooks: Record<string, unknown[]>;
-  } = {
-    hooks: {
-      SessionStart: [
-        {
-          matcher: "",
-          hooks: [
-            {
-              type: "command",
-              command:
-                "echo 'Sverklo is connected. Use sverklo_search for code search (semantic, ranked by importance — better than grep). Use sverklo_remember to save decisions. Use sverklo_recall to check past decisions.'",
-              timeout: 5,
-            },
-          ],
-        },
-      ],
-    },
-  };
-
-  if (autoCapture) {
-    // PostToolUse hook — nudge Claude to capture decisions after meaningful tool calls.
-    // This runs after every tool call; Claude sees the output and decides whether to call
-    // sverklo_remember. Cheap, non-blocking, model-driven (no heuristic false positives).
-    base.hooks.PostToolUse = [
-      {
-        matcher: "Edit|Write|NotebookEdit",
-        hooks: [
-          {
-            type: "command",
-            command:
-              "echo 'If this edit represents a design decision, architectural choice, or pattern worth remembering, call sverklo_remember to save it. Skip if it is a routine fix.'",
-            timeout: 3,
-          },
-        ],
-      },
-    ];
+/**
+ * Resolve the absolute path to the sverklo binary.
+ * Using a full path is more reliable than relying on PATH inheritance
+ * when Claude Code spawns the subprocess.
+ */
+function resolveSverkloBinary(): string {
+  try {
+    return execSync("command -v sverklo", { encoding: "utf-8" }).trim() || "sverklo";
+  } catch {
+    return "sverklo";
   }
-
-  return base;
 }
 
-export async function initProject(projectPath: string, options: { autoCapture?: boolean; mineChats?: boolean } = {}): Promise<void> {
+function buildAutoCaptureHook() {
+  // PostToolUse hook — nudge Claude to capture decisions after Edit/Write tool calls.
+  // The hook output is visible to Claude, who decides whether to call sverklo_remember.
+  // Cheap, non-blocking, model-driven (no heuristic false positives).
+  return {
+    matcher: "Edit|Write|NotebookEdit",
+    hooks: [
+      {
+        type: "command",
+        command:
+          "echo 'If this edit represents a design decision, architectural choice, or pattern worth remembering, call sverklo_remember to save it. Skip if it is a routine fix.'",
+        timeout: 3,
+      },
+    ],
+  };
+}
+
+export async function initProject(
+  projectPath: string,
+  options: { autoCapture?: boolean; mineChats?: boolean } = {}
+): Promise<void> {
   console.log("Initializing Sverklo in", projectPath);
   console.log("");
-  const HOOKS_CONFIG = buildHooksConfig(options.autoCapture ?? false);
 
   // 1. Add CLAUDE.md snippet
   const claudeMdPath = join(projectPath, "CLAUDE.md");
@@ -78,50 +68,12 @@ export async function initProject(projectPath: string, options: { autoCapture?: 
     console.log("  CLAUDE.md — created with sverklo instructions");
   }
 
-  // 2. Add hooks to .claude/settings.local.json
-  const claudeDir = join(projectPath, ".claude");
-  const settingsPath = join(claudeDir, "settings.local.json");
+  // 2. MCP server config — Claude Code reads .mcp.json AT PROJECT ROOT for project-scoped servers.
+  //    .claude/mcp.json is NOT read by Claude Code (verified Apr 2026).
+  const mcpConfigPath = join(projectPath, ".mcp.json");
+  const sverkloBin = resolveSverkloBinary();
 
-  mkdirSync(claudeDir, { recursive: true });
-
-  let settings: any = {};
-  if (existsSync(settingsPath)) {
-    try {
-      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-    } catch {
-      settings = {};
-    }
-  }
-
-  // Check if hook already exists
-  const existingHooks = settings.hooks?.SessionStart;
-  const alreadyHasSverklo = existingHooks?.some((h: any) =>
-    h.hooks?.some((hook: any) => hook.command?.includes("sverklo") || hook.command?.includes("Sverklo"))
-  );
-
-  if (alreadyHasSverklo) {
-    console.log("  .claude/settings.local.json — already has sverklo hooks, skipping");
-  } else {
-    // Merge hooks
-    if (!settings.hooks) settings.hooks = {};
-    if (!settings.hooks.SessionStart) settings.hooks.SessionStart = [];
-    settings.hooks.SessionStart.push(...HOOKS_CONFIG.hooks.SessionStart);
-
-    // Optionally add PostToolUse auto-capture hook
-    if (options.autoCapture && HOOKS_CONFIG.hooks.PostToolUse) {
-      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
-      settings.hooks.PostToolUse.push(...(HOOKS_CONFIG.hooks.PostToolUse as unknown[]));
-      console.log("  .claude/settings.local.json — added SessionStart + PostToolUse (auto-capture) hooks");
-    } else {
-      console.log("  .claude/settings.local.json — added SessionStart hook");
-    }
-
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-  }
-
-  // 3. Add MCP server config if not present
-  const mcpConfigPath = join(claudeDir, "mcp.json");
-  let mcpConfig: any = {};
+  let mcpConfig: { mcpServers?: Record<string, { command: string; args: string[] }> } = {};
   if (existsSync(mcpConfigPath)) {
     try {
       mcpConfig = JSON.parse(readFileSync(mcpConfigPath, "utf-8"));
@@ -131,18 +83,64 @@ export async function initProject(projectPath: string, options: { autoCapture?: 
   }
 
   if (mcpConfig.mcpServers?.sverklo) {
-    console.log("  .claude/mcp.json — sverklo already configured, skipping");
+    console.log("  .mcp.json — sverklo already configured, skipping");
   } else {
     if (!mcpConfig.mcpServers) mcpConfig.mcpServers = {};
     mcpConfig.mcpServers.sverklo = {
-      command: "sverklo",
+      command: sverkloBin,
       args: ["."],
     };
     writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + "\n");
-    console.log("  .claude/mcp.json — added sverklo MCP server");
+    console.log(`  .mcp.json — added sverklo MCP server (${sverkloBin})`);
   }
 
-  // 4. Import existing memories from CLAUDE.md, ADRs, etc.
+  // 3. Optional auto-capture hook in .claude/settings.local.json
+  //    NOTE: We no longer write a fake "Sverklo is connected" SessionStart hook —
+  //    that masked real connection failures. Claude Code's normal MCP loading
+  //    surfaces actual errors when .mcp.json is correct.
+  if (options.autoCapture) {
+    const claudeDir = join(projectPath, ".claude");
+    const settingsPath = join(claudeDir, "settings.local.json");
+    mkdirSync(claudeDir, { recursive: true });
+
+    let settings: { hooks?: Record<string, unknown[]> } = {};
+    if (existsSync(settingsPath)) {
+      try {
+        settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      } catch {
+        settings = {};
+      }
+    }
+
+    if (!settings.hooks) settings.hooks = {};
+    if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+
+    const existingPost = settings.hooks.PostToolUse as Array<{ hooks?: Array<{ command?: string }> }>;
+    const alreadyHasSverklo = existingPost.some((h) =>
+      h.hooks?.some((hook) => hook.command?.includes("sverklo_remember"))
+    );
+
+    if (alreadyHasSverklo) {
+      console.log("  .claude/settings.local.json — auto-capture hook already present, skipping");
+    } else {
+      existingPost.push(buildAutoCaptureHook() as unknown as { hooks?: Array<{ command?: string }> });
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+      console.log("  .claude/settings.local.json — added PostToolUse auto-capture hook");
+    }
+  }
+
+  // 4. Migrate legacy .claude/mcp.json if present (from older sverklo versions)
+  const legacyMcpPath = join(projectPath, ".claude", "mcp.json");
+  if (existsSync(legacyMcpPath)) {
+    try {
+      const legacy = JSON.parse(readFileSync(legacyMcpPath, "utf-8"));
+      if (legacy?.mcpServers?.sverklo) {
+        console.log("  .claude/mcp.json — found legacy config (Claude Code does not read this — moved to .mcp.json)");
+      }
+    } catch {}
+  }
+
+  // 5. Import existing memories from CLAUDE.md, ADRs, etc.
   console.log("");
   console.log("Scanning for existing project knowledge...");
   try {
@@ -185,6 +183,6 @@ export async function initProject(projectPath: string, options: { autoCapture?: 
   }
 
   console.log("");
-  console.log("Done! Sverklo is now configured for this project.");
-  console.log("Start Claude Code and sverklo tools will be preferred automatically.");
+  console.log("Done. Restart Claude Code in this directory and sverklo should appear in /mcp.");
+  console.log("If it doesn't load, run `sverklo doctor` to diagnose.");
 }

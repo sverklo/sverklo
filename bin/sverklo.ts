@@ -34,6 +34,13 @@ if (command === "init") {
   process.exit(0);
 }
 
+if (command === "doctor" || command === "diagnose" || command === "check") {
+  const projectPath = resolve(args[1] || process.cwd());
+  const { runDoctor } = await import("../src/doctor.js");
+  runDoctor(projectPath);
+  process.exit(0);
+}
+
 if (command === "workspace") {
   const sub = args[1];
   const {
@@ -172,7 +179,8 @@ if (command === "--help" || command === "-h") {
 sverklo — code intelligence for AI agents
 
 Usage:
-  sverklo init              Set up sverklo in your project (CLAUDE.md + hooks + MCP config)
+  sverklo init              Set up sverklo in your project (.mcp.json + CLAUDE.md)
+  sverklo doctor            Diagnose MCP setup issues
   sverklo [project-path]    Start the MCP server (stdio transport)
   sverklo ui [project-path] Open the web dashboard
   sverklo wakeup            Print compressed project context (for system-prompt injection)
