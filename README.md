@@ -176,13 +176,20 @@ Opens a web dashboard at `localhost:3847` — browse indexed files, search playg
 
 ## Performance
 
-| Metric | Value |
-|--------|-------|
-| Index 38 files | 640ms |
-| Search query | <50ms |
-| Memory footprint | ~200MB |
-| Languages | 10 |
-| Dependencies | zero config |
+Real measurements on real codebases (full methodology and reproducer in [`BENCHMARKS.md`](./BENCHMARKS.md)):
+
+| Repo | Files | Cold index | Search p95 | Impact analysis | DB size |
+|---|---:|---:|---:|---:|---:|
+| [gin-gonic/gin](https://github.com/gin-gonic/gin) | 99 | 10 s | 12 ms | 0.75 ms | 4 MB |
+| [nestjs/nest](https://github.com/nestjs/nest) | 1,709 | 22 s | 14 ms | 0.88 ms | 11 MB |
+| [facebook/react](https://github.com/facebook/react) | 4,368 | 152 s | 26 ms | 1.18 ms | 67 MB |
+
+- **Search latency stays under 26 ms p95** even on a 4k-file React monorepo
+- **Impact analysis is sub-millisecond** on every repo we tested — it's an indexed SQL join, not a string scan
+- **Cold-start indexing is linear in chunks** (~7 ms/chunk on Apple Silicon). Pay it once per project; incremental refresh after that only re-processes changed files
+- **Steady-state RAM is ~200 MB** after indexing finishes. Peak during indexing is 400–700 MB while the embedder batches chunks
+- **Languages:** 10 (TS, JS, Python, Go, Rust, Java, C, C++, Ruby, PHP)
+- **Dependencies:** zero config, zero API keys, zero cloud calls (after the one-time ~90 MB ONNX model download)
 
 ## Why not... (as of 2026-04)
 
