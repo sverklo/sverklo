@@ -35,7 +35,13 @@ const ID_FILE = join(TELEMETRY_DIR, "install-id");
 const LOG_FILE = join(TELEMETRY_DIR, "telemetry.log");
 const NUDGED_FILE = join(TELEMETRY_DIR, "init-nudged");
 
-const ENDPOINT = "https://t.sverklo.com/v1/event";
+// Telemetry endpoint. Defaults to the production custom-domain URL on
+// sverklo.com (a Cloudflare Worker behind a Cloudflare-managed zone).
+// Override at runtime with SVERKLO_TELEMETRY_ENDPOINT — useful for local
+// development against a wrangler dev server, or for users behind corporate
+// proxies who need to point at a self-hosted relay.
+const ENDPOINT =
+  process.env.SVERKLO_TELEMETRY_ENDPOINT || "https://t.sverklo.com/v1/event";
 const POST_TIMEOUT_MS = 800;
 
 // Resolved lazily so the cost is paid once and only when telemetry is on.

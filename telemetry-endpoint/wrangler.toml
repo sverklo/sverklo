@@ -13,12 +13,15 @@ compatibility_date = "2026-04-08"
 binding = "TELEMETRY_BUCKET"
 bucket_name = "sverklo-telemetry"
 
-# Custom domain route. Requires sverklo.com to be a Cloudflare-managed zone
-# OR an external CNAME to <worker-name>.workers.dev.
+# Custom domain: t.sverklo.com → this Worker. Requires sverklo.com to be a
+# Cloudflare-managed zone, which it is (migrated from GoDaddy DNS to
+# Cloudflare on 2026-04-08). The zone-status check + activation_check API
+# both have to report "active" before deploy succeeds with this block.
 [[routes]]
-pattern = "t.sverklo.com/*"
+pattern = "t.sverklo.com"
 custom_domain = true
 
-# Resource limits
-[limits]
-cpu_ms = 50  # endpoint is one R2 PUT, should never need more than ~10ms
+# NOTE: Custom [limits] are paid-plan only. Workers Free gives every script
+# 10ms CPU per request, which is comfortably more than the ~1-2ms our handler
+# needs (one JSON parse + one R2 PUT). If you upgrade to a paid plan later
+# you can pin a tighter cpu_ms here.
