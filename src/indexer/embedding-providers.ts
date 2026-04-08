@@ -187,20 +187,20 @@ class OllamaProvider implements EmbeddingProvider {
   }
 
   async init(): Promise<void> {
-    // Probe with a minimal request. A failure here will fall back to
-    // the bundled provider via the factory.
+    // Probe with the read-only /api/tags listing endpoint instead of
+    // firing a real embedding request. Derives the tags endpoint from
+    // the embeddings endpoint so custom SVERKLO_OLLAMA_URL overrides
+    // still work. Failure falls back to the bundled provider via the
+    // factory wrapper.
+    const tagsEndpoint = this.endpoint.replace(/\/api\/embeddings\/?$/, "/api/tags");
     try {
-      const res = await fetch(this.endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: this.model, prompt: "ping" }),
-      });
+      const res = await fetch(tagsEndpoint, { method: "GET" });
       if (!res.ok) {
         throw new Error(`Ollama probe failed: ${res.status} ${res.statusText}`);
       }
     } catch (err) {
       throw new Error(
-        `Ollama embedding provider could not reach ${this.endpoint}. ` +
+        `Ollama embedding provider could not reach ${tagsEndpoint}. ` +
           `Is Ollama running? Original error: ${(err as Error).message}`
       );
     }

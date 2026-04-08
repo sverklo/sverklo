@@ -31,6 +31,21 @@ export function handleIndexStatus(indexer: Indexer): string {
   parts.push(`- ${status.fileCount} files · ${status.chunkCount} symbols · ${symbolRefCount} references`);
   parts.push(`- Languages: ${status.languages.join(", ") || "none"}`);
   parts.push(`- Status: ${status.indexing ? `indexing (${status.progress?.done}/${status.progress?.total})` : "ready"}`);
+  // Embedding provider selection — read from env so users can verify
+  // their SVERKLO_EMBEDDING_PROVIDER setting took effect. Issue #9.
+  const providerEnv = (process.env.SVERKLO_EMBEDDING_PROVIDER || "default").toLowerCase();
+  if (providerEnv !== "default" && providerEnv !== "bundled" && providerEnv !== "onnx") {
+    const extra: string[] = [];
+    if (providerEnv === "openai" && process.env.SVERKLO_OPENAI_MODEL) {
+      extra.push(process.env.SVERKLO_OPENAI_MODEL);
+    }
+    if (providerEnv === "ollama" && process.env.SVERKLO_OLLAMA_MODEL) {
+      extra.push(process.env.SVERKLO_OLLAMA_MODEL);
+    }
+    parts.push(`- Embedding provider: ${providerEnv}${extra.length > 0 ? ` (${extra.join(", ")})` : ""}`);
+  } else {
+    parts.push(`- Embedding provider: default (bundled ONNX, 384d)`);
+  }
 
   // Freshness signal — only meaningful once the index has something to compare
   // against. Skip the disk walk entirely on an empty index to avoid scaring

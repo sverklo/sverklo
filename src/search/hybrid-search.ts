@@ -137,11 +137,21 @@ export interface HybridSearchResult {
   fallbackHint: string | null;
 }
 
-export async function hybridSearch(
+/**
+ * Internal: compute the full ranked candidate list without packing.
+ * Extracted so hybridSearch and hybridSearchWithConfidence both share
+ * it — the original implementation ran this pipeline twice, once
+ * inside hybridSearch (packed) and again implicitly when the
+ * confidence wrapper called hybridSearch with a sky-high budget and
+ * then repacked. That was doubling the work on every search call.
+ *
+ * Returns the full ranked list (not token-budgeted). Callers pack.
+ */
+async function rankCandidates(
   indexer: Indexer,
   options: SearchOptions
 ): Promise<SearchResult[]> {
-  const { query, tokenBudget, scope, language, type } = options;
+  const { query, scope, language, type } = options;
 
   // Signal A: BM25 text search
   const ftsResults = indexer.chunkStore.searchFts(query, 50);
@@ -232,11 +242,22 @@ export async function hybridSearch(
     candidates.push({ chunk, file, score: finalScore });
   }
 
-  // Sort by score
+  // Sort by score, return unbounded — caller packs.
   candidates.sort((a, b) => b.score - a.score);
+  return candidates;
+}
 
-  // Pack into token budget
-  return packResults(candidates, tokenBudget);
+/**
+ * Public entry point: returns the ranked+packed result list.
+ * Backwards compat for any in-process callers that don't need the
+ * confidence signal.
+ */
+export async function hybridSearch(
+  indexer: Indexer,
+  options: SearchOptions
+): Promise<SearchResult[]> {
+  const ranked = await rankCandidates(indexer, options);
+  return packResults(ranked, options.tokenBudget);
 }
 
 /**
@@ -244,19 +265,14 @@ export async function hybridSearch(
  * fallback hint. This is the preferred entry point for the MCP tool —
  * it lets us tell agents when semantic search is likely to be weak so
  * they can fall back to Grep without burning a second tool call.
- *
- * The old hybridSearch() is preserved for backwards compat with any
- * in-process callers that just want the ranked list.
  */
 export async function hybridSearchWithConfidence(
   indexer: Indexer,
   options: SearchOptions
 ): Promise<HybridSearchResult> {
-  // We need the full candidate list before packing to a budget so the
-  // confidence signal reflects the actual ranking quality, not whatever
-  // fits in the budget. So we run the inner pipeline twice conceptually:
-  // once unbounded for confidence, then pack for the output.
-  const ranked = await hybridSearch(indexer, { ...options, tokenBudget: 100000 });
+  // Single rank pass; confidence reads the unbounded list, the output
+  // is packed to the caller's budget. No double work.
+  const ranked = await rankCandidates(indexer, options);
 
   const shape = classifyQueryShape(options.query);
   const confidence = computeConfidence(ranked, shape);

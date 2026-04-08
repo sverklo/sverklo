@@ -232,6 +232,14 @@ export async function handleContext(
 // snapshot-testing downstream.
 // ─────────────────────────────────────────────────────────────────────
 
+// Upper bound on the repo-map budget. Anything above 32k tokens is
+// almost certainly a mistake — the resulting map won't fit in any
+// current model's context window and the wall-clock cost of walking
+// every file climbs linearly. We cap and emit a warning in the
+// output so the caller knows we trimmed.
+const MAX_REPO_MAP_BUDGET = 32000;
+const MIN_REPO_MAP_BUDGET = 500;
+
 async function buildPrunedRepoMap(
   indexer: Indexer,
   opts: {
@@ -241,7 +249,22 @@ async function buildPrunedRepoMap(
     exclude: string[];
   }
 ): Promise<string> {
-  const { budget, task, scope, exclude } = opts;
+  let { budget } = opts;
+  const { task, scope, exclude } = opts;
+
+  // Clamp the budget to sane bounds. Sub-500 can't even fit a header
+  // + one file meaningfully; over 32k is nearly always unintentional.
+  let budgetWarning = "";
+  if (budget > MAX_REPO_MAP_BUDGET) {
+    budgetWarning = `_Budget ${budget} exceeded max ${MAX_REPO_MAP_BUDGET} — clamped. For larger maps, use multiple scoped calls._\n\n`;
+    budget = MAX_REPO_MAP_BUDGET;
+  } else if (budget < MIN_REPO_MAP_BUDGET) {
+    return (
+      `Budget too small: ${budget}. Minimum is ${MIN_REPO_MAP_BUDGET} tokens — ` +
+      `below that the repo map can't fit a useful number of files. ` +
+      `Try \`budget: ${MIN_REPO_MAP_BUDGET}\` for a snap view.`
+    );
+  }
 
   // Pull all files sorted by PageRank. file_store.getAll() already
   // returns them in pagerank DESC order — see storage/file-store.ts.
@@ -296,6 +319,7 @@ async function buildPrunedRepoMap(
   parts.push(
     `_Budget: ${budget} tokens · ordered by PageRank${task ? " + task relevance" : ""}._`
   );
+  if (budgetWarning) parts.push(budgetWarning);
   parts.push("");
 
   // Remaining budget after the header. 10% cushion for the trailing

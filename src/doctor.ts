@@ -221,6 +221,58 @@ export function runDoctor(projectPath: string): void {
     });
   }
 
+  // 5.5. Memory journal (JSONL mirror)
+  // Issue #7: the JSONL memory mirror is silently advisory — if it's
+  // broken, users never know. Surface it here so `sverklo doctor` is
+  // the one place to find all failure modes.
+  const journalPath = join(projectPath, ".sverklo", "memories.jsonl");
+  if (existsSync(journalPath)) {
+    try {
+      const content = readFileSync(journalPath, "utf-8");
+      const lines = content.split("\n").filter((l) => l.trim());
+      let badLines = 0;
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          if (!entry.op || typeof entry.id !== "number" || !entry.ts) {
+            badLines++;
+          }
+        } catch {
+          badLines++;
+        }
+      }
+      if (badLines === 0) {
+        checks.push({
+          name: "memory journal",
+          status: "ok",
+          message: `${lines.length} entries at .sverklo/memories.jsonl`,
+        });
+      } else {
+        checks.push({
+          name: "memory journal",
+          status: "warn",
+          message: `${badLines} malformed line(s) out of ${lines.length} in .sverklo/memories.jsonl — probably edited by hand`,
+          fix: "Remove the bad lines or delete the file; sverklo will recreate it on the next memory write",
+        });
+      }
+    } catch (err) {
+      checks.push({
+        name: "memory journal",
+        status: "warn",
+        message: `could not read .sverklo/memories.jsonl: ${(err as Error).message}`,
+      });
+    }
+  } else {
+    // Not having a journal yet is fine — it's only created on the
+    // first memory write — so we don't warn. Report it as an info
+    // line so the user knows where to look.
+    checks.push({
+      name: "memory journal",
+      status: "ok",
+      message: "not created yet (normal — appears on the first sverklo_remember call)",
+    });
+  }
+
   // 6. CLAUDE.md
   const claudeMdPath = join(projectPath, "CLAUDE.md");
   if (existsSync(claudeMdPath)) {

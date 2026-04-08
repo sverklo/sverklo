@@ -207,6 +207,11 @@ export class Indexer {
 
       // 8. Update project metadata
       this.lastIndexedTime = Date.now();
+      // Any full reindex invalidates the freshness cache: the disk
+      // walk we cached is stale relative to the new index state.
+      // Skipping this left sverklo_status showing the old dirty list
+      // for up to FRESHNESS_CACHE_MS after a forced rebuild.
+      this.freshnessCache = null;
       const elapsed = this.lastIndexedTime - startTime;
       log(
         `Indexing complete: ${this.fileStore.count()} files, ` +
@@ -422,6 +427,7 @@ export class Indexer {
     this.indexing = false;
     this.progress = { done: 0, total: 0 };
     this.lastIndexedTime = null;
+    this.freshnessCache = null;
   }
 }
 
