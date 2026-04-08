@@ -34,6 +34,42 @@ if (command === "init") {
   process.exit(0);
 }
 
+if (command === "bench" || command === "benchmark") {
+  // Reproducible benchmark runner. Clones pinned versions of gin, nestjs,
+  // and react into ~/.sverklo-bench-cache, runs the perf profiler against
+  // each, and prints a summary. Everything in BENCHMARKS.md should come
+  // out of this command so readers can reproduce the numbers with one
+  // invocation. Inspired by ripgrep's benchsuite.
+  const { spawn } = await import("node:child_process");
+  const { dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const { existsSync } = await import("node:fs");
+  const here = dirname(fileURLToPath(import.meta.url));
+  // Try source layout first (running from checkout), then installed dist.
+  const candidates = [
+    resolve(here, "..", "scripts", "bench-reproducer.mjs"),
+    resolve(here, "..", "..", "scripts", "bench-reproducer.mjs"),
+  ];
+  const scriptPath = candidates.find((p) => existsSync(p));
+  if (!scriptPath) {
+    console.error(
+      "sverklo bench: could not find scripts/bench-reproducer.mjs.\n" +
+        "This command is only available when running from a sverklo checkout,\n" +
+        "not from the npm-installed package (the bench scripts aren't shipped\n" +
+        "in `files` to keep the package small). Clone the repo and run it from\n" +
+        "there:\n\n" +
+        "  git clone https://github.com/sverklo/sverklo && cd sverklo\n" +
+        "  npm install && npm run build\n" +
+        "  npm run bench"
+    );
+    process.exit(1);
+  }
+  const child = spawn("node", [scriptPath, ...args.slice(1)], { stdio: "inherit" });
+  child.on("exit", (code) => process.exit(code ?? 0));
+  // Keep alive until spawn exit
+  await new Promise(() => {});
+}
+
 if (command === "audit-prompt" || command === "review-prompt") {
   // Emit a ready-to-paste prompt that encodes the hybrid workflow
   // (prefer sverklo tools for discovery, built-in tools for exact
@@ -317,6 +353,7 @@ Usage:
   sverklo [project-path]    Start the MCP server (stdio transport)
   sverklo ui [project-path] Open the web dashboard
   sverklo wakeup            Print compressed project context (for system-prompt injection)
+  sverklo bench             Run reproducible benchmarks on gin/nestjs/react (checkout only)
   sverklo audit-prompt      Print a ready-to-paste codebase-audit prompt (hybrid workflow)
   sverklo review-prompt     Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
   sverklo setup             Download the embedding model (~90MB)

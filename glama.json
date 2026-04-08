@@ -1,0 +1,159 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "name": "sverklo",
+  "displayName": "Sverklo",
+  "description": "Local-first code intelligence MCP for AI coding agents. Hybrid BM25 + ONNX vector search, symbol-level impact analysis, diff-aware PR review with risk scoring, and persistent memory tied to git state.",
+  "version": "0.2.12",
+  "author": "sverklo",
+  "license": "MIT",
+  "homepage": "https://sverklo.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sverklo/sverklo"
+  },
+  "bugs": "https://github.com/sverklo/sverklo/issues",
+  "categories": [
+    "code-search",
+    "code-intelligence",
+    "developer-tools",
+    "memory",
+    "local-first"
+  ],
+  "tags": [
+    "code-search",
+    "semantic-search",
+    "pagerank",
+    "bm25",
+    "onnx",
+    "embeddings",
+    "local-first",
+    "claude-code",
+    "cursor",
+    "windsurf",
+    "antigravity",
+    "diff-review",
+    "impact-analysis",
+    "refactor",
+    "memory",
+    "git-aware",
+    "zero-config"
+  ],
+  "install": {
+    "npm": {
+      "package": "sverklo",
+      "command": "npx -y sverklo <project-path>"
+    },
+    "source": {
+      "repo": "https://github.com/sverklo/sverklo",
+      "build": "npm install && npm run build",
+      "run": "node dist/bin/sverklo.js <project-path>"
+    }
+  },
+  "runtime": {
+    "type": "node",
+    "engines": {
+      "node": ">=20"
+    }
+  },
+  "transport": "stdio",
+  "features": {
+    "localFirst": true,
+    "requiresApiKey": false,
+    "requiresCloud": false,
+    "telemetry": "opt-in",
+    "openSource": true
+  },
+  "privacy": {
+    "dataLeavesDevice": false,
+    "notes": "Sverklo is local-first. It makes network calls only (a) to download the ONNX embedding model on first run, and (b) if the user explicitly opts in to telemetry with `sverklo telemetry enable`. Telemetry ships 9 non-identifying fields documented in TELEMETRY.md."
+  },
+  "tools": [
+    {
+      "name": "sverklo_context",
+      "summary": "One-call onboarding: combines overview, saved memories, and codebase map."
+    },
+    {
+      "name": "sverklo_search",
+      "summary": "Hybrid BM25 + ONNX vector + PageRank search fused via Reciprocal Rank Fusion."
+    },
+    {
+      "name": "sverklo_overview",
+      "summary": "Structural codebase map ranked by PageRank importance."
+    },
+    {
+      "name": "sverklo_lookup",
+      "summary": "Find any function, class, or type by name (typo-tolerant)."
+    },
+    {
+      "name": "sverklo_refs",
+      "summary": "Find all references to a symbol, with caller context."
+    },
+    {
+      "name": "sverklo_deps",
+      "summary": "File dependency graph — importers and imports, both directions."
+    },
+    {
+      "name": "sverklo_impact",
+      "summary": "Walk the symbol graph, return ranked transitive callers (the real blast radius)."
+    },
+    {
+      "name": "sverklo_audit",
+      "summary": "Surface god nodes, hub files, and dead-code candidates in one call."
+    },
+    {
+      "name": "sverklo_ast_grep",
+      "summary": "Structural pattern matching across the AST, not just text."
+    },
+    {
+      "name": "sverklo_review_diff",
+      "summary": "Risk-scored review of git diff — touched-symbol importance × coverage × churn."
+    },
+    {
+      "name": "sverklo_test_map",
+      "summary": "Which tests cover which changed symbols; flag untested production changes."
+    },
+    {
+      "name": "sverklo_diff_search",
+      "summary": "Semantic search restricted to the changed surface of a diff."
+    },
+    {
+      "name": "sverklo_remember",
+      "summary": "Save decisions, patterns, invariants — pinned to the current git SHA."
+    },
+    {
+      "name": "sverklo_recall",
+      "summary": "Semantic search over saved memories with staleness detection."
+    },
+    {
+      "name": "sverklo_memories",
+      "summary": "List all memories with health metrics (still valid / stale / orphaned)."
+    },
+    {
+      "name": "sverklo_forget",
+      "summary": "Delete a memory."
+    },
+    {
+      "name": "sverklo_promote",
+      "summary": "Promote a memory to a higher tier (project / global)."
+    },
+    {
+      "name": "sverklo_demote",
+      "summary": "Demote a memory to a lower tier or archive."
+    },
+    {
+      "name": "sverklo_status",
+      "summary": "Index health check, file counts, last update."
+    },
+    {
+      "name": "sverklo_wakeup",
+      "summary": "Warm the index after a long pause; incremental refresh."
+    }
+  ],
+  "links": {
+    "website": "https://sverklo.com",
+    "docs": "https://github.com/sverklo/sverklo/blob/main/README.md",
+    "benchmarks": "https://github.com/sverklo/sverklo/blob/main/BENCHMARKS.md",
+    "telemetry": "https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md",
+    "security": "https://github.com/sverklo/sverklo/blob/main/SECURITY.md"
+  }
+}

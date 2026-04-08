@@ -21,6 +21,7 @@
     "lint": "eslint src/",
     "prepublishOnly": "rm -rf dist && npm run build",
     "benchmark": "node --experimental-strip-types benchmark/benchmark.ts",
+    "bench": "node scripts/bench-reproducer.mjs",
     "bench:quick": "node --experimental-strip-types --no-warnings benchmark/src/index.ts",
     "bench:latency": "node scripts/mcp-latency-profile.mjs"
   },

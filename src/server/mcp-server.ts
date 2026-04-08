@@ -49,6 +49,7 @@ import {
 } from "./tools/tier.js";
 import { startHttpServer } from "./http-server.js";
 import { track } from "../telemetry/index.js";
+import { applyToolOverrides } from "./tool-overrides.js";
 
 // Zilliz claude-context compatibility tool definitions.
 // These mirror github.com/zilliztech/claude-context tool names so users can
@@ -273,32 +274,38 @@ export async function startMcpServer(rootPath: string): Promise<void> {
   // every session and most users don't need them. Dispatch cases below are
   // always wired so opt-in users keep working.
   const enableZilliz = process.env.SVERKLO_ZILLIZ_COMPAT === "1";
+  // Tool descriptions and the visible set can be overridden at runtime via
+  // SVERKLO_TOOL_<NAME>_DESCRIPTION and SVERKLO_DISABLED_TOOLS env vars.
+  // See src/server/tool-overrides.ts for details. This lets power users
+  // repurpose or trim the tool surface without forking.
+  const baseTools = [
+    contextTool,
+    searchTool,
+    overviewTool,
+    lookupTool,
+    findReferencesTool,
+    dependenciesTool,
+    indexStatusTool,
+    rememberTool,
+    recallTool,
+    forgetTool,
+    memoriesTool,
+    promoteTool,
+    demoteTool,
+    impactTool,
+    auditTool,
+    wakeupTool,
+    reviewDiffTool,
+    diffSearchTool,
+    testMapTool,
+    astGrepTool,
+    ...(enableZilliz
+      ? [indexCodebaseTool, searchCodeTool, clearIndexTool, getIndexingStatusTool]
+      : []),
+  ];
+  const visibleTools = applyToolOverrides(baseTools);
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      contextTool,
-      searchTool,
-      overviewTool,
-      lookupTool,
-      findReferencesTool,
-      dependenciesTool,
-      indexStatusTool,
-      rememberTool,
-      recallTool,
-      forgetTool,
-      memoriesTool,
-      promoteTool,
-      demoteTool,
-      impactTool,
-      auditTool,
-      wakeupTool,
-      reviewDiffTool,
-      diffSearchTool,
-      testMapTool,
-      astGrepTool,
-      ...(enableZilliz
-        ? [indexCodebaseTool, searchCodeTool, clearIndexTool, getIndexingStatusTool]
-        : []),
-    ],
+    tools: visibleTools,
   }));
 
   // Handle tool calls

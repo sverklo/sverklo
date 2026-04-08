@@ -1,0 +1,90 @@
+# Smithery MCP directory metadata.
+# Registered at https://smithery.ai/server/sverklo
+#
+# Updating this file:
+#  - Keep the startCommand matching the npm binary — changes here become the
+#    "install" output users see, so the command must actually work.
+#  - Bump version in sync with package.json on every release.
+
+name: sverklo
+version: 0.2.12
+description: >-
+  Local-first code intelligence MCP for AI coding agents. Hybrid BM25 + ONNX
+  vector search, symbol-level impact analysis, diff-aware PR review with risk
+  scoring, and persistent memory tied to git state. Runs entirely on your
+  machine — no cloud, no API keys, no data leaves your laptop.
+
+homepage: https://sverklo.com
+repository: https://github.com/sverklo/sverklo
+license: MIT
+author: sverklo
+
+# Categories used by Smithery's search and filtering.
+categories:
+  - code-search
+  - code-intelligence
+  - developer-tools
+  - memory
+  - local-first
+
+# Keywords used by Smithery's full-text search.
+keywords:
+  - code-search
+  - semantic-search
+  - pagerank
+  - bm25
+  - onnx
+  - embeddings
+  - local-first
+  - claude-code
+  - cursor
+  - windsurf
+  - antigravity
+  - diff-review
+  - impact-analysis
+  - refactor
+  - memory
+  - git-aware
+
+# How a user should install sverklo as an MCP server. This is what
+# Smithery renders on the install page — keep it copy-paste-able.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - projectPath
+    properties:
+      projectPath:
+        type: string
+        title: Project path
+        description: Absolute path to the project root sverklo should index.
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'sverklo', config.projectPath]
+    })
+
+# Optional runtime configuration surface. These are NOT required —
+# sverklo has zero-config defaults — but power users may want to set them.
+env:
+  SVERKLO_DEBUG:
+    description: Enable debug logging to stderr. Set to "1" to enable.
+    required: false
+  SVERKLO_DISABLE_HINTS:
+    description: Disable intent-aware hint suffixes on tool results.
+    required: false
+  SVERKLO_ZILLIZ_COMPAT:
+    description: Expose Zilliz claude-context compatibility tool aliases.
+    required: false
+
+# Badges and links shown on the Smithery page.
+links:
+  - label: Documentation
+    url: https://sverklo.com
+  - label: Benchmarks
+    url: https://github.com/sverklo/sverklo/blob/main/BENCHMARKS.md
+  - label: Telemetry policy
+    url: https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md
+  - label: Security policy
+    url: https://github.com/sverklo/sverklo/blob/main/SECURITY.md

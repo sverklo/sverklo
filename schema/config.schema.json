@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sverklo.com/schema/config.schema.json",
+  "title": "Sverklo project configuration",
+  "description": "Optional configuration for a sverklo project. All fields are optional — sverklo has zero-config defaults and this file is only needed if you want to override them.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ignore": {
+      "type": "array",
+      "description": "Additional path patterns to exclude from indexing, in gitignore syntax. Merged on top of .gitignore and .sverkloignore.",
+      "items": { "type": "string" }
+    },
+    "include": {
+      "type": "array",
+      "description": "Explicit include patterns. If set, only paths matching these are indexed. Rarely needed — prefer `ignore`.",
+      "items": { "type": "string" }
+    },
+    "languages": {
+      "type": "array",
+      "description": "Limit indexing to a subset of languages. Defaults to all supported (ts, js, python, go, rust, java, c, cpp, ruby, php).",
+      "items": {
+        "type": "string",
+        "enum": ["ts", "js", "python", "go", "rust", "java", "c", "cpp", "ruby", "php"]
+      }
+    },
+    "embeddings": {
+      "type": "object",
+      "description": "Embedding model configuration. Defaults to the bundled all-MiniLM-L6-v2 ONNX model.",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Model identifier. 'default' uses the bundled ONNX model.",
+          "default": "default"
+        },
+        "dimensions": {
+          "type": "integer",
+          "description": "Embedding dimensions. Must match the chosen model.",
+          "default": 384
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "description": "Search behavior tuning.",
+      "additionalProperties": false,
+      "properties": {
+        "bm25Weight": {
+          "type": "number",
+          "description": "Weight applied to BM25 lexical scores in the hybrid fusion. Default 1.0.",
+          "default": 1.0,
+          "minimum": 0
+        },
+        "vectorWeight": {
+          "type": "number",
+          "description": "Weight applied to vector similarity scores in the hybrid fusion. Default 1.0.",
+          "default": 1.0,
+          "minimum": 0
+        },
+        "pageRankBoost": {
+          "type": "number",
+          "description": "Multiplier applied to PageRank importance when re-ranking search results. Default 1.0.",
+          "default": 1.0,
+          "minimum": 0
+        },
+        "defaultTokenBudget": {
+          "type": "integer",
+          "description": "Default token budget for sverklo_search responses when the caller doesn't specify one.",
+          "default": 4000,
+          "minimum": 500
+        }
+      }
+    },
+    "indexer": {
+      "type": "object",
+      "description": "Indexer behavior tuning.",
+      "additionalProperties": false,
+      "properties": {
+        "maxFileSizeBytes": {
+          "type": "integer",
+          "description": "Skip files larger than this. Default 1 MB.",
+          "default": 1048576,
+          "minimum": 1024
+        },
+        "concurrency": {
+          "type": "integer",
+          "description": "Max concurrent embedding workers. Defaults to CPU count.",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "watch": {
+          "type": "boolean",
+          "description": "Enable file watcher for incremental reindexing. Default true.",
+          "default": true
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "description": "Memory layer configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "stalenessThresholdDays": {
+          "type": "integer",
+          "description": "Mark memories as stale if their git SHA is older than this many days and the surrounding code has changed. Default 30.",
+          "default": 30,
+          "minimum": 1
+        },
+        "coreTierLimit": {
+          "type": "integer",
+          "description": "Max number of memories that can live in the 'core' tier (always-on project invariants). Default 25.",
+          "default": 25,
+          "minimum": 1
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "description": "Telemetry configuration. Off by default — must be explicitly enabled via `sverklo telemetry enable`.",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "description": "Override the telemetry endpoint. Default is https://t.sverklo.com. Point to your own CF worker for self-hosted telemetry.",
+          "format": "uri"
+        }
+      }
+    }
+  }
+}
