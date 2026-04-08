@@ -59,21 +59,28 @@ Anything else returns `400`. Anything that the client sent but isn't in the whit
 # 1. Install Wrangler if you haven't already
 npm install -g wrangler
 
-# 2. Authenticate
-wrangler login
+# 2. Authenticate via API token (more reliable than `wrangler login`).
+#    Create the token at https://dash.cloudflare.com/profile/api-tokens
+#    using the "Edit Cloudflare Workers" template.
+export CLOUDFLARE_API_TOKEN="your-token-here"
 
-# 3. Create the R2 bucket
+# 3. Set your account ID (from the right sidebar of any Cloudflare dashboard page)
+export CLOUDFLARE_ACCOUNT_ID="your-account-id-here"
+
+# 4. Verify auth works
+wrangler whoami
+
+# 5. Create the R2 bucket
 wrangler r2 bucket create sverklo-telemetry
 
-# 4. Set the 90-day lifecycle policy
+# 6. Set the 90-day lifecycle policy
 wrangler r2 bucket lifecycle add sverklo-telemetry \
   --id telemetry-90d \
   --prefix "" \
   --expire-days 90
-
-# 5. Edit wrangler.toml — replace REPLACE_WITH_YOUR_CLOUDFLARE_ACCOUNT_ID
-#    with the account ID shown in the Cloudflare dashboard sidebar.
 ```
+
+Both env vars must be set in every shell that runs `wrangler deploy`. Add the two `export` lines to `~/.zshrc` (or a `.env` file you source manually) so you don't have to redo this each time. **Never commit the API token to git** — the account ID is fine to commit but the token is a credential.
 
 ### Deploy the worker
 

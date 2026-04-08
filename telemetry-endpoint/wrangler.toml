@@ -2,9 +2,10 @@ name = "sverklo-telemetry"
 main = "worker.ts"
 compatibility_date = "2026-04-08"
 
-# Replace these with the values from your Cloudflare account.
-# account_id can be found at https://dash.cloudflare.com (right sidebar of any page).
-account_id = "REPLACE_WITH_YOUR_CLOUDFLARE_ACCOUNT_ID"
+# Account ID is read from the CLOUDFLARE_ACCOUNT_ID env var.
+# Set it in your shell before running wrangler:
+#   export CLOUDFLARE_ACCOUNT_ID="<your-account-id>"
+# (Find it in https://dash.cloudflare.com — right sidebar of any page.)
 
 # R2 binding — the bucket the Worker writes raw event JSON files into.
 # Bucket must exist before deploy: `wrangler r2 bucket create sverklo-telemetry`
