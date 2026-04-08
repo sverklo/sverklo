@@ -3,10 +3,7 @@ import type { Indexer } from "../../indexer/indexer.js";
 export const impactTool = {
   name: "sverklo_impact",
   description:
-    "Find all code that would be impacted by changing a symbol. Returns every function/class " +
-    "that references the given symbol name — critical for safe refactoring. Use BEFORE editing " +
-    "a function to understand the blast radius. Much more accurate than grep because it matches " +
-    "function calls and constructor invocations, not string literals or comments.",
+    "Refactor blast-radius: callers of a symbol with confidence scoring. Run before editing.",
   inputSchema: {
     type: "object" as const,
     properties: {

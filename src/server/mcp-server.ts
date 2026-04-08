@@ -33,6 +33,9 @@ import { astGrepTool, handleAstGrep } from "./tools/ast-grep.js";
 import { impactTool, handleImpact } from "./tools/impact.js";
 import { auditTool, handleAudit } from "./tools/audit.js";
 import { wakeupTool, handleWakeup } from "./tools/wakeup.js";
+import { reviewDiffTool, handleReviewDiff } from "./tools/review-diff.js";
+import { diffSearchTool, handleDiffSearch } from "./tools/diff-search.js";
+import { testMapTool, handleTestMap } from "./tools/test-map.js";
 import {
   promoteTool,
   demoteTool,
@@ -153,23 +156,10 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         resources: {},
       },
       instructions:
-        "Sverklo provides code intelligence for this project. Use it where it fits — " +
-        "not as a replacement for Grep/Read but as a sharper tool for the cases below.\n\n" +
-        "USE SVERKLO FOR:\n" +
-        "- sverklo_search: exploratory questions where you don't know the exact symbol " +
-        "('how does auth work', 'find anything related to billing')\n" +
-        "- sverklo_impact: refactor blast radius — who calls this function\n" +
-        "- sverklo_refs: all references to a symbol with semantic context\n" +
-        "- sverklo_deps: file import graph to understand impact of file changes\n" +
-        "- sverklo_lookup: find a function/class definition by name\n" +
-        "- sverklo_overview: high-level codebase map (PageRank-ranked)\n" +
-        "- sverklo_audit: god nodes, hub files, dead code candidates\n" +
-        "- sverklo_remember / sverklo_recall: persist decisions across sessions, tied to git state\n\n" +
-        "PREFER GREP/READ FOR:\n" +
-        "- Exact string matches and literal pattern checks\n" +
-        "- Reading specific file contents or line ranges\n" +
-        "- Focused diff review where you already know which files matter\n" +
-        "- Build/test verification (Bash)",
+        "Sverklo: code intelligence for this repo. Use it for exploratory search, " +
+        "refactor blast-radius, dependency graphs, diff-aware review, and persistent " +
+        "memory across sessions. Prefer Grep/Read for exact-string lookups and " +
+        "single-file edits.",
     }
   );
 
@@ -241,7 +231,11 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     return { contents: [] };
   });
 
-  // List tools
+  // List tools. Zilliz claude-context compat aliases are gated behind
+  // SVERKLO_ZILLIZ_COMPAT=1 — they pay ~450 tokens of schema overhead on
+  // every session and most users don't need them. Dispatch cases below are
+  // always wired so opt-in users keep working.
+  const enableZilliz = process.env.SVERKLO_ZILLIZ_COMPAT === "1";
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       searchTool,
@@ -259,12 +253,13 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       impactTool,
       auditTool,
       wakeupTool,
+      reviewDiffTool,
+      diffSearchTool,
+      testMapTool,
       astGrepTool,
-      // Zilliz claude-context compatibility aliases
-      indexCodebaseTool,
-      searchCodeTool,
-      clearIndexTool,
-      getIndexingStatusTool,
+      ...(enableZilliz
+        ? [indexCodebaseTool, searchCodeTool, clearIndexTool, getIndexingStatusTool]
+        : []),
     ],
   }));
 
@@ -328,6 +323,15 @@ export async function startMcpServer(rootPath: string): Promise<void> {
           break;
         case "sverklo_wakeup":
           result = handleWakeup(indexer, args || {});
+          break;
+        case "sverklo_review_diff":
+          result = handleReviewDiff(indexer, args || {});
+          break;
+        case "sverklo_diff_search":
+          result = await handleDiffSearch(indexer, args || {});
+          break;
+        case "sverklo_test_map":
+          result = handleTestMap(indexer, args || {});
           break;
         case "sverklo_promote":
           result = handlePromote(indexer, args || {});

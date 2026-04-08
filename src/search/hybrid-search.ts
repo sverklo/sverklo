@@ -139,21 +139,40 @@ export function packResults(
   return results;
 }
 
-export function formatResults(results: SearchResult[]): string {
+export function formatResults(
+  results: SearchResult[],
+  opts: { compact?: boolean } = {}
+): string {
   if (results.length === 0) {
     return "No results found.";
   }
 
+  // Compact mode (default): for chunks longer than ~15 lines, show signature
+  // + first 4 lines + last line + an elision marker. 3-4× more results fit
+  // in the same token budget — agents re-Read the full body when they need it.
+  // Disable with `compact: false` for callers that genuinely need full bodies.
+  const compact = opts.compact ?? true;
   const parts: string[] = [];
 
-  for (const { chunk, file, score } of results) {
+  for (const { chunk, file } of results) {
     const header = chunk.name
       ? `## ${file.path}:${chunk.start_line}-${chunk.end_line} (${chunk.type}: ${chunk.name})`
       : `## ${file.path}:${chunk.start_line}-${chunk.end_line} (${chunk.type})`;
 
     parts.push(header);
     parts.push(`\`\`\`${file.language || ""}`);
-    parts.push(chunk.content);
+
+    const lines = chunk.content.split("\n");
+    if (compact && lines.length > 15) {
+      const head = lines.slice(0, 4);
+      const tail = lines[lines.length - 1];
+      parts.push(head.join("\n"));
+      parts.push(`  // … ${lines.length - 5} lines elided — Read for full body …`);
+      parts.push(tail);
+    } else {
+      parts.push(chunk.content);
+    }
+
     parts.push("```");
     parts.push("");
   }

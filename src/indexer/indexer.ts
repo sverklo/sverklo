@@ -271,6 +271,52 @@ export class Indexer {
     };
   }
 
+  /**
+   * Compute index freshness by walking the filesystem and comparing mtimes
+   * to what's stored in the file index. Used by sverklo_status so reviewer
+   * agents can decide whether to fall back to grep on a stale index.
+   *
+   * Disk walk is bounded by the same ignore filter as indexing, and status
+   * is a low-frequency call (start of session) so the cost is acceptable.
+   */
+  getFreshness(): { ageSeconds: number | null; dirtyFiles: string[]; missingFiles: string[] } {
+    const ageSeconds =
+      this.lastIndexedTime === null
+        ? null
+        : Math.floor((Date.now() - this.lastIndexedTime) / 1000);
+
+    const dirtyFiles: string[] = [];
+    const missingFiles: string[] = [];
+
+    try {
+      const ignoreFilter = createIgnoreFilter(this.config.rootPath);
+      const onDisk = discoverFiles(this.config.rootPath, ignoreFilter);
+      const onDiskMap = new Map(onDisk.map((f) => [f.relativePath, f.lastModified]));
+
+      // Files indexed but missing or stale on disk
+      for (const indexed of this.fileStore.getAll()) {
+        const diskMtime = onDiskMap.get(indexed.path);
+        if (diskMtime === undefined) {
+          missingFiles.push(indexed.path);
+        } else if (diskMtime !== indexed.last_modified) {
+          dirtyFiles.push(indexed.path);
+        }
+      }
+
+      // Files on disk but not in the index (new since last index)
+      const indexedPaths = new Set(this.fileStore.getAll().map((f) => f.path));
+      for (const f of onDisk) {
+        if (!indexedPaths.has(f.relativePath)) {
+          dirtyFiles.push(f.relativePath);
+        }
+      }
+    } catch (err) {
+      logError("getFreshness: disk walk failed", err);
+    }
+
+    return { ageSeconds, dirtyFiles, missingFiles };
+  }
+
   close(): void {
     this.db.close();
   }

@@ -107,8 +107,8 @@ function parseTSJS(content: string, lines: string[]): ParseResult {
     let chunk: ParsedChunk | null = null;
 
     // Export/function declarations
-    if (/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+(\w+)/.test(trimmed)) {
-      const name = trimmed.match(/function\s+(\w+)/)?.[1] || null;
+    if (/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\*?\s+(\w+)/.test(trimmed)) {
+      const name = trimmed.match(/function\*?\s+(\w+)/)?.[1] || null;
       const endLine = findBraceEnd(lines, i);
       chunk = extractChunk("function", name, lines, i, endLine);
     }
@@ -120,6 +120,59 @@ function parseTSJS(content: string, lines: string[]): ParseResult {
     ) {
       const name = trimmed.match(/(?:const|let|var)\s+(\w+)/)?.[1] || null;
       const endLine = findBraceEnd(lines, i) || findStatementEnd(lines, i);
+      chunk = extractChunk("function", name, lines, i, endLine);
+    }
+    // CommonJS function expressions: var foo = function (...) { ... }
+    // Express uses this everywhere; missing it leaves whole files unchunked.
+    else if (
+      /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function\*?\s*(?:\w+\s*)?\(/.test(
+        trimmed
+      )
+    ) {
+      const name = trimmed.match(/(?:const|let|var)\s+(\w+)/)?.[1] || null;
+      const endLine = findBraceEnd(lines, i);
+      chunk = extractChunk("function", name, lines, i, endLine);
+    }
+    // CommonJS prototype methods: Foo.prototype.bar = function (...) { ... }
+    // The bread and butter of Express, Mongoose, and most pre-class JS libs.
+    else if (
+      /^(\w+)\.prototype\.(\w+)\s*=\s*(?:async\s+)?function\*?\s*(?:\w+\s*)?\(/.test(trimmed)
+    ) {
+      const m2 = trimmed.match(/^(\w+)\.prototype\.(\w+)/);
+      const name = m2 ? `${m2[1]}.${m2[2]}` : null;
+      const endLine = findBraceEnd(lines, i);
+      chunk = extractChunk("method", name, lines, i, endLine);
+    }
+    // Bare receiver methods at column 0: proto.foo = function () { ... }
+    // Requires the line to start at column 0 (line === trimmed) so we don't
+    // accidentally chunk inner-function callback assignments. Catches Express's
+    // `var proto = module.exports = function(){}; proto.handle = function(){}`
+    // pattern where the receiver is an aliased prototype.
+    // Excludes `module.X` and `exports.X` (handled by dedicated branches above).
+    else if (
+      line === trimmed &&
+      /^([a-z_]\w*)\.(\w+)\s*=\s*(?:async\s+)?function\*?\s*(?:\w+\s*)?\(/.test(trimmed) &&
+      !/^(?:module|exports)\./.test(trimmed)
+    ) {
+      const m2 = trimmed.match(/^(\w+)\.(\w+)/);
+      const name = m2 ? `${m2[1]}.${m2[2]}` : null;
+      const endLine = findBraceEnd(lines, i);
+      chunk = extractChunk("method", name, lines, i, endLine);
+    }
+    // CommonJS exports: module.exports = function name(...) { ... }
+    //                   exports.foo = function (...) { ... }
+    else if (
+      /^module\.exports\s*=\s*(?:async\s+)?function\*?\s+(\w+)\s*\(/.test(trimmed)
+    ) {
+      const name = trimmed.match(/function\*?\s+(\w+)/)?.[1] || null;
+      const endLine = findBraceEnd(lines, i);
+      chunk = extractChunk("function", name, lines, i, endLine);
+    }
+    else if (
+      /^(?:module\.)?exports\.(\w+)\s*=\s*(?:async\s+)?function\*?\s*(?:\w+\s*)?\(/.test(trimmed)
+    ) {
+      const name = trimmed.match(/exports\.(\w+)/)?.[1] || null;
+      const endLine = findBraceEnd(lines, i);
       chunk = extractChunk("function", name, lines, i, endLine);
     }
     // Class declarations

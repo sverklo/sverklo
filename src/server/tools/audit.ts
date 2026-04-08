@@ -3,10 +3,7 @@ import type { Indexer } from "../../indexer/indexer.js";
 export const auditTool = {
   name: "sverklo_audit",
   description:
-    "Generate a project insight report: god nodes (most-referenced symbols), hub files " +
-    "(highest PageRank), orphans (dead code candidates), coupling hotspots, memory summary. " +
-    "One call tells you the state of the codebase. Use at the start of a project to " +
-    "understand the architecture, or before refactoring to identify risks.",
+    "Project report: god nodes, hub files, orphans, language mix, memory health.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -61,8 +58,19 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
   }));
 
   // ─── Orphans: named symbols with zero references ───
+  // Method/qualified chunks are stored as "Receiver.method" or "exports.foo",
+  // but the symbol extractor records call sites under the BARE name (`method`).
+  // Check both the qualified and the unqualified suffix so CJS prototype
+  // methods and `exports.X` aren't falsely flagged as dead.
+  // Also skip non-shipping locations (tests, examples, benchmarks, scripts) —
+  // they're full of helpers that are "used" via test runners or doc snippets
+  // sverklo can't see, and flagging them as dead code is pure noise.
+  const NON_SHIPPING = /(^|\/)(tests?|__tests__|spec|specs|examples?|benchmarks?|fixtures?|scripts?|docs?)(\/|$)/;
   const namedChunks = allChunks.filter(
-    (c) => c.name && (c.type === "function" || c.type === "class" || c.type === "method")
+    (c) =>
+      c.name &&
+      (c.type === "function" || c.type === "class" || c.type === "method") &&
+      !NON_SHIPPING.test(c.filePath)
   );
   const orphans: { name: string; type: string; file: string; line: number }[] = [];
   const MAX_ORPHANS = 15;
@@ -70,10 +78,15 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     if (orphans.length >= MAX_ORPHANS) break;
     // Skip common exports like main, default, index, __init__
     if (["main", "default", "index", "__init__", "constructor"].includes(c.name!)) continue;
-    const refs = refsByName.get(c.name!) || 0;
+    const fullName = c.name!;
+    const dot = fullName.lastIndexOf(".");
+    const bareName = dot >= 0 ? fullName.slice(dot + 1) : fullName;
+    const refs =
+      (refsByName.get(fullName) || 0) +
+      (dot >= 0 ? (refsByName.get(bareName) || 0) : 0);
     if (refs === 0) {
       orphans.push({
-        name: c.name!,
+        name: fullName,
         type: c.type,
         file: c.filePath,
         line: c.start_line,

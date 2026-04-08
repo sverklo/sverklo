@@ -6,3 +6,6 @@ dist/
 grammars/
 models/
 .DS_Store
+benchmark/.cache/
+benchmark/results/
+!benchmark/results/.gitkeep

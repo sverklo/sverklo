@@ -1,6 +1,6 @@
 {
   "name": "sverklo",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Sverklo — local-first code intelligence MCP server. Hybrid search, PageRank ranking, semantic embeddings. Zero config.",
   "type": "module",
   "bin": {
@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "lint": "eslint src/",
     "prepublishOnly": "rm -rf dist && npm run build",
-    "benchmark": "node --experimental-strip-types benchmark/benchmark.ts"
+    "benchmark": "node --experimental-strip-types benchmark/benchmark.ts",
+    "bench:quick": "node --experimental-strip-types --no-warnings benchmark/src/index.ts"
   },
   "keywords": [
     "sverklo",

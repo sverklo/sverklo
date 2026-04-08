@@ -4,24 +4,13 @@ import type { Indexer } from "../../indexer/indexer.js";
 export const astGrepTool = {
   name: "sverklo_ast_grep",
   description:
-    "Structural code search using ast-grep (if installed). Use for AST-based pattern matching when regex/text search isn't precise enough — e.g. finding all calls to a function regardless of formatting, or matching code shapes. Falls back gracefully if ast-grep is not installed.",
+    "Structural AST search via ast-grep (if installed). For shape-matching that regex can't express.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      pattern: {
-        type: "string",
-        description:
-          "ast-grep pattern, e.g. 'console.log($A)' or 'function $NAME($$$) { $$$ }'",
-      },
-      language: {
-        type: "string",
-        description:
-          "Language to parse (e.g. 'typescript', 'javascript', 'python', 'rust', 'go')",
-      },
-      path: {
-        type: "string",
-        description: "Path to search in (default: current project root)",
-      },
+      pattern: { type: "string", description: "e.g. 'console.log($A)'" },
+      language: { type: "string", description: "typescript, python, rust, go, …" },
+      path: { type: "string", description: "Default: project root" },
     },
     required: ["pattern"],
   },

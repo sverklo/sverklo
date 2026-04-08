@@ -1,51 +1,88 @@
-# Sverklo Token Benchmark
+# Sverklo Benchmark
 
-Measures the token cost of answering code questions via sverklo vs grep-and-read-files (what a stateless agent would do).
+This directory contains two harnesses:
 
-## Run it
+## v2 — Tier A primitives (current)
+
+Quality-gated, hand-authored ground truth, no agentic loops. Measures the
+*primitives* each baseline gives an LLM (definition lookup, references,
+file deps, dead code) and reports F1 + tokens-per-correct-answer at a
+fixed quality bar.
 
 ```bash
-cd sverklo
 npm run build
-npm run benchmark -- /path/to/your/repo
+npm run bench:quick
 ```
 
-The benchmark runs 5 realistic queries:
-1. `auth_middleware` — "How does authentication work?"
-2. `database_queries` — "Find database query code"
-3. `error_handling` — "How are errors handled?"
-4. `http_routes` — "Where are HTTP routes defined?"
-5. `state_management` — "How is application state managed?"
+Outputs:
 
-For each, it compares:
-- **grep baseline**: `grep -rlE 'pattern'` → read top 10 matching files fully
-- **sverklo_search**: semantic hybrid query with `token_budget: 6000`
+```
+benchmark/results/<run-id>/
+  raw.jsonl       # one line per (task, baseline)
+  summary.json    # aggregated by category × baseline
+  report.md       # human-readable
+```
 
-Outputs a summary table and writes detailed JSON to `.sverklo-bench/benchmark.json`.
+### Layout
 
-## Results on sverklo's own codebase (50 files, TypeScript)
+```
+benchmark/
+  src/
+    types.ts                  # Task, RunMetrics, Baseline interfaces
+    estimator.ts              # token estimator (chars/3.5)
+    runner/
+      run-primitive.ts        # main loop: dataset × baseline × task
+      score.ts                # recall / precision / F1 (with tolerances)
+      report.ts               # markdown report writer
+    baselines/
+      base.ts                 # Baseline interface + BaselineOutput
+      naive-grep.ts           # grep -rn + cat top 10 files (the floor)
+      smart-grep.ts           # filtered grep + targeted ±10 line reads
+      sverklo.ts              # spawns sverklo MCP, calls lookup/refs/deps/audit
+    datasets/
+      manifest.json           # repos with pinned refs
+      fetch.ts                # shallow git clone for non-local datasets
+    ground-truth/
+      schema.ts               # JSONL loader
+      seed/
+        sverklo.jsonl         # hand-authored 30-task seed for sverklo itself
+        express.gen.ts        # generator: resolves symbol locations from clone
+  scripts/
+    bench-quick.sh            # CI-friendly Tier A only
+  results/                    # per-run output (gitignored except .gitkeep)
+```
 
-| Query | grep tokens | sverklo tokens | Savings |
-|-------|------------:|---------------:|--------:|
-| database_queries | 27,110 | 5,835 | **4.6× fewer** |
-| error_handling | 13,394 | 5,446 | **2.5× fewer** |
-| http_routes | 26,304 | 4,606 | **5.7× fewer** |
-| state_management | 29,634 | 5,634 | **5.3× fewer** |
-| **TOTAL** | **108,957** | **21,526** | **5.1× fewer (80% savings)** |
+### Tasks
 
-*Note: `auth_middleware` returned 0 results from both (sverklo has no auth code), so it's excluded from the average.*
+| Category | What | How baselines answer |
+|---|---|---|
+| P1 | Symbol definition lookup | predict (file, line) for one symbol |
+| P2 | Reference finding | predict all (file, line) callsites |
+| P4 | File dependencies | predict imports + reverse-imports |
+| P5 | Dead code candidates | predict unused exported names |
 
-## What this means
+Scoring tolerances: P1 ±3 lines, P2 ±2 lines (parsers disagree on
+"def line" — signature vs body). P4/P5 use set membership on
+extension-stripped paths / names.
 
-For every 1M tokens your agent would normally spend grepping through irrelevant files, sverklo answers the same questions with ~200K tokens. That's **5× your effective context window** and **5× your rate limit budget**.
+### Quality gate
 
-On a 10K-file repo the ratio is expected to be higher because grep results get worse as the codebase grows, while sverklo's semantic ranking keeps result sets bounded.
+The headline `tokens_per_correct_answer` is computed only over runs with
+**F1 >= 0.8**. Otherwise we'd reward "found nothing cheaply". The
+ungated number is also reported for transparency.
 
-## Methodology
+### Datasets
 
-- **grep baseline**: simulates a stateless agent using `grep -rlE` to find matches, then reading the top 10 files fully via `cat`. This is the "naive" approach most agents default to.
-- **sverklo**: runs `sverklo_search` via MCP with `token_budget: 6000`.
-- **Token estimation**: `ceil(chars / 3.5)` — same heuristic sverklo uses internally.
-- **Cold start**: sverklo's timings include ONNX model load + initial indexing. Warm queries are sub-50ms.
+| name | source | how |
+|---|---|---|
+| sverklo | local checkout | always |
+| express | expressjs/express @ 4.21.1 | shallow clone on first run |
 
-Run on your own repo for a fair comparison — the benefit scales with codebase size.
+## v1 — `benchmark.ts` (legacy)
+
+The old token-savings demo at `benchmark/benchmark.ts`. Kept for
+comparison until v2 is validated. Run with `npm run benchmark -- <path>`.
+
+It produces the misleading "5× fewer tokens" headline because it has no
+quality gate — it compares "found something" to "found something else"
+as if both were correct.

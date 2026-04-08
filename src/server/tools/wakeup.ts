@@ -3,9 +3,7 @@ import type { Indexer } from "../../indexer/indexer.js";
 export const wakeupTool = {
   name: "sverklo_wakeup",
   description:
-    "Returns a compressed 'wake-up' context: top core memories + repo overview + hub files + key " +
-    "decisions. Designed for system-prompt injection when using non-MCP clients (local Llama, " +
-    "GPT API without MCP, etc). Alternative to the auto-injected sverklo://context resource.",
+    "Compressed project context for non-MCP clients (system-prompt injection).",
   inputSchema: {
     type: "object" as const,
     properties: {

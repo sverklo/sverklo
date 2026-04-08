@@ -31,6 +31,33 @@ export function handleIndexStatus(indexer: Indexer): string {
   parts.push(`- ${status.fileCount} files · ${status.chunkCount} symbols · ${symbolRefCount} references`);
   parts.push(`- Languages: ${status.languages.join(", ") || "none"}`);
   parts.push(`- Status: ${status.indexing ? `indexing (${status.progress?.done}/${status.progress?.total})` : "ready"}`);
+
+  // Freshness signal — only meaningful once the index has something to compare
+  // against. Skip the disk walk entirely on an empty index to avoid scaring
+  // the agent with "everything is dirty" noise during initial bootstrap.
+  if (status.fileCount > 0 && !status.indexing) {
+    const fresh = indexer.getFreshness();
+    if (fresh.ageSeconds !== null) {
+      parts.push(`- Last full index: ${formatAge(fresh.ageSeconds)} ago`);
+    } else {
+      parts.push(`- Last full index: unknown (process restarted since last index)`);
+    }
+
+    const dirtyCount = fresh.dirtyFiles.length;
+    const missingCount = fresh.missingFiles.length;
+    if (dirtyCount === 0 && missingCount === 0) {
+      parts.push(`- Freshness: ✅ in sync with disk`);
+    } else {
+      const bits: string[] = [];
+      if (dirtyCount > 0) bits.push(`${dirtyCount} dirty`);
+      if (missingCount > 0) bits.push(`${missingCount} deleted`);
+      parts.push(`- Freshness: ⚠️ ${bits.join(", ")} (file watcher catches up automatically; reads on these may be stale until then)`);
+      const preview = fresh.dirtyFiles.slice(0, 5);
+      if (preview.length > 0) {
+        parts.push(`  Dirty: ${preview.join(", ")}${dirtyCount > preview.length ? `, +${dirtyCount - preview.length} more` : ""}`);
+      }
+    }
+  }
   parts.push("");
 
   // ─── Memory state ───
@@ -91,4 +118,11 @@ export function handleIndexStatus(indexer: Indexer): string {
   parts.push(`_Use sverklo for exploratory work, refactor blast-radius, and semantic queries. Use Grep/Read for exact-match lookups and focused diff review._`);
 
   return parts.join("\n");
+}
+
+function formatAge(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
 }

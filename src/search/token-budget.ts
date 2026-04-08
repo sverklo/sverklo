@@ -67,8 +67,11 @@ export function formatLookup(
   files: Map<number, FileRecord>,
   tokenBudget: number
 ): string {
+  if (chunks.length === 0) return "No results found.";
+
   const parts: string[] = [];
   let remaining = tokenBudget;
+  let fittedAny = false;
 
   for (const chunk of chunks) {
     const file = files.get(chunk.file_id);
@@ -80,14 +83,34 @@ export function formatLookup(
     const contentCost = chunk.token_count;
     const totalCost = headerCost + contentCost + 10;
 
-    if (remaining < totalCost) break;
+    if (remaining < totalCost) continue;
 
     parts.push(header);
     parts.push(`\`\`\`${lang}`);
     parts.push(chunk.content);
     parts.push("```\n");
     remaining -= totalCost;
+    fittedAny = true;
   }
 
-  return parts.length > 0 ? parts.join("\n") : "No results found.";
+  // Fallback: if every chunk overflowed the budget, return header-only entries
+  // for the top matches so the caller still gets locations and signatures.
+  // Returning "No results found." here was hiding real matches whose bodies
+  // exceeded the budget — exactly what bench sv-p1-05/sv-p1-06 hit.
+  if (!fittedAny) {
+    parts.push(
+      `_All ${chunks.length} match${chunks.length === 1 ? "" : "es"} exceed token_budget=${tokenBudget}. Showing locations only — re-run with a larger token_budget or use Read for the full body._`
+    );
+    parts.push("");
+    for (const chunk of chunks.slice(0, 10)) {
+      const file = files.get(chunk.file_id);
+      const filePath = chunk.filePath || file?.path || "unknown";
+      const sig = chunk.signature ? `  \`${chunk.signature.trim()}\`` : "";
+      parts.push(
+        `- **${filePath}:${chunk.start_line}-${chunk.end_line}** (${chunk.type}: ${chunk.name}, ~${chunk.token_count} tokens)${sig}`
+      );
+    }
+  }
+
+  return parts.join("\n");
 }

@@ -8,44 +8,27 @@ const CONFLICT_THRESHOLD = 0.85;
 export const rememberTool = {
   name: "sverklo_remember",
   description:
-    "Save a decision, preference, pattern, or important context as a persistent memory. " +
-    "Memories are searchable semantically and linked to the current git state. " +
-    "Automatically detects conflicts with existing memories and invalidates them (bi-temporal — history preserved).",
+    "Save a persistent memory tied to git state. Auto-invalidates conflicting prior memories.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      content: {
-        type: "string",
-        description:
-          "The memory to save — a decision, preference, pattern, or context",
-      },
+      content: { type: "string", description: "The memory to save" },
       category: {
         type: "string",
         enum: ["decision", "preference", "pattern", "context", "todo", "procedural"],
-        description:
-          "Memory category (default: 'context'). Use 'procedural' for 'always do X' rules that decay slowly.",
+        description: "Default: context. Use procedural for 'always do X' rules.",
       },
-      tags: {
-        type: "array",
-        items: { type: "string" },
-        description: "Optional tags, e.g. ['auth', 'api-design']",
-      },
+      tags: { type: "array", items: { type: "string" }, description: "Optional tags" },
       related_files: {
         type: "array",
         items: { type: "string" },
-        description:
-          "File paths this memory relates to (enables staleness detection)",
+        description: "Files this memory relates to (enables staleness detection)",
       },
-      confidence: {
-        type: "number",
-        description:
-          "Confidence level 0.0-1.0 (default: 1.0). Lower for tentative decisions.",
-      },
+      confidence: { type: "number", description: "0.0-1.0, default 1.0" },
       tier: {
         type: "string",
         enum: ["core", "archive"],
-        description:
-          "Memory tier. 'core' memories auto-inject into every session (project invariants). 'archive' is searched on demand. Default: archive (procedural/preference auto-promote to core).",
+        description: "core auto-injects each session, archive is searched on demand",
       },
     },
     required: ["content"],
