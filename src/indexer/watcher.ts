@@ -32,6 +32,10 @@ export function startWatcher(indexer: Indexer, rootPath: string): void {
     const lang = detectLanguage(absolutePath);
     if (!lang) return;
 
+    // Any real change invalidates the freshness cache immediately so the
+    // next sverklo_status reflects reality without waiting for the TTL.
+    indexer.invalidateFreshnessCache();
+
     // Debounce
     const existing = pending.get(rel);
     if (existing) clearTimeout(existing);
@@ -51,6 +55,7 @@ export function startWatcher(indexer: Indexer, rootPath: string): void {
   watcher.on("unlink", (absolutePath: string) => {
     const rel = relative(rootPath, absolutePath);
     log(`File removed: ${rel}`);
+    indexer.invalidateFreshnessCache();
     indexer.removeFile(rel);
   });
 

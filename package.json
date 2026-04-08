@@ -23,7 +23,8 @@
     "benchmark": "node --experimental-strip-types benchmark/benchmark.ts",
     "bench": "node scripts/bench-reproducer.mjs",
     "bench:quick": "node --experimental-strip-types --no-warnings benchmark/src/index.ts",
-    "bench:latency": "node scripts/mcp-latency-profile.mjs"
+    "bench:latency": "node scripts/mcp-latency-profile.mjs",
+    "bench:playground": "node scripts/generate-playground-data.mjs"
   },
   "keywords": [
     "sverklo",

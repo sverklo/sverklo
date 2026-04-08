@@ -63,7 +63,7 @@ export function formatOverview(
 }
 
 export function formatLookup(
-  chunks: (CodeChunk & { filePath?: string; pagerank?: number })[],
+  chunks: (CodeChunk & { filePath?: string; pagerank?: number; fileLanguage?: string })[],
   files: Map<number, FileRecord>,
   tokenBudget: number
 ): string {
@@ -76,7 +76,7 @@ export function formatLookup(
   for (const chunk of chunks) {
     const file = files.get(chunk.file_id);
     const filePath = chunk.filePath || file?.path || "unknown";
-    const lang = file?.language || "";
+    const lang = chunk.fileLanguage || file?.language || "";
 
     const header = `## ${filePath}:${chunk.start_line}-${chunk.end_line} (${chunk.type}: ${chunk.name})`;
     const headerCost = Math.ceil(header.length / 3.5);

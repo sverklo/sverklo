@@ -1,6 +1,13 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import type { MemoryTier } from "../../types/index.js";
 
+// Issue #11: soft cap on the core tier. Core memories are injected
+// into every session prompt, so bloating this tier costs context-
+// window tokens on every agent interaction. Writes above the cap still
+// succeed — the cap is advisory — but the tool response warns the
+// caller so humans can prune.
+const CORE_TIER_SOFT_LIMIT = 25;
+
 export const promoteTool = {
   name: "sverklo_promote",
   description:
@@ -55,5 +62,27 @@ function setTier(indexer: Indexer, args: Record<string, unknown>, tier: MemoryTi
   }
 
   indexer.memoryStore.setTier(id, tier);
-  return `Moved memory #${id} to ${tier} tier: "${mem.content.slice(0, 80)}${mem.content.length > 80 ? "..." : ""}"`;
+  // Mirror the tier change to the JSONL journal. Issue #7.
+  if (tier === "core") {
+    indexer.memoryJournal.promote(id, tier);
+  } else {
+    indexer.memoryJournal.demote(id, tier);
+  }
+
+  const base = `Moved memory #${id} to ${tier} tier: "${mem.content.slice(0, 80)}${mem.content.length > 80 ? "..." : ""}"`;
+
+  // Warn if promoting pushes the core tier over the soft limit.
+  if (tier === "core") {
+    const coreCount = indexer.memoryStore.getCore(1000).length;
+    if (coreCount > CORE_TIER_SOFT_LIMIT) {
+      return (
+        base +
+        `\n\n⚠️ Core tier now has ${coreCount} memories (soft limit: ${CORE_TIER_SOFT_LIMIT}). ` +
+        "These are injected into every session prompt — too many crowds the context window. " +
+        "Consider demoting the least-critical ones with `sverklo_demote id:<n>`."
+      );
+    }
+  }
+
+  return base;
 }

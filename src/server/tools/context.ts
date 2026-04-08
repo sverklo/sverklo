@@ -14,6 +14,8 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { hybridSearch } from "../../search/hybrid-search.js";
 import { handleRecall } from "./recall.js";
+import { estimateTokens } from "../../utils/tokens.js";
+import type { CodeChunk, FileRecord } from "../../types/index.js";
 
 export const contextTool = {
   name: "sverklo_context",
@@ -21,28 +23,38 @@ export const contextTool = {
     "Umbrella context bundler. Give a task description and get a single curated bundle: " +
     "codebase overview header, semantically relevant code, related symbols, and matching " +
     "saved memories — in one round trip. Use this as the FIRST call when you start working " +
-    "on a new task and want to orient quickly. Drill down with the atomic tools (search, " +
-    "lookup, refs, recall) only after this.",
+    "on a new task and want to orient quickly. " +
+    "PASS `budget` for a PageRank-pruned repo map fit to a token budget — the ideal way " +
+    "to give an agent a complete mental model of an unfamiliar codebase in one call.",
   inputSchema: {
     type: "object" as const,
     properties: {
       task: {
         type: "string",
         description:
-          "Free-form description of what you're trying to do, e.g. 'add rate limiting to the login endpoint' or 'understand how billing webhooks are processed'.",
+          "Free-form description of what you're trying to do, e.g. 'add rate limiting to the login endpoint' or 'understand how billing webhooks are processed'. When `budget` is set and no task is given, returns a pure PageRank-ordered repo map.",
       },
       detail_level: {
         type: "string",
         enum: ["minimal", "normal", "full"],
         description:
-          "How much to return. minimal=fast/cheap (good for snap orientation); normal=balanced (default); full=adds dependency neighbours.",
+          "How much to return. minimal=fast/cheap (good for snap orientation); normal=balanced (default); full=adds dependency neighbours. Ignored when `budget` is set.",
       },
       scope: {
         type: "string",
         description: "Optional path prefix to constrain the search (e.g. 'src/api/').",
       },
+      budget: {
+        type: "number",
+        description:
+          "When set, returns a PageRank-pruned repo map greedily filled to this token budget (inspired by aider's repo-map). Files are ordered by PageRank importance, optionally biased toward `task`. Only symbol signatures are rendered — use the atomic tools for full bodies. Typical values: 4000 (snap map), 8000 (full mental model), 16000 (deep context).",
+      },
+      exclude: {
+        type: "array",
+        items: { type: "string" },
+        description: "Path substrings to exclude from the repo map (e.g. ['test', 'migration']).",
+      },
     },
-    required: ["task"],
   },
 };
 
@@ -52,10 +64,29 @@ export async function handleContext(
   indexer: Indexer,
   args: Record<string, unknown>
 ): Promise<string> {
-  const task = (args.task as string)?.trim();
-  if (!task) return "Error: `task` is required.";
+  const task = (args.task as string)?.trim() || "";
   const detail = ((args.detail_level as string) || "normal") as DetailLevel;
   const scope = args.scope as string | undefined;
+  const budget = args.budget as number | undefined;
+  const exclude = (args.exclude as string[] | undefined) || [];
+
+  // ── Budget mode: PageRank-pruned repo map (issue #8) ──────────────
+  // When budget is set, we skip the standard search-based bundler and
+  // instead build a dense structural map greedily filled to the target
+  // token count. This is the "give the agent a complete mental model
+  // of an unfamiliar repo in one call" path — aider's repo-map pattern.
+  if (typeof budget === "number" && budget > 0) {
+    return await buildPrunedRepoMap(indexer, {
+      budget,
+      task,
+      scope,
+      exclude,
+    });
+  }
+
+  if (!task) {
+    return "Error: `task` is required (unless you pass `budget` for a pure repo map).";
+  }
 
   const searchLimit = detail === "minimal" ? 3 : detail === "normal" ? 5 : 8;
   const memoryLimit = detail === "minimal" ? 2 : 5;
@@ -175,6 +206,183 @@ export async function handleContext(
   parts.push(`- \`sverklo_search query:"<more specific term>"\` to drill into a sub-area`);
   if (detail !== "full") {
     parts.push(`- Re-run with \`detail_level:"full"\` to also see dependency neighbours`);
+  }
+
+  return parts.join("\n");
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Issue #8 — PageRank-pruned repo map fit to a token budget.
+//
+// Design (mirrors aider's repo-map, adapted to sverklo's symbol graph):
+//
+//   1. Rank files by PageRank DESC.
+//   2. If a task was provided, run a semantic search and upweight files
+//      that contain strong matches. This lets the map center on the
+//      subsystem the user is working in, instead of always the global
+//      hub files.
+//   3. Walk files in ranked order; for each, render signatures of its
+//      most important symbols (also ordered by PageRank proxy).
+//   4. Greedily fill the budget. Stop the instant adding the next file
+//      would exceed the cap. The output is deterministic given the
+//      same index state and budget — important for caching.
+//
+// Determinism note: we break PageRank ties by file path to keep output
+// stable across runs of the same input. This matters for caching and
+// snapshot-testing downstream.
+// ─────────────────────────────────────────────────────────────────────
+
+async function buildPrunedRepoMap(
+  indexer: Indexer,
+  opts: {
+    budget: number;
+    task: string;
+    scope?: string;
+    exclude: string[];
+  }
+): Promise<string> {
+  const { budget, task, scope, exclude } = opts;
+
+  // Pull all files sorted by PageRank. file_store.getAll() already
+  // returns them in pagerank DESC order — see storage/file-store.ts.
+  let files: FileRecord[] = indexer.fileStore.getAll();
+
+  // Apply scope prefix and exclude substrings.
+  if (scope) {
+    files = files.filter((f) => f.path.startsWith(scope));
+  }
+  if (exclude.length > 0) {
+    files = files.filter((f) => !exclude.some((ex) => f.path.includes(ex)));
+  }
+
+  // Task-biased reranking: if the caller gave us a task, run a search
+  // and boost files that contain strong matches. We keep the PageRank
+  // signal as the primary order and only use the task signal as a
+  // tiebreaker / boost — so the output is still dominated by the
+  // structural importance of the codebase, not by query noise.
+  const taskBoost = new Map<number, number>();
+  if (task) {
+    try {
+      const hits = await hybridSearch(indexer, {
+        query: task,
+        tokenBudget: 50000, // ask for a lot so boost is meaningful
+        scope,
+        type: "any",
+      });
+      // Accumulate score per file across all hits.
+      for (const h of hits) {
+        taskBoost.set(h.chunk.file_id, (taskBoost.get(h.chunk.file_id) || 0) + h.score);
+      }
+    } catch {
+      // Fall back to pure PageRank if search fails — never block the map.
+    }
+  }
+
+  // Stable ranking: compose PageRank with the task boost, break ties
+  // by path so the same input always produces the same output.
+  const ranked = [...files].sort((a, b) => {
+    const ba = (taskBoost.get(a.id) || 0) * 0.5 + a.pagerank;
+    const bb = (taskBoost.get(b.id) || 0) * 0.5 + b.pagerank;
+    if (bb !== ba) return bb - ba;
+    return a.path.localeCompare(b.path);
+  });
+
+  // Header first so the caller can still see the budget and ordering
+  // even when the budget is tiny and zero files fit.
+  const parts: string[] = [];
+  parts.push(
+    `# Repo map${task ? ` · centered on: ${task}` : ""}${scope ? ` · scope: ${scope}` : ""}`
+  );
+  parts.push(
+    `_Budget: ${budget} tokens · ordered by PageRank${task ? " + task relevance" : ""}._`
+  );
+  parts.push("");
+
+  // Remaining budget after the header. 10% cushion for the trailing
+  // footer text and any rendering slack. Token estimates are rough —
+  // we use the same estimator as the indexer (chars / 3.5).
+  const headerCost = estimateTokens(parts.join("\n"));
+  let remaining = budget - headerCost - 100;
+
+  let filesRendered = 0;
+  let filesSkipped = 0;
+
+  for (const file of ranked) {
+    if (remaining <= 0) {
+      filesSkipped = ranked.length - filesRendered;
+      break;
+    }
+
+    // Pull the file's symbols. We only render symbol signatures
+    // (cheap) plus the symbol's name and type. Full bodies would
+    // blow the budget instantly — the point of a map is to be a
+    // legend, not the terrain.
+    const chunks: CodeChunk[] = indexer.chunkStore
+      .getByFile(file.id)
+      .filter((c) => c.name);
+
+    if (chunks.length === 0) continue;
+
+    // Render the file's entry. Symbols are ordered as they appear in
+    // the file (by start_line). Top-level types/classes come first in
+    // most codebases so this matches how a human skims.
+    const fileHeader = `## \`${file.path}\` · PR ${file.pagerank.toFixed(3)} · ${file.language || "?"}`;
+    const fileLines: string[] = [fileHeader];
+
+    // Soft cap on symbols-per-file so one massive file doesn't eat the
+    // whole budget. Files with >40 symbols render as "+ N more".
+    const CAP_PER_FILE = 40;
+    const shown = chunks.slice(0, CAP_PER_FILE);
+
+    for (const c of shown) {
+      const sig = c.signature ? c.signature.trim() : `${c.type} ${c.name}`;
+      // Keep each line short — the map should scan like an outline.
+      const truncated = sig.length > 110 ? sig.slice(0, 107) + "..." : sig;
+      fileLines.push(`- ${truncated}`);
+    }
+    if (chunks.length > CAP_PER_FILE) {
+      fileLines.push(`- _...and ${chunks.length - CAP_PER_FILE} more symbols_`);
+    }
+
+    const entry = fileLines.join("\n") + "\n";
+    const cost = estimateTokens(entry);
+
+    // If a single file's entry exceeds the remaining budget, render a
+    // truncated version (just the header + symbol count) so the caller
+    // still knows the file exists. Never render a partial entry with
+    // half its symbols cut off — that's confusing.
+    if (cost > remaining) {
+      const fallback =
+        `## \`${file.path}\` · PR ${file.pagerank.toFixed(3)}\n` +
+        `- _${chunks.length} symbols (budget exhausted — use sverklo_lookup for details)_\n`;
+      const fallbackCost = estimateTokens(fallback);
+      if (fallbackCost <= remaining) {
+        parts.push(fallback);
+        remaining -= fallbackCost;
+        filesRendered++;
+      } else {
+        filesSkipped = ranked.length - filesRendered;
+        break;
+      }
+    } else {
+      parts.push(entry);
+      remaining -= cost;
+      filesRendered++;
+    }
+  }
+
+  // Footer
+  parts.push("");
+  parts.push(
+    `_Rendered ${filesRendered} of ${ranked.length} files` +
+      (filesSkipped > 0
+        ? ` (${filesSkipped} skipped — budget exhausted; raise \`budget\` to see more)_`
+        : "_")
+  );
+  if (filesRendered > 0) {
+    parts.push(
+      "_Use `sverklo_lookup name:<symbol>` or `sverklo_search query:<...>` to drill into any symbol._"
+    );
   }
 
   return parts.join("\n");

@@ -28,5 +28,8 @@ export function handleForget(
 
   indexer.memoryStore.delete(id);
   indexer.memoryEmbeddingStore.delete(id);
+  // Mirror the delete as a tombstone in the JSONL journal so the
+  // journal stays replayable. Issue #7.
+  indexer.memoryJournal.forget(id);
   return `Deleted memory #${id} (${memory.category}): "${memory.content.slice(0, 80)}${memory.content.length > 80 ? "..." : ""}"`;
 }

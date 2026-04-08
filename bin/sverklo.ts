@@ -371,7 +371,30 @@ Environment:
   process.exit(0);
 }
 
-const rootPath = resolve(command || process.cwd());
+// Issue #12: runtime mode resolution. Embedded is the default and does
+// what sverklo has always done. Shared and cloud are reserved names
+// that print a clear "not yet implemented" message.
+const { resolveMode, notYetImplemented, SverkloModeError } = await import("../src/modes.js");
+let modeResolution;
+try {
+  modeResolution = resolveMode(args);
+} catch (err) {
+  if (err instanceof SverkloModeError) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  throw err;
+}
+
+if (modeResolution.mode !== "embedded") {
+  process.stderr.write(notYetImplemented(modeResolution.mode));
+  process.exit(2);
+}
+
+// Strip any --mode=... arg before resolving the project path so it
+// doesn't get treated as a directory name.
+const positionalArgs = args.filter((a) => !a.startsWith("--mode="));
+const rootPath = resolve(positionalArgs[0] || process.cwd());
 
 // Auto-download model if missing (no separate setup step needed)
 const { existsSync } = await import("node:fs");

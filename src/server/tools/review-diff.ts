@@ -5,6 +5,7 @@ import type { Indexer } from "../../indexer/indexer.js";
 import type { CodeChunk, FileRecord } from "../../types/index.js";
 import { computeRiskScore, formatRiskBadge, type RiskScore } from "./risk-score.js";
 import { isTestPath, candidateTestNames } from "./test-paths.js";
+import { getDiffHunks, runAllHeuristics, type HeuristicFinding } from "./diff-heuristics.js";
 
 export const reviewDiffTool = {
   name: "sverklo_review_diff",
@@ -279,6 +280,12 @@ export function handleReviewDiff(
     riskByFile.set(cf.path, score);
   }
 
+  // ─── 6.7. Run structural diff heuristics ───
+  // Issue #5: catch unguarded calls inside stream pipelines — the
+  // class of bug that symbol-level analysis alone cannot see.
+  const diffHunks = getDiffHunks(indexer.rootPath, ref);
+  const heuristicFindings: HeuristicFinding[] = runAllHeuristics(diffHunks);
+
   // ─── 7. Format output ───
   const parts: string[] = [];
 
@@ -385,6 +392,34 @@ export function handleReviewDiff(
     parts.push("_These files are imported by many others — changes cascade widely._");
     for (const [path, impact] of highImpactFiles.slice(0, 10)) {
       parts.push(`- \`${path}\` ← ${impact.importers} importer${impact.importers === 1 ? "" : "s"}`);
+    }
+    parts.push("");
+  }
+
+  // Structural heuristic findings (unguarded stream calls, etc.)
+  if (heuristicFindings.length > 0) {
+    parts.push("## ⚠️ Structural warnings");
+    parts.push(
+      "_These are heuristic matches over the diff text. Some may be false positives; " +
+        "each finding carries a short explanation so you can triage quickly._"
+    );
+    // Group by heuristic so the reviewer can judge each class at a glance.
+    const grouped = new Map<string, HeuristicFinding[]>();
+    for (const f of heuristicFindings) {
+      const arr = grouped.get(f.heuristic) || [];
+      arr.push(f);
+      grouped.set(f.heuristic, arr);
+    }
+    for (const [heuristic, findings] of grouped) {
+      parts.push(`### ${heuristic} (${findings.length})`);
+      for (const f of findings.slice(0, 6)) {
+        const badge = f.severity === "high" ? "🔴" : f.severity === "medium" ? "🟡" : "🟢";
+        parts.push(`- ${badge} \`${f.file}:${f.line}\` — ${f.message}`);
+        parts.push(`    \`${f.snippet}\``);
+      }
+      if (findings.length > 6) {
+        parts.push(`  _...and ${findings.length - 6} more_`);
+      }
     }
     parts.push("");
   }

@@ -9,6 +9,7 @@ import { GraphStore } from "../storage/graph-store.js";
 import { MemoryStore } from "../storage/memory-store.js";
 import { MemoryEmbeddingStore } from "../storage/memory-embedding-store.js";
 import { SymbolRefStore } from "../storage/symbol-ref-store.js";
+import { MemoryJournal } from "../memory/journal.js";
 import { discoverFiles } from "./file-discovery.js";
 import { parseFile } from "./parser.js";
 import { describeChunk } from "./describer.js";
@@ -30,9 +31,21 @@ export class Indexer {
   public memoryStore: MemoryStore;
   public memoryEmbeddingStore: MemoryEmbeddingStore;
   public symbolRefStore: SymbolRefStore;
+  public memoryJournal: MemoryJournal;
   private indexing = false;
   private progress = { done: 0, total: 0 };
   private lastIndexedTime: number | null = null;
+
+  // Freshness result cache. The disk walk in getFreshness() dominates the
+  // cost of sverklo_status (~95ms on a 150-file repo before this cache was
+  // added — see issue #6). Status is a read-only advisory call and the
+  // filesystem doesn't meaningfully change in a 2-second window, so we
+  // memoize briefly. The file watcher invalidates on real changes below.
+  private freshnessCache: {
+    ts: number;
+    result: { ageSeconds: number | null; dirtyFiles: string[]; missingFiles: string[] };
+  } | null = null;
+  private static readonly FRESHNESS_CACHE_MS = 2000;
 
   constructor(private config: ProjectConfig) {
     this.db = createDatabase(config.dbPath);
@@ -43,6 +56,7 @@ export class Indexer {
     this.memoryStore = new MemoryStore(this.db);
     this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
     this.symbolRefStore = new SymbolRefStore(this.db);
+    this.memoryJournal = new MemoryJournal(config.rootPath);
   }
 
   get rootPath(): string {
@@ -297,6 +311,22 @@ export class Indexer {
    * is a low-frequency call (start of session) so the cost is acceptable.
    */
   getFreshness(): { ageSeconds: number | null; dirtyFiles: string[]; missingFiles: string[] } {
+    // Serve from cache if recent. Issue #6 — this call dominated the
+    // wall-clock cost of sverklo_status, which agents can hit multiple
+    // times per session.
+    if (
+      this.freshnessCache &&
+      Date.now() - this.freshnessCache.ts < Indexer.FRESHNESS_CACHE_MS
+    ) {
+      // Refresh ageSeconds (wall-clock keeps moving) but reuse the
+      // expensive disk-walk result.
+      const ageSeconds =
+        this.lastIndexedTime === null
+          ? null
+          : Math.floor((Date.now() - this.lastIndexedTime) / 1000);
+      return { ...this.freshnessCache.result, ageSeconds };
+    }
+
     const ageSeconds =
       this.lastIndexedTime === null
         ? null
@@ -310,8 +340,13 @@ export class Indexer {
       const onDisk = discoverFiles(this.config.rootPath, ignoreFilter);
       const onDiskMap = new Map(onDisk.map((f) => [f.relativePath, f.lastModified]));
 
-      // Files indexed but missing or stale on disk
-      for (const indexed of this.fileStore.getAll()) {
+      // Single pass over the indexed file list — the previous version
+      // called fileStore.getAll() twice, doubling the SQLite scan cost
+      // on large repos.
+      const indexedFiles = this.fileStore.getAll();
+      const indexedPaths = new Set<string>();
+      for (const indexed of indexedFiles) {
+        indexedPaths.add(indexed.path);
         const diskMtime = onDiskMap.get(indexed.path);
         if (diskMtime === undefined) {
           missingFiles.push(indexed.path);
@@ -321,7 +356,6 @@ export class Indexer {
       }
 
       // Files on disk but not in the index (new since last index)
-      const indexedPaths = new Set(this.fileStore.getAll().map((f) => f.path));
       for (const f of onDisk) {
         if (!indexedPaths.has(f.relativePath)) {
           dirtyFiles.push(f.relativePath);
@@ -331,7 +365,18 @@ export class Indexer {
       logError("getFreshness: disk walk failed", err);
     }
 
-    return { ageSeconds, dirtyFiles, missingFiles };
+    const result = { ageSeconds, dirtyFiles, missingFiles };
+    this.freshnessCache = { ts: Date.now(), result };
+    return result;
+  }
+
+  /**
+   * Drop the freshness cache. Called by the file watcher when a real
+   * change event fires so the next sverklo_status reflects reality
+   * without waiting for the 2-second TTL.
+   */
+  invalidateFreshnessCache(): void {
+    this.freshnessCache = null;
   }
 
   close(): void {

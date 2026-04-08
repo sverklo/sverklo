@@ -14,6 +14,129 @@ interface SearchOptions {
 // Reciprocal Rank Fusion constant
 const RRF_K = 60;
 
+// Issue #4: query-shape classification. Research showed semantic search
+// consistently underperforms on framework-wiring questions where the
+// answer lives in an annotation, config file, or build-time-generated
+// class rather than in code that names the concept being searched for.
+// When we detect one of these shapes, we lower confidence and surface a
+// suggestion to fall back to Grep for the specific annotation pattern.
+const FRAMEWORK_WIRING_TOKENS = [
+  "registered",
+  "registration",
+  "autowired",
+  "auto-wired",
+  "auto-discovered",
+  "bean",
+  "beans",
+  "annotation",
+  "annotated",
+  "interceptor",
+  "decorator",
+  "middleware setup",
+  "wired",
+  "wiring",
+  "injected",
+  "injection",
+  "provider",
+  "providers",
+  "binding",
+  "bound to",
+  "@component",
+  "@configuration",
+  "@service",
+  "@repository",
+  "@inject",
+  "@module",
+];
+
+function classifyQueryShape(query: string): {
+  shape: "general" | "framework_wiring";
+  reason?: string;
+} {
+  const lower = query.toLowerCase();
+  const hit = FRAMEWORK_WIRING_TOKENS.find((t) => lower.includes(t));
+  if (hit) {
+    return {
+      shape: "framework_wiring",
+      reason: `query mentions "${hit}" — framework registration/wiring questions are often better answered by grep for the specific annotation`,
+    };
+  }
+  return { shape: "general" };
+}
+
+/**
+ * Build a confidence signal from the ranked candidates. Low confidence
+ * means either (a) no strong top result, or (b) the top and second-best
+ * results are too close to distinguish, or (c) the query shape is one
+ * we know semantic search struggles with.
+ *
+ * This is advisory — the results still come back, but the agent sees a
+ * hint at the bottom suggesting grep as a fallback. Issue #4.
+ */
+function computeConfidence(
+  ranked: SearchResult[],
+  queryShape: ReturnType<typeof classifyQueryShape>
+): {
+  level: "high" | "medium" | "low";
+  reason: string | null;
+} {
+  if (ranked.length === 0) {
+    return { level: "low", reason: "no results matched" };
+  }
+
+  const top = ranked[0].score;
+  const second = ranked[1]?.score ?? 0;
+
+  // The RRF scores are small (~0.03 at rank 0 for k=60). A "strong"
+  // top-of-rank hit lands around ~0.03+. Below ~0.005 the query is
+  // either matching weakly or is out-of-distribution. These thresholds
+  // were calibrated against the profiler results in issue #6.
+  const WEAK_TOP_THRESHOLD = 0.005;
+
+  if (top < WEAK_TOP_THRESHOLD) {
+    return {
+      level: "low",
+      reason: "top result has a weak relevance score; the query may be out of distribution",
+    };
+  }
+
+  // Gap ratio: if the second result is >= 80% of the top result, the
+  // ranking has no clear winner and an agent copying the first result
+  // is taking a coin flip.
+  if (second > 0 && second / top > 0.8) {
+    if (queryShape.shape === "framework_wiring") {
+      return {
+        level: "low",
+        reason: queryShape.reason!,
+      };
+    }
+    return {
+      level: "medium",
+      reason: "top two results are close — consider reading both or refining the query",
+    };
+  }
+
+  if (queryShape.shape === "framework_wiring") {
+    return {
+      level: "medium",
+      reason: queryShape.reason!,
+    };
+  }
+
+  return { level: "high", reason: null };
+}
+
+/**
+ * Result of a hybrid search — the ranked candidates plus a confidence
+ * signal the caller can surface in the output. Issue #4.
+ */
+export interface HybridSearchResult {
+  results: SearchResult[];
+  confidence: "high" | "medium" | "low";
+  confidenceReason: string | null;
+  fallbackHint: string | null;
+}
+
 export async function hybridSearch(
   indexer: Indexer,
   options: SearchOptions
@@ -114,6 +237,66 @@ export async function hybridSearch(
 
   // Pack into token budget
   return packResults(candidates, tokenBudget);
+}
+
+/**
+ * Same as hybridSearch but returns a confidence signal and a suggested
+ * fallback hint. This is the preferred entry point for the MCP tool —
+ * it lets us tell agents when semantic search is likely to be weak so
+ * they can fall back to Grep without burning a second tool call.
+ *
+ * The old hybridSearch() is preserved for backwards compat with any
+ * in-process callers that just want the ranked list.
+ */
+export async function hybridSearchWithConfidence(
+  indexer: Indexer,
+  options: SearchOptions
+): Promise<HybridSearchResult> {
+  // We need the full candidate list before packing to a budget so the
+  // confidence signal reflects the actual ranking quality, not whatever
+  // fits in the budget. So we run the inner pipeline twice conceptually:
+  // once unbounded for confidence, then pack for the output.
+  const ranked = await hybridSearch(indexer, { ...options, tokenBudget: 100000 });
+
+  const shape = classifyQueryShape(options.query);
+  const confidence = computeConfidence(ranked, shape);
+
+  const packed = packResults(ranked, options.tokenBudget);
+
+  // Fallback hint wording. Keep the hint specific to *what went wrong*
+  // so the agent can act on it rather than staring at an "unsure" tag.
+  let fallbackHint: string | null = null;
+  if (confidence.level === "low") {
+    if (shape.shape === "framework_wiring") {
+      fallbackHint =
+        "This query looks like a framework-wiring / registration question. " +
+        "Semantic search struggles with these because the answer often lives " +
+        "in a bean annotation, a config file, or a build-time-generated class. " +
+        "Try Grep for the specific annotation pattern (e.g. `@Component`, " +
+        "`@Configuration`, `@Inject`) or the framework-level class name.";
+    } else if (ranked.length === 0) {
+      fallbackHint =
+        "No matches. The query may be out of distribution for the current " +
+        "embedding model. Try rephrasing with concrete identifier names, or " +
+        "fall back to `Grep` for exact string matching.";
+    } else {
+      fallbackHint =
+        "Top result has a weak relevance score. Consider a more specific " +
+        "query, or fall back to `Grep` if you know the exact symbol name.";
+    }
+  } else if (confidence.level === "medium" && shape.shape === "framework_wiring") {
+    fallbackHint =
+      "These results may be framework-wiring-adjacent. If none of the top " +
+      "matches directly answer the question, grep for the specific annotation " +
+      "(e.g. `@Configuration`, `@Component`) — that's often the faster path.";
+  }
+
+  return {
+    results: packed,
+    confidence: confidence.level,
+    confidenceReason: confidence.reason,
+    fallbackHint,
+  };
 }
 
 export function packResults(

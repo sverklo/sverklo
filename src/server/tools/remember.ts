@@ -96,9 +96,24 @@ export async function handleRemember(
     tier
   );
 
+  // Mirror to the JSONL journal so users can `cat .sverklo/memories.jsonl`
+  // or commit it alongside code. Issue #7.
+  indexer.memoryJournal.remember({
+    id,
+    content,
+    category,
+    tags,
+    confidence,
+    git_sha: sha,
+    git_branch: branch,
+    related_files: relatedFiles,
+    tier,
+  });
+
   // Invalidate conflicting memories (bi-temporal — never delete)
   for (const conflict of conflicts) {
     indexer.memoryStore.invalidate(conflict.id, sha, id);
+    indexer.memoryJournal.invalidate(conflict.id, sha, id);
   }
 
   // Store the new embedding

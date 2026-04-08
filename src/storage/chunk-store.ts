@@ -91,6 +91,32 @@ export class ChunkStore {
     return this.getByNameStmt.all(`%${namePattern}%`, limit) as CodeChunk[];
   }
 
+  /**
+   * Same shape as getByName, but JOINs in the containing file's path and
+   * pagerank in a single indexed query so callers don't need to follow
+   * up with a full fileStore.getAll() scan. Issue #6: the first-call
+   * latency on sverklo_lookup was dominated by that scan warming up
+   * prepared statements over the files table.
+   */
+  getByNameWithFile(
+    namePattern: string,
+    limit: number = 20
+  ): (CodeChunk & { filePath: string; pagerank: number; fileLanguage: string })[] {
+    return this.db
+      .prepare(
+        `SELECT c.*, f.path as filePath, f.pagerank, f.language as fileLanguage
+         FROM chunks c JOIN files f ON c.file_id = f.id
+         WHERE c.name LIKE ?
+         ORDER BY f.pagerank DESC
+         LIMIT ?`
+      )
+      .all(`%${namePattern}%`, limit) as (CodeChunk & {
+      filePath: string;
+      pagerank: number;
+      fileLanguage: string;
+    })[];
+  }
+
   count(): number {
     return (
       this.db.prepare("SELECT COUNT(*) as c FROM chunks").get() as { c: number }
