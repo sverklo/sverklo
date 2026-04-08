@@ -21,7 +21,8 @@
     "lint": "eslint src/",
     "prepublishOnly": "rm -rf dist && npm run build",
     "benchmark": "node --experimental-strip-types benchmark/benchmark.ts",
-    "bench:quick": "node --experimental-strip-types --no-warnings benchmark/src/index.ts"
+    "bench:quick": "node --experimental-strip-types --no-warnings benchmark/src/index.ts",
+    "bench:latency": "node scripts/mcp-latency-profile.mjs"
   },
   "keywords": [
     "sverklo",

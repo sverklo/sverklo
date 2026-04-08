@@ -34,6 +34,17 @@ if (command === "init") {
   process.exit(0);
 }
 
+if (command === "audit-prompt" || command === "review-prompt") {
+  // Emit a ready-to-paste prompt that encodes the hybrid workflow
+  // (prefer sverklo tools for discovery, built-in tools for exact
+  // patterns and line-level reading). Pipe into `pbcopy` on macOS or
+  // `xclip -sel clip` on Linux, or paste directly into your agent.
+  const { renderAuditPrompt } = await import("../src/audit-prompt.js");
+  const mode = command === "review-prompt" ? "review" : "audit";
+  process.stdout.write(renderAuditPrompt(mode));
+  process.exit(0);
+}
+
 if (command === "doctor" || command === "diagnose" || command === "check") {
   const projectPath = resolve(args[1] || process.cwd());
   const { runDoctor } = await import("../src/doctor.js");
@@ -306,6 +317,8 @@ Usage:
   sverklo [project-path]    Start the MCP server (stdio transport)
   sverklo ui [project-path] Open the web dashboard
   sverklo wakeup            Print compressed project context (for system-prompt injection)
+  sverklo audit-prompt      Print a ready-to-paste codebase-audit prompt (hybrid workflow)
+  sverklo review-prompt     Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
   sverklo setup             Download the embedding model (~90MB)
   sverklo telemetry         Manage opt-in telemetry (off by default)
   sverklo --help            Show this help

@@ -26,13 +26,20 @@ That's it. `sverklo init` auto-detects your installed AI coding agents, writes t
 We're honest about this — sverklo isn't a magic 5× speedup. It's a sharper tool for specific jobs. Three concrete moments where it earns its keep:
 
 ### "I'm renaming a public method on a billing-critical class"
-Grep `\.charge(` returns 312 matches polluted by `recharge`, `discharge`, an unrelated `Battery.charge` test fixture, and a 2021 comment. `sverklo_impact BillingAccount.charge` walks the symbol graph and returns the **14 real callers** with file paths and line numbers, ranked by depth. Paste that into your agent as a checklist and the rename is mechanical.
+Grep `\.charge(` returns 312 matches polluted by `recharge`, `discharge`, an unrelated `Battery.charge` test fixture, and a 2021 comment. `sverklo_refs BillingAccount.charge` walks the symbol graph and returns the **14 real callers** with file paths and line numbers. `sverklo_impact` ranks them by depth. Paste that into your agent as a checklist and the rename is mechanical.
+
+### "I'm onboarding to a new repo and need to know what's load-bearing"
+`sverklo_overview` runs PageRank over the dependency graph and surfaces the structurally important files — not the ones with the most lines, the ones the rest of the codebase depends on. `sverklo_audit` flags god nodes, hub files, and dead code candidates in one call. Five minutes to a real mental model instead of two hours of clicking around.
 
 ### "I'm reviewing a 40-file PR and don't know what to read first"
 `sverklo_review_diff` analyzes the diff, computes a risk score per file (touched-symbol importance × test coverage × historical churn), flags files with no test changes against modified production code, and gives your agent a prioritized review order. `sverklo_test_map` shows which tests cover which changed symbols. The agent reviews like a senior dev because it's reading in the order a senior dev would.
 
-### "I'm onboarding to a new repo and need to know what's load-bearing"
-`sverklo_overview` runs PageRank over the dependency graph and surfaces the structurally important files — not the ones with the most lines, the ones the rest of the codebase depends on. `sverklo_audit` flags god nodes, hub files, and dead code candidates in one call. Five minutes to a real mental model instead of two hours of clicking around.
+### The two tools that earn their keep every time
+
+If you only remember two, remember these. They consistently deliver value that plain text search cannot:
+
+1. **`sverklo_refs`** — proves dead code with certainty (zero references across the whole graph, not just the files grep happened to scan) and answers "is this actually used anywhere?" in one call.
+2. **`sverklo_audit`** — one structural pass over the codebase that surfaces god classes, hub files, and suspicious concentrations of complexity without you having to guess the right regex.
 
 ### When grep is still the right tool
 
@@ -42,6 +49,7 @@ Sverklo is the right tool when **you don't know exactly what to search for**. Wh
 - **Reading file contents** — only `Read` does this. Sverklo isn't a file reader.
 - **Build and test verification** — only `Bash` runs `npm test` or `gradle check`.
 - **Focused single-file diffs** — for a signature change in one file, `git diff` + `Read` is hard to beat.
+- **Small codebases (under ~50 source files)** — the indexing and MCP roundtrip overhead doesn't pay off at that size. Just read everything. Sverklo starts earning its keep around 100+ files and really shines above 500.
 
 If a launch post tells you a tool is great for everything, close the tab.
 
