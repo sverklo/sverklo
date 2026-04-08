@@ -5,7 +5,11 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ALL_PROMPTS, findPrompt } from "./prompts.js";
+import { HintEngine } from "./hints.js";
 import { Indexer } from "../indexer/indexer.js";
 import { startWatcher } from "../indexer/watcher.js";
 import { getProjectConfig } from "../utils/config.js";
@@ -36,6 +40,7 @@ import { wakeupTool, handleWakeup } from "./tools/wakeup.js";
 import { reviewDiffTool, handleReviewDiff } from "./tools/review-diff.js";
 import { diffSearchTool, handleDiffSearch } from "./tools/diff-search.js";
 import { testMapTool, handleTestMap } from "./tools/test-map.js";
+import { contextTool, handleContext } from "./tools/context.js";
 import {
   promoteTool,
   demoteTool,
@@ -114,6 +119,7 @@ const getIndexingStatusTool = {
 export async function startMcpServer(rootPath: string): Promise<void> {
   const config = getProjectConfig(rootPath);
   const indexer = new Indexer(config);
+  const hints = new HintEngine();
 
   // Start indexing in background. Tracked in a mutable holder so clear_index
   // can swap in a fresh promise after wiping the database.
@@ -154,6 +160,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       capabilities: {
         tools: {},
         resources: {},
+        prompts: {},
       },
       instructions:
         "Sverklo: code intelligence for this repo. Use it for exploratory search, " +
@@ -231,6 +238,35 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     return { contents: [] };
   });
 
+  // Prompts: workflow templates that show up in IDE pickers (Claude Code,
+  // Cursor, Antigravity). These encode the *order* of sverklo tool calls
+  // for common code-intelligence tasks — review, pre-merge, onboarding,
+  // architecture mapping, and debugging.
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: ALL_PROMPTS.map((p) => ({
+      name: p.name,
+      description: p.description,
+      arguments: p.arguments,
+    })),
+  }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const prompt = findPrompt(request.params.name);
+    if (!prompt) {
+      throw new Error(`Unknown prompt: ${request.params.name}`);
+    }
+    const args = (request.params.arguments || {}) as Record<string, string | undefined>;
+    return {
+      description: prompt.description,
+      messages: [
+        {
+          role: "user" as const,
+          content: { type: "text" as const, text: prompt.build(args) },
+        },
+      ],
+    };
+  });
+
   // List tools. Zilliz claude-context compat aliases are gated behind
   // SVERKLO_ZILLIZ_COMPAT=1 — they pay ~450 tokens of schema overhead on
   // every session and most users don't need them. Dispatch cases below are
@@ -238,6 +274,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
   const enableZilliz = process.env.SVERKLO_ZILLIZ_COMPAT === "1";
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
+      contextTool,
       searchTool,
       overviewTool,
       lookupTool,
@@ -282,6 +319,9 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       let result: string;
 
       switch (name) {
+        case "sverklo_context":
+          result = await handleContext(indexer, args || {});
+          break;
         case "sverklo_search":
           result = await handleSearch(indexer, args || {});
           break;
@@ -391,6 +431,15 @@ export async function startMcpServer(rootPath: string): Promise<void> {
 
         default:
           result = `Unknown tool: ${name}`;
+      }
+
+      // Append intent-aware hints unless the caller opts out via env var.
+      // Hints are off the critical path of the actual answer — append-only.
+      if (process.env.SVERKLO_DISABLE_HINTS !== "1") {
+        const argRecord = (args || {}) as Record<string, unknown>;
+        hints.record(name, argRecord);
+        const hintBlock = hints.buildHint(name, argRecord);
+        if (hintBlock) result = result + "\n" + hintBlock;
       }
 
       return {

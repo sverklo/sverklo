@@ -1,8 +1,10 @@
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Indexer } from "../../indexer/indexer.js";
 import type { CodeChunk, FileRecord } from "../../types/index.js";
+import { computeRiskScore, formatRiskBadge, type RiskScore } from "./risk-score.js";
+import { isTestPath, candidateTestNames } from "./test-paths.js";
 
 export const reviewDiffTool = {
   name: "sverklo_review_diff",
@@ -205,6 +207,78 @@ export function handleReviewDiff(
     }
   }
 
+  // ─── 6.5. Compute per-file risk score ───
+  // Build a quick lookup of indexed test files so we can answer "is this
+  // file tested?" without re-scanning the index per file.
+  const allFilesForTests = indexer.fileStore.getAll();
+  const testFilesByBasename = new Map<string, true>();
+  for (const f of allFilesForTests) {
+    if (isTestPath(f.path)) testFilesByBasename.set(basename(f.path), true);
+  }
+
+  // Aggregate added/removed/modified symbols per file path
+  const symbolsByFile = new Map<string, string[]>();
+  const addToSymbolsByFile = (file: string, name: string) => {
+    const arr = symbolsByFile.get(file) || [];
+    arr.push(name);
+    symbolsByFile.set(file, arr);
+  };
+  for (const s of addedSymbols) addToSymbolsByFile(s.file, s.name);
+  for (const s of removedSymbols) addToSymbolsByFile(s.file, s.name);
+  for (const m of modifiedFiles) {
+    for (const s of m.symbols) if (s.name) addToSymbolsByFile(m.path, s.name);
+  }
+
+  const riskByFile = new Map<string, RiskScore>();
+  for (const cf of cappedFiles) {
+    if (cf.status === "D") continue;
+    const symbols = symbolsByFile.get(cf.path) || [];
+
+    // Tested? Try sibling test names + same-file basename match in index
+    const tested = (() => {
+      for (const cand of candidateTestNames(cf.path)) {
+        if (testFilesByBasename.has(cand)) return true;
+      }
+      // Also: any importer that is itself a test file
+      const indexed = fileCache.get(cf.path);
+      if (indexed) {
+        for (const edge of indexer.graphStore.getImporters(indexed.id)) {
+          const importerPath = Array.from(fileCache.values()).find(
+            (f) => f.id === edge.source_file_id
+          )?.path;
+          if (importerPath && isTestPath(importerPath)) return true;
+        }
+      }
+      return false;
+    })();
+
+    // Total caller count for changed symbols (cap each lookup so a single
+    // symbol with 1000 callers doesn't dominate the score linearly)
+    let totalCallers = 0;
+    for (const name of symbols) {
+      const c = indexer.symbolRefStore.getCallerCount(name);
+      totalCallers += Math.min(c, 50);
+    }
+
+    const danglingCount = removedSymbols
+      .filter((s) => s.file === cf.path)
+      .filter((s) => (danglingRefs.get(s.name)?.count ?? 0) > 0).length;
+
+    const importerCount = fileImpact.get(cf.path)?.importers ?? 0;
+
+    const score = computeRiskScore({
+      path: cf.path,
+      added: cf.added,
+      removed: cf.removed,
+      isTested: tested,
+      importerCount,
+      changedSymbolNames: symbols,
+      totalCallerCount: totalCallers,
+      danglingSymbolCount: danglingCount,
+    });
+    riskByFile.set(cf.path, score);
+  }
+
   // ─── 7. Format output ───
   const parts: string[] = [];
 
@@ -226,9 +300,28 @@ export function handleReviewDiff(
     const pr = indexed ? ` (PR ${indexed.pagerank.toFixed(2)})` : "";
     const impact = fileImpact.get(cf.path);
     const impactNote = impact && impact.importers > 0 ? ` ← ${impact.importers} importer${impact.importers === 1 ? "" : "s"}` : "";
-    parts.push(`- **${cf.status}** \`${cf.path}\` +${cf.added} -${cf.removed}${pr}${impactNote}`);
+    const risk = riskByFile.get(cf.path);
+    const riskNote = risk ? ` · ${formatRiskBadge(risk)}` : "";
+    parts.push(`- **${cf.status}** \`${cf.path}\` +${cf.added} -${cf.removed}${pr}${impactNote}${riskNote}`);
   }
   parts.push("");
+
+  // Risk hot-list: surface high/critical files with their reasons so a
+  // reviewer can immediately see *why* a file is flagged.
+  const riskRanked = [...riskByFile.entries()]
+    .filter(([, r]) => r.level === "high" || r.level === "critical")
+    .sort((a, b) => b[1].total - a[1].total);
+  if (riskRanked.length > 0) {
+    parts.push("## ⚠️ Highest-risk files");
+    parts.push("_Risk score combines: untested, security-sensitive paths, fan-in, caller count, dangling refs, churn._");
+    for (const [path, score] of riskRanked.slice(0, 8)) {
+      parts.push(`- ${formatRiskBadge(score)} \`${path}\``);
+      if (score.reasons.length > 0) {
+        parts.push(`  _${score.reasons.join("; ")}_`);
+      }
+    }
+    parts.push("");
+  }
 
   // Removed symbols + dangling refs (the most important section for safety)
   if (removedSymbols.length > 0) {

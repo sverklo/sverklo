@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import type { Indexer } from "../../indexer/indexer.js";
+import { isTestPath, candidateTestNames } from "./test-paths.js";
+import { computeRiskScore, formatRiskBadge } from "./risk-score.js";
 
 export const testMapTool = {
   name: "sverklo_test_map",
@@ -26,77 +28,6 @@ export const testMapTool = {
     },
   },
 };
-
-// Filename patterns that indicate a test file across common ecosystems.
-// Kept regex-light so additions are easy.
-const TEST_FILE_PATTERNS = [
-  /\.test\.[jt]sx?$/,
-  /\.spec\.[jt]sx?$/,
-  /(^|\/)__tests__\//,
-  /(^|\/)tests?\//,
-  /_test\.go$/,
-  /_test\.py$/,
-  /(^|\/)test_[^/]+\.py$/,
-  /Test\.java$/,
-  /Tests\.java$/,
-  /Spec\.scala$/,
-  /_spec\.rb$/,
-  /(^|\/)spec\//,
-  /\.test\.exs$/,
-  /(^|\/)test\/.*\.exs$/,
-];
-
-function isTestPath(path: string): boolean {
-  return TEST_FILE_PATTERNS.some((re) => re.test(path));
-}
-
-/**
- * Generate the candidate test filenames that conventionally cover a source file.
- * Examples:
- *   src/foo/bar.ts → bar.test.ts, bar.spec.ts, __tests__/bar.test.ts
- *   src/foo/bar.py → test_bar.py, bar_test.py
- *   com/Foo.java  → FooTest.java, FooTests.java
- */
-function candidateTestNames(sourcePath: string): string[] {
-  const file = basename(sourcePath);
-  const dot = file.lastIndexOf(".");
-  if (dot <= 0) return [];
-  const stem = file.slice(0, dot);
-  const ext = file.slice(dot); // includes leading dot
-
-  const names: string[] = [];
-
-  // JS/TS family
-  if (/\.[jt]sx?$/.test(ext)) {
-    names.push(`${stem}.test${ext}`, `${stem}.spec${ext}`);
-  }
-  // Python
-  if (ext === ".py") {
-    names.push(`test_${stem}.py`, `${stem}_test.py`);
-  }
-  // Go
-  if (ext === ".go") {
-    names.push(`${stem}_test.go`);
-  }
-  // Java/Kotlin/Scala
-  if (ext === ".java" || ext === ".kt" || ext === ".scala") {
-    names.push(`${stem}Test${ext}`, `${stem}Tests${ext}`, `${stem}Spec${ext}`);
-  }
-  // Ruby
-  if (ext === ".rb") {
-    names.push(`${stem}_spec.rb`, `${stem}_test.rb`);
-  }
-  // Rust — convention is inline #[cfg(test)] modules; sibling file uncommon
-  if (ext === ".rs") {
-    names.push(`${stem}_test.rs`);
-  }
-  // Elixir
-  if (ext === ".ex") {
-    names.push(`${stem}_test.exs`);
-  }
-
-  return names;
-}
 
 export function handleTestMap(
   indexer: Indexer,
@@ -233,7 +164,40 @@ export function handleTestMap(
     lines.push(`## ⚠️ No matching tests found (${uncovered.length})`);
     lines.push(`These changed files have no test file matching by name or import. They may be untested, ` +
       `tested via integration/e2e suites sverklo can't see, or covered by tests outside the indexed paths.`);
-    for (const u of uncovered) lines.push(`- ${u}`);
+    // Compute a risk score for each uncovered file so the reviewer sees
+    // *which* untested files are actually dangerous (e.g. auth code with
+    // many importers) vs benign (e.g. a typo in a doc snippet).
+    const uncoveredScored = uncovered.map((u) => {
+      const id = pathToId.get(u);
+      const importerCount = id !== undefined
+        ? indexer.graphStore.getImporters(id).length
+        : 0;
+      const symbols = id !== undefined
+        ? indexer.chunkStore.getByFile(id).filter((c) => c.name).map((c) => c.name!)
+        : [];
+      let totalCallers = 0;
+      for (const name of symbols) {
+        totalCallers += Math.min(indexer.symbolRefStore.getCallerCount(name), 50);
+      }
+      const score = computeRiskScore({
+        path: u,
+        added: 0,
+        removed: 0,
+        isTested: false,
+        importerCount,
+        changedSymbolNames: symbols,
+        totalCallerCount: totalCallers,
+        danglingSymbolCount: 0,
+      });
+      return { path: u, score };
+    });
+    uncoveredScored.sort((a, b) => b.score.total - a.score.total);
+    for (const { path: u, score } of uncoveredScored) {
+      lines.push(`- ${formatRiskBadge(score)} ${u}`);
+      if (score.reasons.length > 0) {
+        lines.push(`  _${score.reasons.filter((r) => r !== "no matching tests").join("; ") || "no matching tests"}_`);
+      }
+    }
     lines.push("");
   }
 
