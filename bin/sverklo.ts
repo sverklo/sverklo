@@ -175,15 +175,35 @@ if (command === "telemetry") {
     console.log("");
 
     // Read y/n from stdin if interactive, otherwise --yes flag.
+    // Pass the prompt directly to readline.question() — doing a prior
+    // stdout.write() and then question("") races with the TTY handoff
+    // on some terminal/Node combinations and the prompt never shows.
     const autoYes = args.includes("--yes") || args.includes("-y");
     let confirmed = autoYes;
-    if (!autoYes && process.stdin.isTTY) {
-      process.stdout.write("Type 'yes' to enable, anything else to cancel: ");
+    if (!autoYes) {
+      if (!process.stdin.isTTY) {
+        console.log("Non-interactive stdin — pass --yes to confirm enable.");
+        console.log("Cancelled. Telemetry remains OFF.");
+        process.exit(0);
+      }
       const readline = await import("node:readline/promises");
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      const answer = (await rl.question("")).trim().toLowerCase();
-      rl.close();
-      confirmed = answer === "yes" || answer === "y";
+      // Clean exit on SIGINT so ctrl-C doesn't leave the terminal in a bad state.
+      rl.on("SIGINT", () => {
+        rl.close();
+        console.log("");
+        console.log("Cancelled. Telemetry remains OFF.");
+        process.exit(0);
+      });
+      try {
+        const answer = (await rl.question("Type 'yes' to enable, anything else to cancel: ")).trim().toLowerCase();
+        confirmed = answer === "yes" || answer === "y";
+      } catch {
+        // User hit ctrl-D / ctrl-C / the terminal closed — treat as cancel.
+        confirmed = false;
+      } finally {
+        rl.close();
+      }
     }
     if (!confirmed) {
       console.log("");
