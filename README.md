@@ -102,6 +102,24 @@ Find the path with `which sverklo`. Add to:
 - **VS Code:** `.vscode/mcp.json`
 - **JetBrains:** Settings → Tools → MCP Servers
 
+### Google Antigravity
+Antigravity uses a **global** MCP config file (no per-project config — known limitation, see [Google forum](https://discuss.ai.google.dev/t/support-for-per-workspace-mcp-config-on-antigravity/111952)). `sverklo init` writes it for you if Antigravity is installed, otherwise edit the file by hand:
+
+`~/.gemini/antigravity/mcp_config.json` (Windows: `C:\Users\<USER>\.gemini\antigravity\mcp_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "sverklo": {
+      "command": "/full/path/to/sverklo",
+      "args": ["/absolute/path/to/your/project"]
+    }
+  }
+}
+```
+
+Restart Antigravity after editing. To verify, open the side panel → **MCP Servers** → **Manage MCP Servers** — sverklo should appear in the list. Because the config is global, if you work on multiple projects you'll need to either re-run `sverklo init` from each (it rewrites the path) or run a separate sverklo instance per project under different keys (`sverklo-projA`, `sverklo-projB`).
+
 ### Any MCP Client
 ```bash
 npx sverklo /path/to/your/project

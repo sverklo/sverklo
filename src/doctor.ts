@@ -113,6 +113,60 @@ export function runDoctor(projectPath: string): void {
     });
   }
 
+  // 4b. Google Antigravity (optional) — only check if Antigravity dir exists.
+  //     Antigravity uses ~/.gemini/antigravity/mcp_config.json (global, no per-project).
+  //     Silent skip when Antigravity isn't installed; users on other clients shouldn't
+  //     see noise about a tool they don't use.
+  const antigravityDir = join(homedir(), ".gemini", "antigravity");
+  if (existsSync(antigravityDir)) {
+    const agConfigPath = join(antigravityDir, "mcp_config.json");
+    if (existsSync(agConfigPath)) {
+      try {
+        const ag = JSON.parse(readFileSync(agConfigPath, "utf-8"));
+        const sv = ag?.mcpServers?.sverklo;
+        if (sv?.command && Array.isArray(sv.args)) {
+          // Antigravity has no per-project config, so the args[] path tells us
+          // which project this user wired up. Warn if it's not the current one.
+          const wiredPath = sv.args[0];
+          if (wiredPath === projectPath) {
+            checks.push({
+              name: "Antigravity MCP config",
+              status: "ok",
+              message: "sverklo wired to this project",
+            });
+          } else {
+            checks.push({
+              name: "Antigravity MCP config",
+              status: "warn",
+              message: `sverklo is wired to ${wiredPath} (not this project)`,
+              fix: "sverklo init (rewrites Antigravity config to current project)",
+            });
+          }
+        } else {
+          checks.push({
+            name: "Antigravity MCP config",
+            status: "warn",
+            message: "exists but sverklo not configured",
+            fix: "sverklo init",
+          });
+        }
+      } catch {
+        checks.push({
+          name: "Antigravity MCP config",
+          status: "warn",
+          message: "mcp_config.json exists but is invalid JSON",
+        });
+      }
+    } else {
+      checks.push({
+        name: "Antigravity MCP config",
+        status: "warn",
+        message: "Antigravity is installed but mcp_config.json missing",
+        fix: "sverklo init",
+      });
+    }
+  }
+
   // 5. Legacy .claude/mcp.json (does NOT work — flag it)
   const legacyMcp = join(projectPath, ".claude", "mcp.json");
   if (existsSync(legacyMcp)) {

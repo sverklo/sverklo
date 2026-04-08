@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
+import { homedir } from "node:os";
 
 const CLAUDE_MD_SNIPPET = `
 ## Sverklo — Code Intelligence
@@ -162,6 +163,42 @@ export async function initProject(
     console.log(`  .claude/settings.local.json — added ${bits.join(" + ")}`);
   } else {
     console.log("  .claude/settings.local.json — sverklo permissions already set");
+  }
+
+  // 3.5 Google Antigravity — global MCP config at ~/.gemini/antigravity/mcp_config.json.
+  //     Antigravity has NO per-project MCP config (verified Apr 2026, Google forum
+  //     feature request open). So this is a one-time-per-machine wiring, not per-project,
+  //     but we still write it from `init` because it's the lowest-friction moment to do it.
+  //     Schema mirrors Claude Desktop / Cursor (mcpServers + command/args/env).
+  const antigravityDir = join(homedir(), ".gemini", "antigravity");
+  if (existsSync(antigravityDir)) {
+    const antigravityConfigPath = join(antigravityDir, "mcp_config.json");
+    type AgConfig = {
+      mcpServers?: Record<string, { command: string; args: string[]; env?: Record<string, string> }>;
+    };
+    let agConfig: AgConfig = {};
+    if (existsSync(antigravityConfigPath)) {
+      try {
+        agConfig = JSON.parse(readFileSync(antigravityConfigPath, "utf-8"));
+      } catch {
+        agConfig = {};
+      }
+    }
+    if (agConfig.mcpServers?.sverklo) {
+      console.log("  ~/.gemini/antigravity/mcp_config.json — sverklo already configured");
+    } else {
+      if (!agConfig.mcpServers) agConfig.mcpServers = {};
+      // Antigravity's global config doesn't know about the per-project root, so we
+      // pass the absolute project path explicitly. Users with multiple projects
+      // will need to re-run `sverklo init` from each (or hand-edit).
+      agConfig.mcpServers.sverklo = {
+        command: sverkloBin,
+        args: [projectPath],
+      };
+      writeFileSync(antigravityConfigPath, JSON.stringify(agConfig, null, 2) + "\n");
+      console.log(`  ~/.gemini/antigravity/mcp_config.json — added sverklo (project: ${projectPath})`);
+      console.log("    Restart Antigravity to pick up the new MCP server.");
+    }
   }
 
   // 4. Migrate legacy .claude/mcp.json if present (from older sverklo versions)
