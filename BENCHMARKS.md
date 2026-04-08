@@ -11,17 +11,22 @@ Real measurements on real codebases. Reproducible — the harness is at [`script
 
 ## Summary
 
+Five real codebases of increasing size, three languages (Go, TS/JS, Python), one laptop.
+
 | Repo | Files | Chunks | Languages | Cold index | DB on disk | Search p50 | Search p95 | Overview | Impact analysis |
 |---|---:|---:|---|---:|---:|---:|---:|---:|---:|
 | **[gin-gonic/gin](https://github.com/gin-gonic/gin)** | 99 | 1,413 | Go | 10.3 s | 4.2 MB | 11 ms | 12 ms | 4 ms | 0.75 ms |
+| **[microsoft/TypeScript/src](https://github.com/microsoft/TypeScript)** | 707 | 10,873 | TS | 71.1 s | 47 MB | 20 ms | 35 ms | 47 ms | 2.44 ms |
 | **[nestjs/nest](https://github.com/nestjs/nest)** | 1,709 | 2,976 | TS/JS | 22.4 s | 11 MB | 14 ms | 14 ms | 16 ms | 0.88 ms |
+| **[django/django](https://github.com/django/django)** | 2,942 | 10,900 | Python/JS | 67.9 s | 56 MB | 20 ms | 22 ms | 106 ms | 2.0 ms |
 | **[facebook/react](https://github.com/facebook/react)** | 4,368 | 20,144 | TS/JS | 152 s | 67 MB | 23 ms | 26 ms | 58 ms | 1.18 ms |
 
 **The honest read:**
-- **Search is fast and stays fast.** Even on a 4,368-file React monorepo, p95 search latency is 26 ms. Sverklo is intended to be called in the agent's hot loop and the latency budget allows it.
-- **Impact analysis is sub-millisecond on every project we tested.** Walking the symbol graph is one indexed SQL join, not a 200-grep-match scan.
-- **Cold-start indexing scales linearly with chunks.** ~7 ms per chunk on the laptop above. A 20 k chunk repo takes ~2.5 minutes the first time. Incremental refresh after that is much cheaper — only changed files get re-parsed and re-embedded.
-- **Steady-state RAM after indexing is much lower than peak.** The peak RSS during indexing is 400–700 MB because the ONNX embedder is loaded and chunks are being batched in memory. Once indexing finishes and the embedder is no longer batching, RSS drops back to ~200 MB. The README's "~200 MB" figure is the steady state, not the indexing peak — we'll be more explicit about that.
+- **Search is fast and stays fast.** Across all five repos, p95 search latency stays between 12 ms (gin) and 35 ms (TypeScript). The TypeScript number is the worst case in the benchmark and it's still well inside any latency budget the agent's hot loop cares about.
+- **Impact analysis is 0.75–2.44 ms on every project.** Even on the densest codebase (TypeScript compiler) and the most-called symbol (`isIdentifier`, called from every parser code path), it's an indexed SQL join, not a 200-grep-match scan.
+- **Cold-start indexing is linear in chunks, not files.** Across the five runs the constant factor is 6–7 ms per chunk, regardless of language: gin 7.3 ms/chunk, TypeScript 6.5 ms/chunk, nestjs 7.5 ms/chunk, django 6.2 ms/chunk, react 7.5 ms/chunk. A 20 k chunk repo takes ~2.5 minutes the first time. Incremental refresh after that only re-processes files that changed.
+- **Steady-state RAM after indexing is much lower than peak.** The peak RSS during indexing is 400–700 MB because the ONNX embedder is loaded and chunks are being batched in memory. Once indexing finishes and the embedder is no longer batching, RSS drops back to ~200 MB. The README's "~200 MB" figure is the steady state, not the indexing peak — BENCHMARKS.md is explicit about that distinction.
+- **Languages don't change the shape.** Indexing Python (django) costs about the same per chunk as indexing TypeScript (TypeScript compiler) or Go (gin). Tree-sitter is doing the heavy lifting and it's roughly language-agnostic.
 
 ---
 
@@ -75,6 +80,50 @@ Impact:           0.88 ms
 ```
 
 A real-world TS framework — the kind of codebase a team would actually use sverklo on. Index time is fine, search latency is well under any user-perceptible threshold, and the index is small enough on disk to keep around forever.
+
+### microsoft/TypeScript (compiler `src/` only — dense TS code)
+
+```
+Files indexed:    707
+Chunks:           10,873
+Languages:        typescript
+Cold index:       71.11 s
+RSS peak:         564.2 MB
+DB size on disk:  44.8 MB
+Search p50:       19.69 ms
+Search p95:       34.64 ms
+Overview:         47.00 ms
+Impact pivot:     isIdentifier
+Impact:           2.44 ms
+```
+
+The TypeScript compiler is the **densest codebase** in the benchmark — 707 files but **10,873 chunks**, ~15 chunks per file. That's because the compiler is built out of large files with many internal functions and classes, each of which becomes its own searchable chunk. Indexing time is dominated by chunks-to-embed, not files-to-parse: 71 s for TypeScript vs 22 s for nestjs even though nestjs has 2.4× more files.
+
+We benchmarked `src/` only because the full `microsoft/TypeScript` repo has ~39,000 files, almost all in the `tests/` corpus (every file in the conformance test suite is a separate `.ts`). Indexing the full repo would take an hour, dominated by code that no real user runs sverklo on.
+
+`isIdentifier` was picked as the impact pivot because it's one of the most-called helpers in the entire compiler — every parser code path and every type checker code path calls it. Sub-3-millisecond impact analysis on the most-referenced symbol in the repo is the strongest argument for the indexed-SQL approach over walking files at query time.
+
+### django/django (large Python framework)
+
+```
+Files indexed:    2,942
+Chunks:           10,900
+Languages:        javascript, python
+Cold index:       67.86 s
+RSS peak:         697.9 MB
+DB size on disk:  56.4 MB
+Search p50:       20.07 ms
+Search p95:       22.42 ms
+Overview:         106.32 ms
+Impact pivot:     assertEqual
+Impact:           2.00 ms
+```
+
+The Python anchor in the benchmark suite. 2.9k files (mostly `.py`, with some JS in the admin static assets) producing 10.9k chunks at ~3.7 chunks per file — looser than TypeScript because Python files tend to be smaller.
+
+The `assertEqual` pivot is interesting: it's the most-called symbol in the repo because every test file extends Django's `TestCase` and calls it. PageRank correctly demotes the test files in the search rankings, but `sverklo_impact assertEqual` still finds them all in 2 ms — exactly what you'd want when you're trying to find every test that asserts equality on a value you're about to refactor.
+
+Overview latency is the highest of the five (106 ms) because Django has a wide module tree — the PageRank computation has more nodes to converge over.
 
 ### facebook/react (large TS/JS monorepo)
 
