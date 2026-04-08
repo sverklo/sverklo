@@ -146,6 +146,108 @@ if (command === "setup" || command === "install") {
   process.exit(0);
 }
 
+if (command === "telemetry") {
+  const sub = args[1];
+  const tel = await import("../src/telemetry/index.js");
+
+  if (sub === "enable") {
+    console.log("");
+    console.log("Sverklo telemetry is currently OFF. Enabling sends:");
+    console.log("");
+    console.log("  install_id  one random UUID stored at ~/.sverklo/install-id");
+    console.log("  version     current sverklo version");
+    console.log("  os          darwin / linux / win32");
+    console.log("  node_major  the Node major version sverklo is running on");
+    console.log("  event       one of 17 fixed event types");
+    console.log("  tool        sverklo_* tool name (when applicable)");
+    console.log("  outcome     ok / error / timeout");
+    console.log("  duration_ms tool execution time");
+    console.log("");
+    console.log("It does NOT send:");
+    console.log("  - code, queries, file paths, symbol names, or memory contents");
+    console.log("  - IP addresses, hostnames, or project identifiers");
+    console.log("  - git remote URLs, branch names, or SHAs");
+    console.log("");
+    console.log("Every event is mirrored to ~/.sverklo/telemetry.log so you can see");
+    console.log("exactly what gets sent. The endpoint source code lives at");
+    console.log("https://github.com/sverklo/sverklo/tree/main/telemetry-endpoint");
+    console.log("and the sending code is at src/telemetry/index.ts (under 250 lines).");
+    console.log("");
+
+    // Read y/n from stdin if interactive, otherwise --yes flag.
+    const autoYes = args.includes("--yes") || args.includes("-y");
+    let confirmed = autoYes;
+    if (!autoYes && process.stdin.isTTY) {
+      process.stdout.write("Type 'yes' to enable, anything else to cancel: ");
+      const readline = await import("node:readline/promises");
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const answer = (await rl.question("")).trim().toLowerCase();
+      rl.close();
+      confirmed = answer === "yes" || answer === "y";
+    }
+    if (!confirmed) {
+      console.log("");
+      console.log("Cancelled. Telemetry remains OFF.");
+      process.exit(0);
+    }
+
+    const id = await tel.enable();
+    console.log("");
+    console.log(`Telemetry enabled. install_id: ${id}`);
+    console.log(`Local mirror: ${tel.logPath}`);
+    console.log("Disable any time with:  sverklo telemetry disable");
+    process.exit(0);
+  }
+
+  if (sub === "disable") {
+    await tel.disable();
+    console.log("");
+    console.log("Telemetry disabled. The disabled sentinel is permanent —");
+    console.log("you'll need to run `sverklo telemetry enable` again to re-opt-in.");
+    process.exit(0);
+  }
+
+  if (sub === "status") {
+    const s = tel.status();
+    console.log("");
+    console.log(`telemetry: ${s.enabled ? "ON" : "OFF"}`);
+    if (s.installId) console.log(`install_id: ${s.installId}`);
+    console.log(`endpoint:  ${s.endpoint}`);
+    console.log(`local log: ${s.logPath}`);
+    console.log("");
+    if (!s.enabled) {
+      console.log("Enable with:  sverklo telemetry enable");
+    } else {
+      console.log("Disable with: sverklo telemetry disable");
+      console.log("Tail log:     sverklo telemetry log");
+    }
+    process.exit(0);
+  }
+
+  if (sub === "log") {
+    const { existsSync, readFileSync } = await import("node:fs");
+    if (!existsSync(tel.logPath)) {
+      console.log("No telemetry log yet. Enable with: sverklo telemetry enable");
+      process.exit(0);
+    }
+    process.stdout.write(readFileSync(tel.logPath, "utf-8"));
+    process.exit(0);
+  }
+
+  console.log(`
+sverklo telemetry — opt-in, privacy-preserving, off by default
+
+Usage:
+  sverklo telemetry enable    Opt in (interactive prompt; prints exact schema first)
+  sverklo telemetry disable   Opt out permanently (sends one final opt_out event)
+  sverklo telemetry status    Show current state
+  sverklo telemetry log       Print the local mirror of every event sent
+
+Design doc: https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md
+`);
+  process.exit(0);
+}
+
 if (command === "ui" || command === "dashboard") {
   const projectPath = resolve(args[1] || process.cwd());
   const { existsSync } = await import("node:fs");
@@ -185,6 +287,7 @@ Usage:
   sverklo ui [project-path] Open the web dashboard
   sverklo wakeup            Print compressed project context (for system-prompt injection)
   sverklo setup             Download the embedding model (~90MB)
+  sverklo telemetry         Manage opt-in telemetry (off by default)
   sverklo --help            Show this help
 
 Quick start:

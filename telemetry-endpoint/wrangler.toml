@@ -1,0 +1,23 @@
+name = "sverklo-telemetry"
+main = "worker.ts"
+compatibility_date = "2026-04-08"
+
+# Replace these with the values from your Cloudflare account.
+# account_id can be found at https://dash.cloudflare.com (right sidebar of any page).
+account_id = "REPLACE_WITH_YOUR_CLOUDFLARE_ACCOUNT_ID"
+
+# R2 binding — the bucket the Worker writes raw event JSON files into.
+# Bucket must exist before deploy: `wrangler r2 bucket create sverklo-telemetry`
+[[r2_buckets]]
+binding = "TELEMETRY_BUCKET"
+bucket_name = "sverklo-telemetry"
+
+# Custom domain route. Requires sverklo.com to be a Cloudflare-managed zone
+# OR an external CNAME to <worker-name>.workers.dev.
+[[routes]]
+pattern = "t.sverklo.com/*"
+custom_domain = true
+
+# Resource limits
+[limits]
+cpu_ms = 50  # endpoint is one R2 PUT, should never need more than ~10ms

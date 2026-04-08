@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { track, hasBeenNudged, markNudged } from "./telemetry/index.js";
 
 const CLAUDE_MD_SNIPPET = `
 ## Sverklo — Code Intelligence
@@ -265,5 +266,39 @@ export async function initProject(
     // Doctor failures are non-fatal — init still succeeded
   }
 
+  // 7. Telemetry detection events (only sent if user has opted in;
+  //    track() is a hard short-circuit no-op otherwise).
+  void track("init.run");
+  if (existsSync(join(projectPath, ".mcp.json"))) {
+    void track("init.detected.claude-code");
+  }
+  if (existsSync(join(projectPath, ".cursor", "mcp.json"))) {
+    void track("init.detected.cursor");
+  }
+  if (existsSync(join(homedir(), ".windsurf", "mcp.json"))) {
+    void track("init.detected.windsurf");
+  }
+  if (existsSync(join(projectPath, ".vscode", "mcp.json"))) {
+    void track("init.detected.vscode");
+  }
+  if (existsSync(join(homedir(), ".gemini", "antigravity"))) {
+    void track("init.detected.antigravity");
+  }
+
+  // 8. First-run nudge: ask once whether the user wants to opt in. Stored in
+  //    ~/.sverklo/init-nudged so it never asks again, even across projects.
+  //    Stays one line to avoid feeling pushy.
+  if (!hasBeenNudged()) {
+    console.log("");
+    console.log(
+      "Telemetry is OFF. To help us prioritize fixes, opt in with:  sverklo telemetry enable"
+    );
+    console.log(
+      "What gets collected (and what doesn't) is documented at github.com/sverklo/sverklo/blob/main/TELEMETRY.md"
+    );
+    markNudged();
+  }
+
+  console.log("");
   console.log("Restart Claude Code in this directory and sverklo will appear in /mcp.");
 }

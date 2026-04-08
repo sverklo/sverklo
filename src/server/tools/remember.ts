@@ -1,6 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { embed, cosineSimilarity } from "../../indexer/embedder.js";
 import { getGitState } from "../../memory/git-state.js";
+import { track } from "../../telemetry/index.js";
 import type { MemoryCategory, MemoryTier } from "../../types/index.js";
 
 const CONFLICT_THRESHOLD = 0.85;
@@ -112,6 +113,8 @@ export async function handleRemember(
       `superseded ${conflicts.length} memor${conflicts.length === 1 ? "y" : "ies"}: ${conflicts.map((c) => `#${c.id} (sim ${c.similarity.toFixed(2)})`).join(", ")}`
     );
   }
+
+  void track("memory.write");
 
   return parts.join("\n");
 }

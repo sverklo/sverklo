@@ -18,6 +18,7 @@ import { extractReferences } from "./symbol-extractor.js";
 import { createIgnoreFilter } from "../utils/ignore.js";
 import { estimateTokens } from "../utils/tokens.js";
 import { log, logError } from "../utils/logger.js";
+import { track } from "../telemetry/index.js";
 import type { ProjectConfig, ImportRef, IndexStatus } from "../types/index.js";
 
 export class Indexer {
@@ -52,6 +53,10 @@ export class Indexer {
     if (this.indexing) return;
     this.indexing = true;
 
+    // Cold-start vs refresh detection: cold start = no file records yet.
+    // Computed before initEmbedder so we don't count model download in duration.
+    const __isColdStart = this.fileStore.count() === 0;
+
     try {
       log(`Indexing ${this.config.rootPath}...`);
       const startTime = Date.now();
@@ -84,6 +89,9 @@ export class Indexer {
       if (toIndex.length === 0) {
         log("Index is up to date");
         this.indexing = false;
+        // Emit a refresh event for the no-op case so we can see how often
+        // people re-run sverklo on already-indexed projects.
+        if (!__isColdStart) void track("index.refresh", { duration_ms: 0 });
         return;
       }
 
@@ -190,6 +198,15 @@ export class Indexer {
         `Indexing complete: ${this.fileStore.count()} files, ` +
           `${this.chunkStore.count()} chunks in ${elapsed}ms`
       );
+
+      // Telemetry: cold-start measures time-to-first-search for new projects;
+      // refresh measures incremental work cost. No file/chunk counts (those
+      // can fingerprint a repo).
+      if (__isColdStart) {
+        void track("index.cold_start", { duration_ms: elapsed });
+      } else {
+        void track("index.refresh", { duration_ms: elapsed });
+      }
     } finally {
       this.indexing = false;
     }

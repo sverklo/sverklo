@@ -48,6 +48,7 @@ import {
   handleDemote,
 } from "./tools/tier.js";
 import { startHttpServer } from "./http-server.js";
+import { track } from "../telemetry/index.js";
 
 // Zilliz claude-context compatibility tool definitions.
 // These mirror github.com/zilliztech/claude-context tool names so users can
@@ -315,6 +316,11 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       await indexPromise;
     }
 
+    // Telemetry: time the dispatch and emit a single tool.call event with
+    // outcome + duration. No args, no result content, no error message.
+    const __telemetryStart = Date.now();
+    let __telemetryOutcome: "ok" | "error" | "timeout" = "ok";
+
     try {
       let result: string;
 
@@ -442,10 +448,30 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         if (hintBlock) result = result + "\n" + hintBlock;
       }
 
+      // Fire-and-forget telemetry. Only sverklo_* names are tracked
+      // (compat aliases like search_code are excluded — they pollute the
+      // tool name distribution and we already account for them via the
+      // underlying handlers).
+      if (name.startsWith("sverklo_")) {
+        void track("tool.call", {
+          tool: name,
+          outcome: __telemetryOutcome,
+          duration_ms: Date.now() - __telemetryStart,
+        });
+      }
+
       return {
         content: [{ type: "text", text: result }],
       };
     } catch (err) {
+      __telemetryOutcome = "error";
+      if (name.startsWith("sverklo_")) {
+        void track("tool.call", {
+          tool: name,
+          outcome: "error",
+          duration_ms: Date.now() - __telemetryStart,
+        });
+      }
       const message =
         err instanceof Error ? err.message : "Unknown error";
       logError(`Tool ${name} failed`, err);

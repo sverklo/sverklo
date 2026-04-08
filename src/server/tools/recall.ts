@@ -1,6 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { embed, cosineSimilarity } from "../../indexer/embedder.js";
 import { checkStaleness } from "../../memory/staleness.js";
+import { track } from "../../telemetry/index.js";
 import type { Memory, MemoryCategory } from "../../types/index.js";
 
 const RRF_K = 60;
@@ -72,6 +73,7 @@ export async function handleRecall(
 
   // Score, filter, sort
   const candidates: { memory: Memory; score: number }[] = [];
+  let staleSeen = 0;
 
   for (const [memoryId, rrfScore] of rrfScores) {
     const memory = indexer.memoryStore.getById(memoryId);
@@ -80,6 +82,7 @@ export async function handleRecall(
 
     // Staleness check (lazy)
     const stale = checkStaleness(memory, indexer.fileStore, indexer.memoryStore);
+    if (stale) staleSeen++;
     if (stale && !includeStale) continue;
 
     // Boost by confidence and recency
@@ -89,6 +92,9 @@ export async function handleRecall(
 
     candidates.push({ memory, score: finalScore });
   }
+
+  void track("memory.read");
+  if (staleSeen > 0) void track("memory.staleness_detected");
 
   candidates.sort((a, b) => b.score - a.score);
   const results = candidates.slice(0, limit);

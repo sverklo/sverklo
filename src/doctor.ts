@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { track } from "./telemetry/index.js";
 
 interface CheckResult {
   name: string;
@@ -340,4 +341,9 @@ export function runDoctor(projectPath: string): void {
     console.log(`${failed} failure${failed === 1 ? "" : "s"}, ${warned} warning${warned === 1 ? "" : "s"}. Fix the failures above.`);
   }
   console.log("");
+
+  // Telemetry: one event per run, plus one event per failure (no detail).
+  // The doctor.issue count tells us setup pain rate without leaking what failed.
+  void track("doctor.run");
+  for (let i = 0; i < failed; i++) void track("doctor.issue");
 }

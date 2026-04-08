@@ -210,6 +210,25 @@ Sverklo is the only tool that combines **hybrid code search + symbol graph + mem
 | Custom ignores | `.sverkloignore` in project root |
 | Debug logging | `SVERKLO_DEBUG=1` |
 
+## Telemetry
+
+**Off by default.** Sverklo ships zero telemetry until you explicitly run `sverklo telemetry enable`. If you never run that command, sverklo never makes a network call beyond the one-time embedding model download on first run.
+
+If you do opt in, we collect 9 fields per event: a random install ID (generated locally), sverklo version, OS, Node major version, the event type (one of 17 fixed enum values), the tool name when applicable, the outcome (ok/error/timeout), and the duration in ms. Server-side we add a Unix timestamp.
+
+**We never collect:** code, queries, file paths, symbol names, memory contents, git SHAs, branches, repo URLs, IP addresses, hostnames, error messages, language breakdowns, or anything else that could identify you or your codebase.
+
+Every event is mirrored to `~/.sverklo/telemetry.log` **before** the network call so you can `tail -f` it and see exactly what gets sent. The endpoint is a Cloudflare Worker we own at `t.sverklo.com`, the source lives in [`telemetry-endpoint/`](./telemetry-endpoint/), retention is 90 days, and the entire client implementation is one file under 250 lines at [`src/telemetry/index.ts`](./src/telemetry/index.ts).
+
+Read [`TELEMETRY.md`](./TELEMETRY.md) for the full schema, the 17 event types, what we deliberately don't collect, and how to verify it. The design rationale and locked decisions are in [`TELEMETRY_DESIGN.md`](./TELEMETRY_DESIGN.md).
+
+```bash
+sverklo telemetry status    # show current state
+sverklo telemetry enable    # opt in (interactive, prints schema first)
+sverklo telemetry disable   # opt out, permanent per machine
+sverklo telemetry log       # show every event that was sent
+```
+
 ## Open Source, Open Core
 
 The full MCP server is **free and open source** (MIT). All 20 tools, no limits, no telemetry, no "free tier" — that's not where the line is.
