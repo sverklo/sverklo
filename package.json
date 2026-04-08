@@ -26,21 +26,42 @@
   "keywords": [
     "sverklo",
     "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "code-search",
     "semantic-search",
+    "code-intelligence",
     "codebase-indexing",
-    "pagerank",
     "claude-code",
     "cursor",
+    "antigravity",
+    "windsurf",
     "ai-coding",
+    "ai-agents",
+    "local-first",
+    "embeddings",
+    "onnx",
+    "ast",
+    "pagerank",
+    "bm25",
+    "rag",
     "developer-tools",
-    "code-intelligence"
+    "diff-review",
+    "risk-scoring",
+    "refactor",
+    "impact-analysis",
+    "memory",
+    "git-aware"
   ],
-  "homepage": "https://github.com/sverklo/sverklo",
+  "homepage": "https://sverklo.com",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sverklo/sverklo.git"
   },
+  "bugs": {
+    "url": "https://github.com/sverklo/sverklo/issues"
+  },
+  "author": "Sverklo (https://sverklo.com)",
   "license": "MIT",
   "engines": {
     "node": ">=20"

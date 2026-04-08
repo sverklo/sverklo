@@ -1,53 +1,94 @@
 # Sverklo
 
+[![npm version](https://img.shields.io/npm/v/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
+[![npm downloads](https://img.shields.io/npm/dw/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
+[![GitHub stars](https://img.shields.io/github/stars/sverklo/sverklo?style=flat&color=E85A2A)](https://github.com/sverklo/sverklo)
+[![License: MIT](https://img.shields.io/badge/license-MIT-E85A2A.svg)](LICENSE)
+[![Local-first](https://img.shields.io/badge/local--first-no%20cloud-E85A2A)](#)
+
 **Other tools remember your conversations. Sverklo understands your code.**
 
-Local-first code intelligence MCP with hybrid semantic search, symbol-level impact analysis, and bi-temporal memory tied to git state. Runs entirely on your machine. No API keys. No cloud. No data leaves your laptop.
+Local-first code intelligence MCP for **Claude Code, Cursor, Windsurf, VS Code, JetBrains, and Google Antigravity**. Hybrid semantic search, symbol-level impact analysis, diff-aware MR review with risk scoring, and bi-temporal memory tied to git state. Runs entirely on your machine. No API keys. No cloud. No data leaves your laptop.
 
 ```bash
 npm install -g sverklo
 cd your-project && sverklo init
 ```
 
-That's it. `sverklo init` writes `.mcp.json` at your project root, adds sverklo instructions to `CLAUDE.md`, auto-allows the sverklo tools, and runs `sverklo doctor` to verify the setup.
+That's it. `sverklo init` auto-detects your installed AI coding agents, writes the right MCP config files, appends sverklo instructions to your `CLAUDE.md`, and runs `sverklo doctor` to verify the setup.
+
+> **First 5 minutes:** see [`FIRST_RUN.md`](FIRST_RUN.md) for three scripted prompts that demonstrate the tools sverklo adds that grep can't replace.
 
 ---
 
-## When sverklo helps (and when it doesn't)
+## When to reach for sverklo
 
-We're honest about this — sverklo isn't a magic 5× speedup. It's a sharper tool for specific kinds of work.
+We're honest about this — sverklo isn't a magic 5× speedup. It's a sharper tool for specific jobs. Three concrete moments where it earns its keep:
 
-### Sverklo wins on
-- **Exploratory questions** — "what replaced this deleted code?", "how does the auth flow work?", "what's related to billing?"
-- **Refactor blast radius** — `sverklo_impact <symbol>` walks the symbol graph and tells you exactly who calls it. Fewer false positives than grep on common names.
-- **Large interconnected codebases** — when grep returns 200 matches and you don't know which are relevant, semantic ranking + PageRank surfaces the load-bearing code first.
-- **Memory across sessions** — `sverklo_remember`/`sverklo_recall` keeps decisions and patterns alive after context compaction. Tied to git SHA so you know what the code looked like when the decision was made.
-- **Project audits** — `sverklo_audit` surfaces god nodes, hub files, dead code candidates in one call.
+### "I'm renaming a public method on a billing-critical class"
+Grep `\.charge(` returns 312 matches polluted by `recharge`, `discharge`, an unrelated `Battery.charge` test fixture, and a 2021 comment. `sverklo_impact BillingAccount.charge` walks the symbol graph and returns the **14 real callers** with file paths and line numbers, ranked by depth. Paste that into your agent as a checklist and the rename is mechanical.
 
-### Built-in tools win on
-- **Focused diff review** — for a signature change or a single-file refactor, `git diff` + `Read` + targeted `Grep` is hard to beat.
+### "I'm reviewing a 40-file PR and don't know what to read first"
+`sverklo_review_diff` analyzes the diff, computes a risk score per file (touched-symbol importance × test coverage × historical churn), flags files with no test changes against modified production code, and gives your agent a prioritized review order. `sverklo_test_map` shows which tests cover which changed symbols. The agent reviews like a senior dev because it's reading in the order a senior dev would.
+
+### "I'm onboarding to a new repo and need to know what's load-bearing"
+`sverklo_overview` runs PageRank over the dependency graph and surfaces the structurally important files — not the ones with the most lines, the ones the rest of the codebase depends on. `sverklo_audit` flags god nodes, hub files, and dead code candidates in one call. Five minutes to a real mental model instead of two hours of clicking around.
+
+### When grep is still the right tool
+
+Sverklo is the right tool when **you don't know exactly what to search for**. When you do, grep is fine and we tell you so:
+
 - **Exact string matching** — "does this literal string exist anywhere?" → `Grep` is faster and more reliable.
 - **Reading file contents** — only `Read` does this. Sverklo isn't a file reader.
 - **Build and test verification** — only `Bash` runs `npm test` or `gradle check`.
+- **Focused single-file diffs** — for a signature change in one file, `git diff` + `Read` is hard to beat.
 
-The honest pattern: **sverklo is the right tool when you don't know exactly what to search for**. When you do know, grep is fine.
+If a launch post tells you a tool is great for everything, close the tab.
 
 ---
 
-## What It Does
+## Twenty tools your agent actually uses
 
+Grouped by job. Every tool runs locally, every tool is free.
+
+### Search — find code without knowing the literal string
 | Tool | What |
 |------|------|
-| `sverklo_search` | Hybrid semantic + text search across entire codebase |
+| `sverklo_search` | Hybrid BM25 + ONNX vector + PageRank, fused with Reciprocal Rank Fusion |
 | `sverklo_overview` | Structural codebase map ranked by PageRank importance |
-| `sverklo_lookup` | Find any function, class, or type by name |
-| `sverklo_refs` | Find all references to a symbol |
-| `sverklo_deps` | Show file dependency graph (imports + importers) |
-| `sverklo_status` | Index health check |
-| `sverklo_remember` | Save decisions, preferences, patterns with git state |
-| `sverklo_recall` | Semantic search over saved memories |
+| `sverklo_lookup` | Find any function, class, or type by name (typo-tolerant) |
+| `sverklo_context` | One-call onboarding — combines overview, code, and saved memories |
+| `sverklo_ast_grep` | Structural pattern matching across the AST, not just text |
+
+### Impact — refactor without the regression
+| Tool | What |
+|------|------|
+| `sverklo_impact` | Walk the symbol graph, return ranked transitive callers (the real blast radius) |
+| `sverklo_refs` | Find all references to a symbol, with caller context |
+| `sverklo_deps` | File dependency graph — both directions, importers and imports |
+| `sverklo_audit` | Surface god nodes, hub files, dead code candidates in one call |
+
+### Review — diff-aware MR review with risk scoring
+| Tool | What |
+|------|------|
+| `sverklo_review_diff` | Risk-scored review of `git diff` — touched-symbol importance × coverage × churn |
+| `sverklo_test_map` | Which tests cover which changed symbols; flag untested production changes |
+| `sverklo_diff_search` | Semantic search restricted to the changed surface of a diff |
+
+### Memory — bi-temporal, git-aware, never stale
+| Tool | What |
+|------|------|
+| `sverklo_remember` | Save decisions, patterns, invariants — pinned to the current git SHA |
+| `sverklo_recall` | Semantic search over saved memories with staleness detection |
+| `sverklo_memories` | List all memories with health metrics (still valid / stale / orphaned) |
 | `sverklo_forget` | Delete a memory |
-| `sverklo_memories` | List all memories with health metrics |
+| `sverklo_promote` / `sverklo_demote` | Move memories between tiers (project / global / archived) |
+
+### Index health
+| Tool | What |
+|------|------|
+| `sverklo_status` | Index health check, file counts, last update |
+| `sverklo_wakeup` | Warm the index after a long pause; incremental refresh |
 
 ## How It Works
 
@@ -143,18 +184,22 @@ Opens a web dashboard at `localhost:3847` — browse indexed files, search playg
 | Languages | 10 |
 | Dependencies | zero config |
 
-## Why Not...
+## Why not... (as of 2026-04)
 
-| Alternative | Gap |
-|-------------|-----|
-| **Built-in grep** | No semantic understanding. Burns tokens reading irrelevant files. |
-| **Augment** | Cloud-only, closed source, $20-200/mo |
-| **Greptile** | Cloud-only, $30/dev/mo, no memory |
-| **CocoIndex** | No PageRank ranking, no hybrid search, no memory |
-| **Aider repo-map** | No MCP, no semantic search, no memory |
-| **claude-mem** | Memory only, no code search, ChromaDB overhead |
+| Alternative | Local | OSS | Code search | Symbol graph | Memory | MR review | Cost |
+|---|---|---|---|---|---|---|---|
+| **Sverklo** | ✓ | ✓ MIT | ✓ hybrid + PageRank | ✓ | ✓ git-aware | ✓ risk-scored | $0 |
+| Built-in grep / Read | ✓ | ✓ | text only | ✗ | ✗ | ✗ | $0 |
+| [Cursor's @codebase](https://docs.cursor.com/context/codebase-indexing) | ✗ cloud | ✗ | ✓ | partial | ✗ | ✗ | with Cursor sub |
+| [Sourcegraph Cody](https://sourcegraph.com/cody) | ✗ cloud | ✗ source-available | ✓ | ✓ | ✗ | partial | $9–19/dev/mo |
+| [Continue.dev](https://continue.dev) | partial | ✓ | ✓ basic | ✗ | ✗ | ✗ | $0 |
+| [Claude Context (Zilliz)](https://github.com/zilliztech/claude-context) | ✗ Milvus | ✓ | ✓ vector only | ✗ | ✗ | ✗ | $0 + Milvus |
+| [Aider repo-map](https://aider.chat/docs/repomap.html) | ✓ | ✓ | ✗ | ✓ basic | ✗ | ✗ | $0 |
+| [Greptile](https://greptile.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | ✓ | $30/dev/mo |
+| [Augment](https://augmentcode.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | partial | $20–200/mo |
+| [claude-mem](https://github.com/themanojdesai/claude-mem) | ✓ | ✓ | ✗ | ✗ | ✓ ChromaDB | ✗ | $0 |
 
-Sverklo is the only tool that combines **code search + memory + dependency graph** in one local-first MCP server.
+Sverklo is the only tool that combines **hybrid code search + symbol graph + memory + diff-aware review** in one local-first MCP server.
 
 ## Configuration
 
@@ -167,11 +212,13 @@ Sverklo is the only tool that combines **code search + memory + dependency graph
 
 ## Open Source, Open Core
 
-The full MCP server is **free and open source** (MIT). All 10 tools, no limits.
+The full MCP server is **free and open source** (MIT). All 20 tools, no limits, no telemetry, no "free tier" — that's not where the line is.
 
-**Sverklo Pro** (coming soon) adds smart auto-capture, cross-project patterns, and better models.
+**Sverklo Pro** (later this year) adds smart auto-capture of decisions, cross-project pattern learning, and larger embedding models.
 
-**Sverklo Team** (coming soon) adds shared team memory and on-prem deployment.
+**Sverklo Team** (later this year) adds shared team memory and on-prem deployment.
+
+The open-core line is **"Pro adds new things, never gates current things."** Anything in the OSS server today stays in the OSS server forever.
 
 ## Links
 
