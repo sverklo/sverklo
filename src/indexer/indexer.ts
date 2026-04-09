@@ -13,7 +13,11 @@ import { MemoryJournal } from "../memory/journal.js";
 import { discoverFiles } from "./file-discovery.js";
 import { parseFile } from "./parser.js";
 import { describeChunk } from "./describer.js";
-import { embed, initEmbedder } from "./embedder.js";
+import { embed as legacyEmbed, initEmbedder } from "./embedder.js";
+import {
+  createEmbeddingProvider,
+  type EmbeddingProvider,
+} from "./embedding-providers.js";
 import { buildGraph } from "./graph-builder.js";
 import { extractReferences } from "./symbol-extractor.js";
 import { createIgnoreFilter } from "../utils/ignore.js";
@@ -32,6 +36,13 @@ export class Indexer {
   public memoryEmbeddingStore: MemoryEmbeddingStore;
   public symbolRefStore: SymbolRefStore;
   public memoryJournal: MemoryJournal;
+
+  // Issue #9 wiring (caught during dogfood session, 2026-04-08):
+  // The pluggable provider factory existed but the indexer was still
+  // calling the bundled ONNX embed() directly, so SVERKLO_EMBEDDING_PROVIDER
+  // had no effect. We lazily select a provider on the first index() call,
+  // then use it everywhere via the public embed() method below.
+  private embeddingProvider: EmbeddingProvider | null = null;
   private indexing = false;
   private progress = { done: 0, total: 0 };
   private lastIndexedTime: number | null = null;
@@ -63,19 +74,64 @@ export class Indexer {
     return this.config.rootPath;
   }
 
+  /**
+   * Embed a batch of texts using the selected provider. Callers should
+   * prefer this over importing the legacy embed() directly so that a
+   * single env-var change (SVERKLO_EMBEDDING_PROVIDER) actually takes
+   * effect across every query path.
+   *
+   * If the provider hasn't been lazily initialized yet (embed() called
+   * before the first index() run), we init the default provider
+   * synchronously via the bundled ONNX module so read-path tools like
+   * search / recall / remember still work during bootstrap.
+   */
+  async embed(texts: string[]): Promise<Float32Array[]> {
+    if (this.embeddingProvider) {
+      return this.embeddingProvider.embed(texts);
+    }
+    // Fallback: lazy-init the default provider. Happens if search /
+    // recall is called before index() completes.
+    await initEmbedder();
+    return legacyEmbed(texts);
+  }
+
+  /**
+   * Human-readable name of the active embedding provider. Used by
+   * sverklo_status and sverklo doctor to show the user which provider
+   * their env vars actually selected. Returns "default" if the
+   * provider hasn't been initialized yet.
+   */
+  get embeddingProviderName(): string {
+    return this.embeddingProvider?.name ?? "default";
+  }
+
+  /**
+   * Dimensions of the active embedding provider. Surfaced in status
+   * so users can spot a dimension mismatch that would require reindex.
+   */
+  get embeddingDimensions(): number {
+    return this.embeddingProvider?.dimensions ?? 384;
+  }
+
   async index(): Promise<void> {
     if (this.indexing) return;
     this.indexing = true;
 
     // Cold-start vs refresh detection: cold start = no file records yet.
-    // Computed before initEmbedder so we don't count model download in duration.
+    // Computed before provider init so we don't count model download in duration.
     const __isColdStart = this.fileStore.count() === 0;
 
     try {
       log(`Indexing ${this.config.rootPath}...`);
       const startTime = Date.now();
 
-      await initEmbedder();
+      // Select the embedding provider lazily on first index. This
+      // reads SVERKLO_EMBEDDING_PROVIDER + related env vars and falls
+      // back to the bundled ONNX model on any failure. Only runs once
+      // per Indexer instance — subsequent index() calls reuse it.
+      if (!this.embeddingProvider) {
+        this.embeddingProvider = await createEmbeddingProvider();
+      }
 
       // 1. Discover files
       const ignoreFilter = createIgnoreFilter(this.config.rootPath);
@@ -191,7 +247,7 @@ export class Indexer {
       for (let i = 0; i < embeddingBatch.length; i += BATCH_SIZE) {
         const batch = embeddingBatch.slice(i, i + BATCH_SIZE);
         const texts = batch.map((b) => b.text);
-        const vectors = await embed(texts);
+        const vectors = await this.embed(texts);
 
         for (let j = 0; j < batch.length; j++) {
           this.embeddingStore.insert(batch[j].chunkId, vectors[j]);
@@ -282,7 +338,7 @@ export class Indexer {
         }
 
         const embText = description + "\n" + chunk.content.slice(0, 512);
-        const [vector] = await embed([embText]);
+        const [vector] = await this.embed([embText]);
         this.embeddingStore.insert(chunkId, vector);
       }
     } catch (err) {

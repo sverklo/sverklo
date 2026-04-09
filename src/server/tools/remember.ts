@@ -1,5 +1,5 @@
 import type { Indexer } from "../../indexer/indexer.js";
-import { embed, cosineSimilarity } from "../../indexer/embedder.js";
+import { cosineSimilarity } from "../../indexer/embedder.js";
 import { getGitState } from "../../memory/git-state.js";
 import { track } from "../../telemetry/index.js";
 import type { MemoryCategory, MemoryTier } from "../../types/index.js";
@@ -58,7 +58,7 @@ export async function handleRemember(
   // ─── Conflict detection ───
   // Check for existing active memories with high semantic similarity.
   // If same related_files or very high similarity, invalidate the old one.
-  const [queryVector] = await embed([content]);
+  const [queryVector] = await indexer.embed([content]);
   const existingEmbeddings = indexer.memoryEmbeddingStore.getAll();
   const conflicts: { id: number; similarity: number }[] = [];
 

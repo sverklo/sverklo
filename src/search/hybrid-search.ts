@@ -1,5 +1,5 @@
 import type { Indexer } from "../indexer/indexer.js";
-import { embed, cosineSimilarity } from "../indexer/embedder.js";
+import { cosineSimilarity } from "../indexer/embedder.js";
 import type { SearchResult, CodeChunk, FileRecord, ChunkType } from "../types/index.js";
 import { log } from "../utils/logger.js";
 
@@ -159,7 +159,7 @@ async function rankCandidates(
   // Signal B: Vector similarity search
   // Optimization: only scan vectors for FTS candidate files + top PageRank files
   // instead of ALL embeddings (O(n) brute force)
-  const [queryVector] = await embed([query]);
+  const [queryVector] = await indexer.embed([query]);
 
   const candidateChunkIds = new Set<number>();
 

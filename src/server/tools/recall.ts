@@ -1,5 +1,5 @@
 import type { Indexer } from "../../indexer/indexer.js";
-import { embed, cosineSimilarity } from "../../indexer/embedder.js";
+import { cosineSimilarity } from "../../indexer/embedder.js";
 import { checkStaleness } from "../../memory/staleness.js";
 import { track } from "../../telemetry/index.js";
 import type { Memory, MemoryCategory, MemoryTier } from "../../types/index.js";
@@ -124,7 +124,7 @@ export async function handleRecall(
   const ftsResults = indexer.memoryStore.searchFts(query, 30);
 
   // Signal B: Vector similarity
-  const [queryVector] = await embed([query]);
+  const [queryVector] = await indexer.embed([query]);
   const allEmbeddings = indexer.memoryEmbeddingStore.getAll();
   const vectorScores: { memoryId: number; score: number }[] = [];
 

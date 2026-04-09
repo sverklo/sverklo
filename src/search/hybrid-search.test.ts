@@ -66,6 +66,7 @@ describe("query-shape classifier", () => {
       embeddingStore: {
         get: () => undefined,
       },
+      embed: async () => [new Float32Array(384)],
     } as unknown as Parameters<typeof hybridSearchWithConfidence>[0];
 
     const result = await hybridSearchWithConfidence(fakeIndexer, {
@@ -93,6 +94,7 @@ describe("query-shape classifier", () => {
       embeddingStore: {
         get: () => undefined,
       },
+      embed: async () => [new Float32Array(384)],
     } as unknown as Parameters<typeof hybridSearchWithConfidence>[0];
 
     // Empty results will still trigger "no results" low-confidence, but
@@ -123,6 +125,7 @@ describe("query-shape classifier", () => {
       embeddingStore: {
         get: () => undefined,
       },
+      embed: async () => [new Float32Array(384)],
     } as unknown as Parameters<typeof hybridSearchWithConfidence>[0];
 
     const result = await hybridSearchWithConfidence(fakeIndexer, {
