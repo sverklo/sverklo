@@ -301,4 +301,12 @@ export async function initProject(
 
   console.log("");
   console.log("Restart Claude Code in this directory and sverklo will appear in /mcp.");
+  // Next-steps footer: make the dashboard visible without forcing it.
+  // Users in CI / SSH / headless environments ignore this; users who
+  // want a visual explorer have a one-command path.
+  console.log("");
+  console.log("Next steps:");
+  console.log("  claude                # start coding — sverklo tools are preferred automatically");
+  console.log("  sverklo ui             # optional: open the web dashboard for visual exploration");
+  console.log("                          (dependency graph, search playground, memory viewer)");
 }

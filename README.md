@@ -224,6 +224,31 @@ Opens a web dashboard at `localhost:3847` — browse indexed files, search playg
 
 > **First run:** The ONNX embedding model (~90MB) downloads automatically. Takes ~30 seconds on first launch, then instant.
 
+## The web dashboard (`sverklo ui`)
+
+Sverklo ships with a local web dashboard that gives you a visual window into the index the MCP tools work against. It's the fastest way to verify the index looks right, explore the structural graph of an unfamiliar codebase, or audit saved memories.
+
+```bash
+sverklo ui .
+```
+
+Opens `http://localhost:3847` in your browser. Everything runs locally — the dashboard reads straight from the SQLite index file at `~/.sverklo/<project-hash>/index.db`. No cloud, no network calls, no server to stand up.
+
+![Sverklo dashboard showing the dependency graph view](./docs/dashboard.png)
+
+What you can see:
+
+- **Overview** — PageRank-ranked file list, language breakdown, chunk count, memory health
+- **File browser** — every indexed file with its chunks (functions, classes, types), import graph (both directions), and PageRank score
+- **Search playground** — run `sverklo_search` queries interactively and see the ranked hits, scores, and PageRank contribution side-by-side. Faster than typing queries into your agent when you're debugging a failing search.
+- **Dependency graph** — the whole repo's file-level dependency graph, nodes colored by language, sized by PageRank. Pan and zoom. The fastest way to find "the files that matter" in a repo you've never seen.
+- **Memory viewer** — all saved memories, grouped by tier (core / archive), with their git SHAs, tags, and staleness flags
+- **Memory timeline** — bi-temporal view showing invalidated memories alongside active ones, with the SHAs where each one was superseded. Click through to see which memory replaced which.
+
+The dashboard is read-only — nothing you do here changes the index. Use the MCP tools from your AI agent for that. Think of the dashboard as the "inspect" view of the tools you're already using.
+
+Keep it open in a tab alongside Claude Code or Cursor while you work. When a tool call returns a confusing result, click through to see exactly what the index thinks the codebase looks like.
+
 ## Performance
 
 Real measurements on real codebases. Every number below is reproducible with one command:

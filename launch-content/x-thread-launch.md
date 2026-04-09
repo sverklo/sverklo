@@ -2,7 +2,7 @@
 
 ## Format
 
-7 tweets. Post in order, no gaps > 30 seconds between 1 and 2 (the hook needs to land immediately). Then pace: tweets 3-7 can be posted over 2-3 minutes.
+**8 tweets.** Post in order, no gaps > 30 seconds between 1 and 2 (the hook needs to land immediately). Then pace: tweets 3-8 can be posted over 2-3 minutes.
 
 Pin tweet 1 to your profile immediately after posting.
 
@@ -117,7 +117,22 @@ Pin tweet 1 to your profile immediately after posting.
 
 ---
 
-## Tweet 7 — the CTA
+## Tweet 7 — the dashboard (the feature nobody expects)
+
+> Oh, and there's a local web dashboard.
+>
+> `sverklo ui` opens it at localhost:3847. Dependency graph colored by language, sized by PageRank. Search playground. Memory timeline with bi-temporal invalidation. File browser with chunk-level detail.
+>
+> Runs offline, obviously. [SCREENSHOT]
+
+**Notes:**
+- **This is the element most likely to get quote-retweeted after the weakness tweet.** Visual payoff + local-first + "nobody else is doing this for a code MCP" = shareable.
+- **The screenshot is mandatory.** Without it, this tweet is much weaker. Open `sverklo ui` on the sverklo repo itself, navigate to the dependency graph view, capture at 1600x1000 or similar crop. Save to `sverklo-site/dashboard.png` and reference it here.
+- Keep "Runs offline, obviously" as the closing — it ties back to the whole thread's local-first thesis without being preachy about it.
+
+---
+
+## Tweet 8 — the CTA
 
 > Repo: github.com/sverklo/sverklo
 > Docs: sverklo.com
@@ -153,7 +168,7 @@ X-specific: **don't reply to your own thread to boost it**. The algorithm penali
 
 ## If the thread goes viral (>1000 likes on tweet 1)
 
-Add an 8th tweet, 2-4 hours after the initial burst:
+Add a 9th tweet, 2-4 hours after the initial burst:
 
 > Update for the new folks:
 >

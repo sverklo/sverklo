@@ -18,6 +18,28 @@
 //
 // Source-auditable in 60 seconds. If anything in here surprises you,
 // open an issue at github.com/sverklo/sverklo.
+//
+// ── Pageview endpoint (added for launch) ────────────────────────────
+//
+// POST /v1/pageview accepts a tiny shape from sverklo.com + /playground
+// so we can tell where launch traffic is coming from. It is explicitly
+// separate from /v1/event (tool telemetry) because the two categories
+// have different privacy characteristics and different opt-in
+// assumptions:
+//
+//   - /v1/event is opt-in per user, off by default in the CLI, guarded
+//     by `sverklo telemetry enable` with a 22-line explainer before the
+//     first byte is sent.
+//   - /v1/pageview is website analytics. It has no cookies, no IP
+//     storage, no fingerprinting, and respects the Do-Not-Track header
+//     on the client side (the client doesn't send the ping if DNT is
+//     on). It only counts which page was visited and where it came
+//     from. This is the minimum we need to know whether a launch
+//     channel actually drove traffic.
+//
+// Both endpoints write to the same R2 bucket but under different key
+// prefixes so aggregation can tell them apart: events go to
+// `<date>/<uuid>.json`, pageviews go to `pageviews/<date>/<uuid>.json`.
 
 const ALLOWED_EVENTS = new Set([
   "init.run",
@@ -56,6 +78,68 @@ interface SanitizedEvent {
   outcome: string;
   duration_ms: number;
   ts: number;
+}
+
+// Pageview shape. Deliberately minimal. No cookies, no IP, no UA beyond
+// the short device-class string the client self-reports.
+const ALLOWED_PAGES = new Set([
+  "/",
+  "/playground",
+  "/playground/",
+  "/blog",
+  "/blog/",
+]);
+
+// Referrer buckets we care about. Anything not matching drops to "other".
+// This shape lets us cheaply tell which launch channel drove traffic
+// without storing arbitrary URLs.
+function bucketReferrer(raw: string): string {
+  if (!raw) return "direct";
+  let host = "";
+  try {
+    host = new URL(raw).hostname.toLowerCase();
+  } catch {
+    return "other";
+  }
+  if (host === "news.ycombinator.com" || host.endsWith(".ycombinator.com")) return "hn";
+  if (host === "reddit.com" || host.endsWith(".reddit.com")) return "reddit";
+  if (host === "twitter.com" || host === "x.com" || host.endsWith(".x.com")) return "x";
+  if (host === "github.com" || host.endsWith(".github.com") || host.endsWith(".githubusercontent.com")) return "github";
+  if (host === "sverklo.com" || host.endsWith(".sverklo.com")) return "self";
+  if (host === "producthunt.com" || host.endsWith(".producthunt.com")) return "producthunt";
+  if (host === "lobste.rs") return "lobsters";
+  if (host === "news.google.com") return "google-news";
+  if (host === "google.com" || host.endsWith(".google.com")) return "google";
+  if (host === "duckduckgo.com") return "duckduckgo";
+  return "other";
+}
+
+interface SanitizedPageview {
+  page: string;
+  referrer_bucket: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  device: string; // "mobile" | "tablet" | "desktop" | "unknown"
+  ts: number;
+}
+
+function isValidPageview(b: unknown): b is Omit<SanitizedPageview, "ts" | "referrer_bucket"> & { referrer?: string } {
+  if (!b || typeof b !== "object") return false;
+  const r = b as Record<string, unknown>;
+  if (typeof r.page !== "string" || !ALLOWED_PAGES.has(r.page)) return false;
+  if (r.referrer !== undefined && typeof r.referrer !== "string") return false;
+  if (typeof r.referrer === "string" && r.referrer.length > 2048) return false;
+  // utm_* fields: optional strings, short
+  for (const k of ["utm_source", "utm_medium", "utm_campaign"]) {
+    const v = r[k];
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "string") return false;
+    if (v.length > 64) return false;
+  }
+  if (typeof r.device !== "string") return false;
+  if (!["mobile", "tablet", "desktop", "unknown"].includes(r.device)) return false;
+  return true;
 }
 
 interface Env {
@@ -107,9 +191,19 @@ export default {
       });
     }
 
-    if (url.pathname !== "/v1/event") {
-      return new Response("Not found", { status: 404 });
+    // Route: tool-telemetry event
+    if (url.pathname === "/v1/event") {
+      return handleEvent(req, env);
     }
+    // Route: landing-page pageview
+    if (url.pathname === "/v1/pageview") {
+      return handlePageview(req, env);
+    }
+    return new Response("Not found", { status: 404 });
+  },
+};
+
+async function handleEvent(req: Request, env: Env): Promise<Response> {
     if (req.method !== "POST") {
       return new Response("Method not allowed", { status: 405 });
     }
@@ -162,5 +256,54 @@ export default {
       status: 204,
       headers: { "Access-Control-Allow-Origin": "*" },
     });
-  },
-};
+}
+
+async function handlePageview(req: Request, env: Env): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+  const ct = req.headers.get("content-type") || "";
+  // sendBeacon sends text/plain by default; we accept both.
+  if (!ct.includes("application/json") && !ct.includes("text/plain")) {
+    return new Response("Unsupported media type", { status: 415 });
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response("Bad request", { status: 400 });
+  }
+
+  if (!isValidPageview(body)) {
+    return new Response("Invalid pageview", { status: 400 });
+  }
+
+  // Re-bucket the referrer server-side so clients can't smuggle
+  // arbitrary URLs in. We never store the raw referrer string.
+  const rawReferrer = typeof body.referrer === "string" ? body.referrer : "";
+  const bucket = bucketReferrer(rawReferrer);
+
+  const sanitized: SanitizedPageview = {
+    page: body.page,
+    referrer_bucket: bucket,
+    utm_source: body.utm_source ?? null,
+    utm_medium: body.utm_medium ?? null,
+    utm_campaign: body.utm_campaign ?? null,
+    device: body.device,
+    ts: Math.floor(Date.now() / 1000),
+  };
+
+  const id = crypto.randomUUID();
+  const key = `pageviews/${todayUtc()}/${id}.json`;
+  try {
+    await env.TELEMETRY_BUCKET.put(key, JSON.stringify(sanitized));
+  } catch {
+    // Swallow — pageview analytics are best-effort.
+  }
+
+  return new Response(null, {
+    status: 204,
+    headers: { "Access-Control-Allow-Origin": "*" },
+  });
+}
