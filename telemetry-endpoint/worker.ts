@@ -144,6 +144,10 @@ function isValidPageview(b: unknown): b is Omit<SanitizedPageview, "ts" | "refer
 
 interface Env {
   TELEMETRY_BUCKET: R2Bucket;
+  // Basic-auth password for /v1/stats and /v1/stats/ui.
+  // Set via: wrangler secret put STATS_PASSWORD
+  // Not in code, not in git. Unset = endpoints return 500.
+  STATS_PASSWORD?: string;
 }
 
 interface R2Object {
@@ -229,13 +233,323 @@ export default {
     if (url.pathname === "/v1/pageview") {
       return handlePageview(req, env);
     }
-    // Route: aggregated pageview stats for today (launch-day viewer)
+    // Route: aggregated pageview stats for today (launch-day viewer).
+    // Both the JSON endpoint and the HTML dashboard are behind HTTP
+    // Basic Auth guarded by STATS_PASSWORD.
     if (url.pathname === "/v1/stats") {
+      const authResult = checkBasicAuth(req, env);
+      if (authResult) return authResult;
       return handleStats(req, env, ctx);
+    }
+    if (url.pathname === "/v1/stats/ui") {
+      const authResult = checkBasicAuth(req, env);
+      if (authResult) return authResult;
+      return handleStatsUi();
     }
     return new Response("Not found", { status: 404 });
   },
 };
+
+// ────────────────────────────────────────────────────────────────────
+// HTTP Basic Auth guard for the stats endpoints
+// ────────────────────────────────────────────────────────────────────
+//
+// Returns null if the request is authenticated, or a 401 Response if
+// not. The expected password is read from env.STATS_PASSWORD which is
+// stored as a Cloudflare Workers secret (not in code).
+//
+// Username is ignored — we only check the password. Browsers prompt
+// once per session and remember the credentials for the duration of
+// the browser session.
+
+function checkBasicAuth(req: Request, env: Env): Response | null {
+  if (!env.STATS_PASSWORD) {
+    return new Response(
+      "Stats endpoint is not configured: STATS_PASSWORD secret is unset. " +
+        "Set it with: wrangler secret put STATS_PASSWORD",
+      { status: 500 }
+    );
+  }
+  const auth = req.headers.get("authorization") || "";
+  if (!auth.startsWith("Basic ")) {
+    return new Response("Authentication required", {
+      status: 401,
+      headers: {
+        "www-authenticate": 'Basic realm="sverklo-stats", charset="UTF-8"',
+      },
+    });
+  }
+  try {
+    const decoded = atob(auth.slice(6));
+    const colonIdx = decoded.indexOf(":");
+    if (colonIdx < 0) {
+      return new Response("Malformed credentials", { status: 401 });
+    }
+    const password = decoded.slice(colonIdx + 1);
+    // Constant-time-ish comparison. Workers runtime doesn't give us
+    // crypto.subtle for sync comparison, but the timing attack surface
+    // is tiny here — it's a personal dashboard, not a login system.
+    if (password !== env.STATS_PASSWORD) {
+      return new Response("Invalid credentials", {
+        status: 401,
+        headers: {
+          "www-authenticate": 'Basic realm="sverklo-stats", charset="UTF-8"',
+        },
+      });
+    }
+  } catch {
+    return new Response("Malformed credentials", { status: 401 });
+  }
+  return null; // authenticated
+}
+
+// ────────────────────────────────────────────────────────────────────
+// /v1/stats/ui — the HTML dashboard
+// ────────────────────────────────────────────────────────────────────
+//
+// Minimal self-contained dashboard. Fetches /v1/stats every 15s and
+// renders the aggregated numbers. Dark theme matching sverklo brand.
+// No dependencies — vanilla JS, inline CSS, one file. ~200 lines.
+
+function handleStatsUi(): Response {
+  const html = STATS_UI_HTML;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      // Same-origin only — we don't need this loaded from other sites.
+      "x-frame-options": "DENY",
+      "referrer-policy": "no-referrer",
+    },
+  });
+}
+
+const STATS_UI_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sverklo stats</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: #0E0D0B;
+  color: #EDE7D9;
+  font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+.wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #E85A2A;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.sub { color: #6B6354; font-size: 12px; margin-bottom: 24px; }
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 600px) { .hero { grid-template-columns: 1fr; } }
+.metric {
+  background: #16140F;
+  border: 1px solid #2A2620;
+  border-radius: 8px;
+  padding: 20px;
+}
+.metric .label {
+  font-size: 11px;
+  color: #6B6354;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.metric .value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #EDE7D9;
+  line-height: 1;
+}
+.metric .delta {
+  font-size: 11px;
+  color: #8FB339;
+  margin-top: 4px;
+}
+.metric.accent { border-color: #E85A2A; }
+.metric.accent .value { color: #E85A2A; }
+section {
+  background: #16140F;
+  border: 1px solid #2A2620;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+section h2 {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B6354;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 50px;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.bar-row .name { color: #A39886; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+.bar-row .bar-track {
+  height: 8px;
+  background: #22201A;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar-row .bar-fill {
+  height: 100%;
+  background: #E85A2A;
+  transition: width 0.4s ease;
+}
+.bar-row .count { text-align: right; color: #EDE7D9; font-weight: 600; }
+.bar-row.referrer .bar-fill { background: #E85A2A; }
+.bar-row.page .bar-fill { background: #5BA3F5; }
+.bar-row.device .bar-fill { background: #8FB339; }
+.bar-row.utm .bar-fill { background: #D4A535; }
+footer {
+  color: #6B6354;
+  font-size: 11px;
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #22201A;
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8FB339;
+  margin-right: 6px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.empty { color: #6B6354; font-style: italic; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>sverklo · launch analytics</h1>
+  <div class="sub" id="sub"><span class="dot"></span>connecting…</div>
+
+  <div class="hero">
+    <div class="metric accent">
+      <div class="label">total today</div>
+      <div class="value" id="m-total">—</div>
+    </div>
+    <div class="metric">
+      <div class="label">last 10 min</div>
+      <div class="value" id="m-last10">—</div>
+    </div>
+    <div class="metric">
+      <div class="label">unique referrers</div>
+      <div class="value" id="m-refcount">—</div>
+    </div>
+  </div>
+
+  <section>
+    <h2>by referrer</h2>
+    <div id="s-referrer"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>by page</h2>
+    <div id="s-page"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>by device</h2>
+    <div id="s-device"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>by utm source</h2>
+    <div id="s-utm"><span class="empty">none yet</span></div>
+  </section>
+
+  <footer>
+    Auto-refreshes every 15s · cache-max 60s<br>
+    Data from t.sverklo.com/v1/stats · R2-backed · no cookies
+  </footer>
+</div>
+
+<script>
+let lastTotal = null;
+
+async function fetchStats() {
+  try {
+    const r = await fetch('/v1/stats', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    render(data);
+  } catch (e) {
+    document.getElementById('sub').innerHTML = '<span style="color:#E5484D">⚠ fetch failed: ' + e + '</span>';
+  }
+}
+
+function renderBars(elId, obj, rowClass) {
+  const el = document.getElementById(elId);
+  const entries = Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    el.innerHTML = '<span class="empty">none yet</span>';
+    return;
+  }
+  const max = Math.max(...entries.map(([, v]) => v));
+  el.innerHTML = entries.map(([name, count]) => {
+    const pct = Math.max(2, Math.round((count / max) * 100));
+    return '<div class="bar-row ' + rowClass + '">' +
+           '<span class="name">' + escapeHtml(name) + '</span>' +
+           '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+           '<span class="count">' + count + '</span>' +
+           '</div>';
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function render(data) {
+  const delta = lastTotal !== null && data.total > lastTotal ? ' +' + (data.total - lastTotal) : '';
+  document.getElementById('m-total').textContent = data.total;
+  document.getElementById('m-last10').textContent = data.last_10m;
+  document.getElementById('m-refcount').textContent = Object.keys(data.by_referrer || {}).length;
+  document.getElementById('sub').innerHTML =
+    '<span class="dot"></span>live · ' + data.date + ' · updated ' + new Date().toLocaleTimeString();
+
+  renderBars('s-referrer', data.by_referrer, 'referrer');
+  renderBars('s-page', data.by_page, 'page');
+  renderBars('s-device', data.by_device, 'device');
+  renderBars('s-utm', data.by_utm_source, 'utm');
+
+  lastTotal = data.total;
+}
+
+fetchStats();
+setInterval(fetchStats, 15000);
+</script>
+</body>
+</html>`;
 
 async function handleEvent(req: Request, env: Env): Promise<Response> {
     if (req.method !== "POST") {
