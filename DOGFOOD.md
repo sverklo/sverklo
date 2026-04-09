@@ -1,5 +1,64 @@
 # Sverklo Dogfood Protocol
 
+## Dogfood session #3 — 2026-04-08 (on v0.2.16)
+
+**Problem**: While fixing #3 (git warning on fresh repos) I noticed `getGitState` exists in two files — `src/memory/git-state.ts` (the exported one) and `src/memory/import.ts` (a private duplicate). Both needed the same fix applied during the #3 work. Consolidate the duplicate to a single source of truth using sverklo's tools for discovery, impact, and verification. **Bonus check**: does the #17 stale-binary warning fire for this session's MCP server? (It was spawned from an old binary and I've upgraded the binary 4 times since.)
+**Repo**: sverklo/sverklo
+**Start**: 18:32   **End**: 18:37 (≈5 minutes — trivially small because the tools did their job)
+
+### Observations (chronological)
+- **18:32** Called `sverklo_status` as the first thing. **Critical self-test**: the #17 stale-binary warning did NOT fire, even though the MCP server in this session is demonstrably running pre-v0.2.14 code (no "Embedding provider:" line in status output) and I've upgraded the global binary 4 times since the session started. **This is actually correct behavior** — the fix can only warn users who are already running a version that contains it. The warning is **forward-looking insurance**: users transitioning to v0.2.16 don't benefit, users transitioning FROM v0.2.16 to v0.2.17+ do. Worth documenting in the release notes for clarity.
+- **18:33** Ran `sverklo_refs getGitState` + `sverklo_lookup getGitState` in parallel. One round trip returned: both definitions (git-state.ts:14 exported, import.ts:399 private), all 12 references, their callers, and confirmation that signatures match. **Everything I needed to plan the refactor in ~2 seconds.**
+- **18:34** Checked with Grep whether the import.ts duplicate was dead code. Not dead — used once at line 129. Simple import + delete + re-export path.
+- **18:34** Applied the consolidation: imported from `./git-state.js`, deleted the 28-line duplicate, left a comment explaining what happened.
+- **18:35** First build failed: `execSync` no longer imported but still used at line 338 (a git-history scan for memory extraction). **Classic over-eager refactor.** Fixed by adding execSync back.
+- **18:36** Second build clean. Full test suite: 127/127 passing. No regressions from the refactor.
+
+### Moments I wanted grep
+- **18:34** When I needed to confirm whether the import.ts duplicate was actually called from within its own file. This is a single-file exact-string question and Grep is perfect for it. Used it, got the answer immediately. No complaint — this is the right split of responsibility between the tools.
+- **18:35** When I needed to find remaining `execSync` usages after the over-eager import removal. Same pattern: single-file, exact string, Grep is the right tool.
+
+### Moments sverklo saved me
+- **18:33** Parallel `sverklo_refs` + `sverklo_lookup` delivered the complete refactor plan in one round trip. A pure-grep version of this workflow would have been: `grep -rn "getGitState" src/` → filter noise → read each file → find definitions vs callers → deduce the blast radius. That's 3-5 minutes of manual work. Sverklo did it in ~2 seconds.
+- **18:33** `sverklo_lookup` returned both definitions' signatures in one view, confirming they were identical. Without that confirmation I would have had to `Read` both files to spot-check. Saved another minute.
+
+### The four questions
+
+**1. Did it help?** — **Yes, decisively.** This was the smallest, most focused dogfood yet — a single 5-minute refactor — and the tools turned what would have been a 3-5 minute manual discovery phase into a 2-second parallel call. The refactor itself was one edit, one build-fail-and-fix, one successful build. **Total session time: ~5 minutes including this log.**
+
+**2. Where did it fail?** — **One minor thing**: I made the classic "removed the import, forgot another caller" mistake in the first compile pass. Sverklo couldn't have prevented this — TypeScript caught it correctly. But a hypothetical `sverklo_impact` on the `execSync` import would have shown the remaining caller. I didn't run it because the import seemed obviously unused. Lesson: **even small refactors benefit from `sverklo_impact` on the affected imports**, not just the renamed function. Not a bug — a workflow refinement.
+
+**3. Where did it surprise me?** — The **stale-binary warning observation**. I didn't realize when I wrote the #17 fix that it's fundamentally a forward-looking insurance mechanism — users upgrading TO the version containing the fix don't benefit from it on the current upgrade, only on subsequent ones. This isn't a bug in the fix; it's inherent to the problem. But it changes how I'd describe the fix in release notes. Also the **in-session tool response speed** is genuinely invisible now — I stopped noticing tool calls happen because they return before I can think about waiting.
+
+**4. Would I install this on a project I cared about?** — **Yes, unambiguously.** Three sessions in a row, three clean "yes" answers. The product is ready.
+
+### Bugs found (filed during the session)
+
+**None.** Zero new bugs in this session. The issue tracker remains at zero open.
+
+### Real work completed during the session
+
+- Consolidated the duplicate `getGitState` function. `src/memory/import.ts` now imports from the single source of truth at `src/memory/git-state.ts`. The 28-line local copy is gone.
+- Verified the refactor didn't regress any behavior: full test suite (127/127) still passing, including the capture-stderr regression test from #3 which runs against the consolidated path.
+- Confirmed `src/server/tools/remember.ts` continues to import from the correct location (it always did).
+- Documented the #17 stale-binary warning's forward-looking nature as a session finding.
+
+### The verdict
+
+**Ship the launch. No further dogfood needed.**
+
+Three sessions. Session #1: found four bugs (#13, #14, #15, #17 the stale binary). Session #2: verified all fixes and found zero new bugs but one polish opportunity. Session #3: one trivial refactor, zero bugs, real-world confirmation of the workflow.
+
+**The product has been run end-to-end by its author on three different real problems across ~90 minutes of wall-clock dogfooding. Four bugs were found, four were fixed, two follow-up releases shipped (v0.2.15 + v0.2.16), and the backlog is at zero.** That is the strongest quality signal I can generate without external users. Further dogfooding is diminishing returns.
+
+Time to ship the launch comms and set the launch date.
+
+---
+
+## Dogfood session #2 — 2026-04-08 (on v0.2.15)
+
+---
+
 ## Dogfood session #2 — 2026-04-08 (on v0.2.15)
 
 **Problem**: Audit the other 17 language parsers in `src/indexer/parser.ts` for the same off-by-one bug fixed in #16. TSJS had `i = chunk.endLine` where endLine was 1-indexed — the fix was `-1`. Python / Go / Rust / Java / Ruby / PHP / C / C++ / Kotlin / Scala / Swift / Dart / Elixir / Lua / Zig / Haskell / Clojure / OCaml may or may not share the bug. Find out.

@@ -5,6 +5,7 @@ import type { Indexer } from "../indexer/indexer.js";
 import type { MemoryCategory } from "../types/index.js";
 import { embed } from "../indexer/embedder.js";
 import { log } from "../utils/logger.js";
+import { getGitState } from "./git-state.js";
 
 interface ExtractedMemory {
   content: string;
@@ -396,33 +397,8 @@ export function importGitLog(
   return memories;
 }
 
-function getGitState(rootPath: string): { sha: string | null; branch: string | null } {
-  // Issue #3: probe HEAD first. Fresh repos with no commits would
-  // otherwise leak a git warning to stderr during `sverklo init`.
-  try {
-    execSync("git rev-parse --verify HEAD", {
-      cwd: rootPath,
-      stdio: ["ignore", "ignore", "ignore"],
-      timeout: 3000,
-    });
-  } catch {
-    return { sha: null, branch: null };
-  }
-  try {
-    const sha = execSync("git rev-parse HEAD", {
-      cwd: rootPath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 3000,
-    }).trim();
-    const branch = execSync("git branch --show-current", {
-      cwd: rootPath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 3000,
-    }).trim();
-    return { sha: sha || null, branch: branch || null };
-  } catch {
-    return { sha: null, branch: null };
-  }
-}
+// getGitState is now imported from ./git-state.js — the consolidated
+// source of truth. Prior versions had a private duplicate here with
+// its own copy of the #3 fix. Found during dogfood session #3 on
+// 2026-04-08 and consolidated so future fixes to git state handling
+// only need to land in one place.
