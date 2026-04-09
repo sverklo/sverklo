@@ -1,4 +1,45 @@
+import { statSync } from "node:fs";
 import type { Indexer } from "../../indexer/indexer.js";
+
+// Issue #17: the process-start timestamp. Used to detect whether the
+// sverklo binary on disk has been updated since this MCP server was
+// spawned — i.e. the user ran `npm install -g sverklo@<newer>` but
+// the IDE subprocess kept running the old binary. The warning is
+// advisory; the tool still works.
+const PROCESS_START_MS = Date.now() - Math.round(process.uptime() * 1000);
+
+/**
+ * True if the sverklo binary on disk is newer than our process start.
+ * Zero network, single stat() call, cached per-session because we
+ * check it on every status call.
+ */
+let cachedStaleCheck: { ts: number; stale: boolean } | null = null;
+function isBinaryStale(): boolean {
+  const now = Date.now();
+  if (cachedStaleCheck && now - cachedStaleCheck.ts < 60_000) {
+    return cachedStaleCheck.stale;
+  }
+  try {
+    // process.argv[1] is the running script path — for sverklo this
+    // is usually dist/bin/sverklo.js or a symlink target. stat resolves
+    // the symlink so we see the actual binary's mtime.
+    const binPath = process.argv[1];
+    if (!binPath) {
+      cachedStaleCheck = { ts: now, stale: false };
+      return false;
+    }
+    const mtime = statSync(binPath).mtimeMs;
+    // If the binary was modified after this process started, we're
+    // running stale code. Small fudge factor (5s) for clock drift on
+    // file systems with low mtime resolution.
+    const stale = mtime > PROCESS_START_MS + 5000;
+    cachedStaleCheck = { ts: now, stale };
+    return stale;
+  } catch {
+    cachedStaleCheck = { ts: now, stale: false };
+    return false;
+  }
+}
 
 export const indexStatusTool = {
   name: "sverklo_status",
@@ -20,6 +61,19 @@ export function handleIndexStatus(indexer: Indexer): string {
   const symbolRefCount = indexer.symbolRefStore.count();
 
   const parts: string[] = [];
+
+  // Issue #17: warn loudly if the user upgraded sverklo on disk but
+  // is still running the old binary in this MCP session. Placed at
+  // the very top of the output because it changes the user's next
+  // action ("restart your IDE").
+  if (isBinaryStale()) {
+    parts.push(
+      "⚠️ **Sverklo binary on disk is newer than the running process.** " +
+        "You upgraded sverklo but this MCP server is still running the old code. " +
+        "**Restart your IDE** (or the MCP client) to load the new binary."
+    );
+    parts.push("");
+  }
 
   // ─── Project header ───
   parts.push(`# ${status.projectName}`);

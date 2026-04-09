@@ -397,9 +397,30 @@ export function importGitLog(
 }
 
 function getGitState(rootPath: string): { sha: string | null; branch: string | null } {
+  // Issue #3: probe HEAD first. Fresh repos with no commits would
+  // otherwise leak a git warning to stderr during `sverklo init`.
   try {
-    const sha = execSync("git rev-parse HEAD", { cwd: rootPath, encoding: "utf-8", timeout: 3000 }).trim();
-    const branch = execSync("git branch --show-current", { cwd: rootPath, encoding: "utf-8", timeout: 3000 }).trim();
+    execSync("git rev-parse --verify HEAD", {
+      cwd: rootPath,
+      stdio: ["ignore", "ignore", "ignore"],
+      timeout: 3000,
+    });
+  } catch {
+    return { sha: null, branch: null };
+  }
+  try {
+    const sha = execSync("git rev-parse HEAD", {
+      cwd: rootPath,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 3000,
+    }).trim();
+    const branch = execSync("git branch --show-current", {
+      cwd: rootPath,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 3000,
+    }).trim();
     return { sha: sha || null, branch: branch || null };
   } catch {
     return { sha: null, branch: null };

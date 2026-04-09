@@ -1,8 +1,27 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { track } from "./telemetry/index.js";
+
+/**
+ * Read the version from the package.json bundled with the running
+ * binary. This reports what we actually are, not what happens to be
+ * named `sverklo` on PATH. Issue #2.
+ */
+function readOwnVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    for (const rel of ["..", "../..", "../../.."]) {
+      try {
+        const pkg = JSON.parse(readFileSync(join(here, rel, "package.json"), "utf-8"));
+        if (pkg.name === "sverklo" && pkg.version) return pkg.version;
+      } catch {}
+    }
+  } catch {}
+  return "unknown";
+}
 
 interface CheckResult {
   name: string;
@@ -33,22 +52,18 @@ export function runDoctor(projectPath: string): void {
   }
 
   // 2. Version
-  if (sverkloBin) {
-    try {
-      const version = execSync(`${sverkloBin} --version`, { encoding: "utf-8" }).trim();
-      checks.push({
-        name: "version",
-        status: "ok",
-        message: version,
-      });
-    } catch (err) {
-      checks.push({
-        name: "version",
-        status: "fail",
-        message: "failed to run --version",
-      });
-    }
-  }
+  // Issue #2: report the version we actually are, not whatever
+  // `sverklo --version` happens to return when run via PATH. The old
+  // approach executed the binary on PATH as a subprocess, which
+  // reports a different version whenever the running doctor was
+  // launched from a non-PATH copy (`npm link`, node_modules/.bin,
+  // direct dist path, etc.). The self-report is the truthful answer.
+  const ownVersion = readOwnVersion();
+  checks.push({
+    name: "version",
+    status: ownVersion === "unknown" ? "warn" : "ok",
+    message: `sverklo v${ownVersion}`,
+  });
 
   // 3. ONNX model
   const modelPath = join(homedir(), ".sverklo", "models", "model.onnx");
