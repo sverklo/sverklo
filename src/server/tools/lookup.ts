@@ -44,7 +44,18 @@ export function handleLookup(
   indexer: Indexer,
   args: Record<string, unknown>
 ): string {
-  const symbol = args.symbol as string;
+  // Bug A (issue #15 investigation): missing / wrong-named required
+  // params previously fell through to a SQL LIKE '%undefined%' and
+  // returned "No results found" — indistinguishable from "the symbol
+  // doesn't exist" and actively misleading. Fail loud instead so the
+  // caller knows it was their mistake, not the index's.
+  const symbol = args.symbol;
+  if (typeof symbol !== "string" || symbol.trim() === "") {
+    return (
+      'Error: `symbol` is required. Usage: sverklo_lookup symbol:"MyClass".\n' +
+      "The tool schema names this parameter `symbol`, not `name` — common typo."
+    );
+  }
   const type = (args.type as ChunkType | "any") || "any";
   const tokenBudget = (args.token_budget as number) || 1200;
 

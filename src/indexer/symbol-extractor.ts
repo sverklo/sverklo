@@ -52,10 +52,22 @@ export function extractReferences(
   selfName: string | null = null
 ): { name: string; line: number }[] {
   const refs: { name: string; line: number }[] = [];
-  const seen = new Set<string>(); // dedupe within a chunk
   const lines = content.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
+    // Dedupe scope is per LINE, not per chunk.
+    //
+    // Issue #13: the old implementation used a chunk-wide `seen` set,
+    // which meant a symbol called twice in the same function got one
+    // symbol_ref row at the first call site — the second call was
+    // silently dropped. That made sverklo_impact a lossy tool and
+    // caused it to under-report blast radius on any real refactor.
+    //
+    // Per-line dedupe still catches the case where two regexes (CALL_RE
+    // and NEW_RE) both fire on `new Foo()`, while letting repeat calls
+    // across lines each contribute their own row. The (chunk, name,
+    // line) UNIQUE constraint on symbol_refs prevents exact duplicates.
+    const seenOnLine = new Set<string>();
     const line = lines[i];
     // Strip string literals and comments to reduce false positives
     const stripped = stripStringsAndComments(line);
@@ -69,9 +81,9 @@ export function extractReferences(
         name === selfName ||
         KEYWORDS.has(name) ||
         COMMON_BUILTINS.has(name) ||
-        seen.has(name)
+        seenOnLine.has(name)
       ) continue;
-      seen.add(name);
+      seenOnLine.add(name);
       refs.push({ name, line: i });
     }
 
@@ -79,8 +91,8 @@ export function extractReferences(
     NEW_RE.lastIndex = 0;
     while ((m = NEW_RE.exec(stripped)) !== null) {
       const name = m[1];
-      if (name === selfName || KEYWORDS.has(name) || seen.has(name)) continue;
-      seen.add(name);
+      if (name === selfName || KEYWORDS.has(name) || seenOnLine.has(name)) continue;
+      seenOnLine.add(name);
       refs.push({ name, line: i });
     }
   }

@@ -73,6 +73,15 @@ export function formatLookup(
   let remaining = tokenBudget;
   let fittedAny = false;
 
+  // Bug B (issue #15 investigation): chunks that didn't fit the
+  // budget used to be silently dropped if ANY other chunk fit. On
+  // a query for 'Indexer', that meant the real 470-line Indexer
+  // class (4730 tokens) was replaced by a 150-token
+  // fakeIndexerWithCore test helper with no hint that the real
+  // match was hiding right behind it. Track skipped chunks so we
+  // can always surface them, even when other matches fit.
+  const skipped: typeof chunks = [];
+
   for (const chunk of chunks) {
     const file = files.get(chunk.file_id);
     const filePath = chunk.filePath || file?.path || "unknown";
@@ -83,7 +92,10 @@ export function formatLookup(
     const contentCost = chunk.token_count;
     const totalCost = headerCost + contentCost + 10;
 
-    if (remaining < totalCost) continue;
+    if (remaining < totalCost) {
+      skipped.push(chunk);
+      continue;
+    }
 
     parts.push(header);
     parts.push(`\`\`\`${lang}`);
@@ -93,10 +105,14 @@ export function formatLookup(
     fittedAny = true;
   }
 
-  // Fallback: if every chunk overflowed the budget, return header-only entries
-  // for the top matches so the caller still gets locations and signatures.
-  // Returning "No results found." here was hiding real matches whose bodies
-  // exceeded the budget — exactly what bench sv-p1-05/sv-p1-06 hit.
+  // Two cases that both produce a "location-only" section:
+  //
+  //   1. Nothing fit → the old "All N matches exceed budget" fallback.
+  //      We still need this because returning "No results found" for
+  //      matches that exist but are oversized is actively misleading.
+  //
+  //   2. Some fit, some didn't → list the ones that didn't so the
+  //      caller knows they exist. This is the bug-B fix.
   if (!fittedAny) {
     parts.push(
       `_All ${chunks.length} match${chunks.length === 1 ? "" : "es"} exceed token_budget=${tokenBudget}. Showing locations only — re-run with a larger token_budget or use Read for the full body._`
@@ -110,6 +126,25 @@ export function formatLookup(
         `- **${filePath}:${chunk.start_line}-${chunk.end_line}** (${chunk.type}: ${chunk.name}, ~${chunk.token_count} tokens)${sig}`
       );
     }
+  } else if (skipped.length > 0) {
+    parts.push("");
+    parts.push(
+      `_${skipped.length} additional match${skipped.length === 1 ? "" : "es"} too large to fit token_budget=${tokenBudget}:_`
+    );
+    for (const chunk of skipped.slice(0, 10)) {
+      const file = files.get(chunk.file_id);
+      const filePath = chunk.filePath || file?.path || "unknown";
+      const sig = chunk.signature ? `  \`${chunk.signature.trim()}\`` : "";
+      parts.push(
+        `- **${filePath}:${chunk.start_line}-${chunk.end_line}** (${chunk.type}: ${chunk.name}, ~${chunk.token_count} tokens)${sig}`
+      );
+    }
+    if (skipped.length > 10) {
+      parts.push(`- _...and ${skipped.length - 10} more_`);
+    }
+    parts.push(
+      `_Raise token_budget or call sverklo_lookup with the specific symbol to see the body._`
+    );
   }
 
   return parts.join("\n");
