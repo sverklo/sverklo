@@ -1,7 +1,29 @@
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Indexer } from "../indexer/indexer.js";
 import { log } from "../utils/logger.js";
 import { getDashboardHTML } from "./dashboard-html.js";
+
+// Read the package version once at module load so the dashboard footer
+// and any other surface can show what version is actually running.
+// Was hardcoded as "v0.1.7" in the dashboard HTML until a dogfood
+// session caught it right before launch — the screenshot we were
+// planning to promote would have shown a 4-month-old version.
+function readPackageVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    for (const rel of ["..", "../..", "../../.."]) {
+      try {
+        const pkg = JSON.parse(readFileSync(join(here, rel, "package.json"), "utf-8"));
+        if (pkg.name === "sverklo" && pkg.version) return pkg.version;
+      } catch {}
+    }
+  } catch {}
+  return "unknown";
+}
+const PACKAGE_VERSION = readPackageVersion();
 
 export function startHttpServer(indexer: Indexer, port: number = 3847): void {
   const server = createServer(async (req, res) => {
@@ -21,7 +43,9 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
       // ─── API routes ───
       if (url.pathname === "/api/status") {
         const status = indexer.getStatus();
-        json(res, status);
+        // Include the running package version so the dashboard footer
+        // can show what's actually running instead of a hardcoded string.
+        json(res, { ...status, version: PACKAGE_VERSION });
       } else if (url.pathname === "/api/stats") {
         // Aggregated stats for the dashboard overview
         const files = indexer.fileStore.getAll();

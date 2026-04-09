@@ -715,7 +715,7 @@ footer.status .spacer { flex: 1; }
     <div class="item"><span class="k">chunks</span> <span class="v" id="st-chunks">–</span></div>
     <div class="item"><span class="k">memories</span> <span class="v" id="st-mem">–</span></div>
     <div class="spacer"></div>
-    <div class="item"><span class="v">sverklo</span> <span class="k">v0.1.7</span></div>
+    <div class="item"><span class="v">sverklo</span> <span class="k" id="st-version">–</span></div>
   </footer>
 </div>
 
@@ -764,6 +764,11 @@ async function init() {
   document.getElementById('st-files').textContent = state.stats.fileCount;
   document.getElementById('st-chunks').textContent = state.stats.chunkCount;
   document.getElementById('st-mem').textContent = state.stats.memoryCount;
+  // Version comes from the server (reads package.json at module load)
+  // so the dashboard footer always matches the running binary.
+  if (state.status.version) {
+    document.getElementById('st-version').textContent = 'v' + state.status.version;
+  }
 
   renderInspectorToday();
   renderStats();
