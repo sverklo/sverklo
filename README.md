@@ -7,6 +7,7 @@ _Sverklo_ (Russian: **сверло**, _SVER-lo_) — "drill." Code intelligence 
 [![GitHub stars](https://img.shields.io/github/stars/sverklo/sverklo?style=flat&color=E85A2A)](https://github.com/sverklo/sverklo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-E85A2A.svg)](LICENSE)
 [![Local-first](https://img.shields.io/badge/local--first-no%20cloud-E85A2A)](#)
+[![SafeSkill 20/100](https://img.shields.io/badge/SafeSkill-20%2F100_Blocked-red)](https://safeskill.dev/scan/sverklo-sverklo)
 
 ## Stop re-explaining your codebase to your AI.
 
