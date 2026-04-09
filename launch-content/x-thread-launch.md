@@ -17,14 +17,16 @@ Pin tweet 1 to your profile immediately after posting.
 >
 > So I built Sverklo. Runs locally, indexes react in 2.5 minutes, MIT licensed. Benchmarks on real repos, not toy projects 👇
 >
-> [DEMO GIF: 10 seconds of Claude Code asking "where's auth handled?" → sverklo returns 3 ranked files with file paths → compared to ripgrep returning 800 lines of noise]
+> [ATTACH: demo.mp4 — 30 seconds of Claude Code answering "what would break if I rename extractReferences?" via sverklo_impact, returning the full ranked callsites + risk assessment "DIRECT, single definition — safe, mechanical rename" in one tool call]
 
 **Notes:**
 - Opens with a shared pain point (not with "I built X")
 - Names the two specific failure modes — concrete, not vague
 - "runs locally" is the tiebreaker, not the lead
 - Ends with a hook for the thread ("benchmarks below")
-- **The GIF is the most important asset.** Record it at 1080p, ≤10 seconds, no voice, captions only. If you only ship one piece of media, it's this.
+- **Media: upload demo.mp4 as X native video (not a GIF).** X auto-compresses GIFs harder than MP4s and native video plays inline without a click. The file is at sverklo.com/demo.mp4 (also available in the repo at docs/demo.mp4). 30 seconds, 1600x770, 484KB, H.264 yuv420p faststart-encoded.
+- **Fallback**: if X has issues with the MP4, use demo.gif (2.1 MB, same content, 14fps) from the same paths.
+- **Static fallback** (for contexts that embed only images): demo.png at docs/demo.png — the final answer frame showing the complete tool output.
 
 ---
 
