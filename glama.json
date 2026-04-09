@@ -3,7 +3,7 @@
   "name": "sverklo",
   "displayName": "Sverklo",
   "description": "Local-first code intelligence MCP for AI coding agents. Hybrid BM25 + ONNX vector search, symbol-level impact analysis, diff-aware PR review with risk scoring, and persistent memory tied to git state.",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "author": "sverklo",
   "license": "MIT",
   "homepage": "https://sverklo.com",

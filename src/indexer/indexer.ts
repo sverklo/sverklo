@@ -1,7 +1,12 @@
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
-import { createDatabase } from "../storage/database.js";
+import {
+  createDatabase,
+  getDataVersion,
+  setDataVersion,
+  CURRENT_DATA_VERSION,
+} from "../storage/database.js";
 import { FileStore } from "../storage/file-store.js";
 import { ChunkStore } from "../storage/chunk-store.js";
 import { EmbeddingStore } from "../storage/embedding-store.js";
@@ -68,6 +73,73 @@ export class Indexer {
     this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
     this.symbolRefStore = new SymbolRefStore(this.db);
     this.memoryJournal = new MemoryJournal(config.rootPath);
+
+    // Run any outstanding data migrations before any query code touches
+    // the stores. Migrations are surgical — they operate on the existing
+    // data and never require a full reindex — so the user sees zero
+    // downtime on upgrade.
+    this.runDataMigrations();
+  }
+
+  /**
+   * Bring the on-disk data layer up to CURRENT_DATA_VERSION. Runs
+   * once on Indexer construction and is a no-op on already-current
+   * databases.
+   *
+   * Migrations are intentionally side-effecting on this instance's
+   * stores; each one should be small, deterministic, and fast.
+   */
+  private runDataMigrations(): void {
+    const stored = getDataVersion(this.db);
+    if (stored >= CURRENT_DATA_VERSION) return;
+
+    // A fresh database has version 0 and no data yet — we'll stamp it
+    // below without running any migrations. Only existing data needs
+    // upgrading.
+    const chunkCount = this.chunkStore.count();
+
+    if (stored < 2 && chunkCount > 0) {
+      // Migration 1 → 2: re-extract symbol references from every
+      // existing chunk. Fixes github.com/sverklo/sverklo/issues/13
+      // where v0.2.13 and earlier collapsed repeat calls of the
+      // same symbol in one chunk to a single symbol_refs row.
+      //
+      // We drop the old symbol_refs rows and re-run extractReferences
+      // in-process. No file I/O, no re-parsing — just regex over the
+      // chunk bodies we already have in the DB.
+      log(
+        `[migration] data_version ${stored} → 2: re-extracting symbol refs for ${chunkCount} chunks (fixes #13)`
+      );
+      const t0 = Date.now();
+      this.db.exec("DELETE FROM symbol_refs");
+
+      // Pull chunks one at a time to keep memory bounded on huge repos.
+      const rows = this.db
+        .prepare("SELECT id, name, start_line, content FROM chunks")
+        .all() as { id: number; name: string | null; start_line: number; content: string }[];
+
+      let totalRefs = 0;
+      const insertTxn = this.db.transaction(() => {
+        for (const row of rows) {
+          const refs = extractReferences(row.content, row.name);
+          for (const ref of refs) {
+            this.symbolRefStore.insert(
+              row.id,
+              ref.name,
+              row.start_line + ref.line
+            );
+            totalRefs++;
+          }
+        }
+      });
+      insertTxn();
+
+      log(
+        `[migration] extracted ${totalRefs} symbol refs in ${Date.now() - t0}ms`
+      );
+    }
+
+    setDataVersion(this.db, CURRENT_DATA_VERSION);
   }
 
   get rootPath(): string {
