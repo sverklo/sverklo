@@ -196,7 +196,19 @@ function parseTSJS(content: string, lines: string[]): ParseResult {
 
     if (chunk && chunk.content.length > 10) {
       chunks.push(chunk);
-      i = chunk.endLine; // skip past this chunk
+      // Issue #16: chunk.endLine is 1-indexed (set by extractChunk),
+      // but this loop's `i` is 0-indexed. Assigning the 1-indexed
+      // value meant the for-loop's `i++` skipped one line past the
+      // chunk. On a file with two adjacent top-level functions like
+      //   function helper() { return 1; }
+      //   export function run() { ... }
+      // that skipped line was the `function run` declaration, and
+      // every subsequent top-level function was missing from the
+      // index entirely. Every other language parser in this file
+      // correctly uses the 0-indexed `endLine` local. Subtract 1 so
+      // the next iteration's `i++` lands exactly on the line after
+      // the chunk.
+      i = chunk.endLine - 1;
     }
   }
 
