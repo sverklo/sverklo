@@ -146,9 +146,39 @@ interface Env {
   TELEMETRY_BUCKET: R2Bucket;
 }
 
+interface R2Object {
+  key: string;
+  text(): Promise<string>;
+}
+
+interface R2Objects {
+  objects: R2Object[];
+  truncated: boolean;
+  cursor?: string;
+}
+
 interface R2Bucket {
   put(key: string, value: string): Promise<void>;
+  list(options: { prefix: string; limit?: number; cursor?: string }): Promise<R2Objects>;
+  get(key: string): Promise<R2Object | null>;
 }
+
+// Cloudflare's Cache API is our only zero-cost memoization layer —
+// Workers instances are ephemeral so module-level caching doesn't
+// survive across requests. For the /v1/stats endpoint we cache the
+// aggregated response for 60 seconds so a user hammering refresh
+// during launch day doesn't send 1000 R2 GETs every time.
+interface ExecutionContext {
+  waitUntil(promise: Promise<unknown>): void;
+  passThroughOnException(): void;
+}
+
+declare const caches: {
+  default: {
+    match(request: Request): Promise<Response | undefined>;
+    put(request: Request, response: Response): Promise<void>;
+  };
+};
 
 function isValidEvent(b: unknown): b is Omit<SanitizedEvent, "ts"> {
   if (!b || typeof b !== "object") return false;
@@ -176,7 +206,7 @@ function todayUtc(): string {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
     // CORS preflight: nothing to allow, but be polite.
@@ -185,7 +215,7 @@ export default {
         status: 204,
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST",
+          "Access-Control-Allow-Methods": "POST, GET",
           "Access-Control-Allow-Headers": "content-type",
         },
       });
@@ -198,6 +228,10 @@ export default {
     // Route: landing-page pageview
     if (url.pathname === "/v1/pageview") {
       return handlePageview(req, env);
+    }
+    // Route: aggregated pageview stats for today (launch-day viewer)
+    if (url.pathname === "/v1/stats") {
+      return handleStats(req, env, ctx);
     }
     return new Response("Not found", { status: 404 });
   },
@@ -306,4 +340,141 @@ async function handlePageview(req: Request, env: Env): Promise<Response> {
     status: 204,
     headers: { "Access-Control-Allow-Origin": "*" },
   });
+}
+
+// ────────────────────────────────────────────────────────────────────
+// /v1/stats — aggregated pageview summary for today
+// ────────────────────────────────────────────────────────────────────
+//
+// Launch-day analytics viewer. Scans pageviews/<today>/*.json from R2,
+// tallies by referrer_bucket / page / device / utm_source, and returns
+// the summary as JSON. Cached at the edge for 60 seconds so hammering
+// refresh during launch day doesn't explode R2 class B costs.
+//
+// No auth. The aggregates are non-sensitive and the raw file keys use
+// random UUIDs so the bucket contents aren't enumerable from the URL.
+//
+// To view:
+//   curl https://t.sverklo.com/v1/stats
+// Or bookmark in a browser tab for one-click refresh during launch.
+
+interface StatsResponse {
+  date: string;
+  total: number;
+  last_10m: number;
+  by_referrer: Record<string, number>;
+  by_page: Record<string, number>;
+  by_device: Record<string, number>;
+  by_utm_source: Record<string, number>;
+  generated_at: number;
+  cache_age_s: number;
+}
+
+async function handleStats(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  if (req.method !== "GET") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  // Edge cache lookup. The cache key is synthetic — we don't use the
+  // real request URL because we want a single canonical entry per
+  // day (different user agents or headers shouldn't split the cache).
+  const cacheKey = new Request(`https://t.sverklo.com/__cache/stats/${todayUtc()}`);
+  const cached = await caches.default.match(cacheKey);
+  if (cached) {
+    // Return the cached response with a fresh Access-Control-Allow-Origin
+    // header (not strictly needed, but cheap insurance).
+    const body = await cached.text();
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "access-control-allow-origin": "*",
+        "cache-control": "public, max-age=60",
+        "x-sverklo-cache": "hit",
+      },
+    });
+  }
+
+  // Compute the aggregate. Walk every pageview object under today's
+  // prefix. For a few thousand pageviews/day this is fine; beyond
+  // that we'd want a roll-up counter updated on insert.
+  const prefix = `pageviews/${todayUtc()}/`;
+  const totals: StatsResponse = {
+    date: todayUtc(),
+    total: 0,
+    last_10m: 0,
+    by_referrer: {},
+    by_page: {},
+    by_device: {},
+    by_utm_source: {},
+    generated_at: Math.floor(Date.now() / 1000),
+    cache_age_s: 0,
+  };
+  const cutoff10m = Math.floor(Date.now() / 1000) - 600;
+
+  const bump = (map: Record<string, number>, key: string | null | undefined) => {
+    if (!key) return;
+    map[key] = (map[key] || 0) + 1;
+  };
+
+  let cursor: string | undefined;
+  try {
+    do {
+      const listing = await env.TELEMETRY_BUCKET.list({
+        prefix,
+        limit: 1000,
+        cursor,
+      });
+      // Parallelize the GET calls in small batches so we don't hit
+      // Worker subrequest limits on huge days.
+      const BATCH = 20;
+      for (let i = 0; i < listing.objects.length; i += BATCH) {
+        const batch = listing.objects.slice(i, i + BATCH);
+        const bodies = await Promise.all(
+          batch.map(async (obj) => {
+            try {
+              const body = await env.TELEMETRY_BUCKET.get(obj.key);
+              if (!body) return null;
+              return JSON.parse(await body.text());
+            } catch {
+              return null;
+            }
+          })
+        );
+        for (const data of bodies) {
+          if (!data || typeof data !== "object") continue;
+          totals.total++;
+          if (typeof data.ts === "number" && data.ts >= cutoff10m) totals.last_10m++;
+          bump(totals.by_referrer, data.referrer_bucket);
+          bump(totals.by_page, data.page);
+          bump(totals.by_device, data.device);
+          bump(totals.by_utm_source, data.utm_source);
+        }
+      }
+      cursor = listing.truncated ? listing.cursor : undefined;
+    } while (cursor);
+  } catch {
+    // R2 list/get errors should not 500 the endpoint. Return
+    // whatever we managed to aggregate with a partial flag.
+  }
+
+  const body = JSON.stringify(totals, null, 2);
+  const response = new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "access-control-allow-origin": "*",
+      "cache-control": "public, max-age=60",
+      "x-sverklo-cache": "miss",
+    },
+  });
+
+  // Fire-and-forget: store in edge cache so the next request within
+  // 60s is a cheap hit. Clone because Response bodies are single-use.
+  ctx.waitUntil(caches.default.put(cacheKey, response.clone()));
+  return response;
 }
