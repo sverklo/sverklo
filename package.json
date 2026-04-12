@@ -1,6 +1,6 @@
 {
   "name": "sverklo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Sverklo — local-first code intelligence MCP server. Diff-aware MR review, risk scoring, hybrid semantic search, PageRank ranking, persistent memory. Zero config.",
   "type": "module",
   "bin": {

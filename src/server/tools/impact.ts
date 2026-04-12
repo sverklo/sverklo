@@ -1,9 +1,12 @@
 import type { Indexer } from "../../indexer/indexer.js";
+import { findWorkspaceForProject, getWorkspaceDbPath } from "../../workspace/workspace-config.js";
+import { CrossRepoDb } from "../../workspace/cross-db.js";
+import type { InterfaceContract } from "../../workspace/cross-db.js";
 
 export const impactTool = {
   name: "sverklo_impact",
   description:
-    "Refactor blast-radius: callers of a symbol with confidence scoring. Run before editing.",
+    "Refactor blast-radius: callers of a symbol with confidence scoring. Run before editing. Use cross_repo:true to see impact across linked projects in a workspace.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -14,6 +17,10 @@ export const impactTool = {
       limit: {
         type: "number",
         description: "Max references to return (default 50)",
+      },
+      cross_repo: {
+        type: "boolean",
+        description: "Include cross-repo impact from workspace projects (default false)",
       },
     },
     required: ["symbol"],
@@ -109,5 +116,86 @@ export function handleImpact(indexer: Indexer, args: Record<string, unknown>): s
     }
   }
 
+  // Cross-repo impact (if requested and workspace exists)
+  if (args.cross_repo) {
+    const crossSection = getCrossRepoImpact(indexer, symbol);
+    if (crossSection) {
+      parts.push("\n" + crossSection);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+function getCrossRepoImpact(indexer: Indexer, symbol: string): string | null {
+  try {
+    const wsConfig = findWorkspaceForProject(indexer.rootPath);
+    if (!wsConfig) {
+      return "\n_No workspace found for this project. Create one with `sverklo workspace init <name> <path1> <path2>`._";
+    }
+
+    const db = new CrossRepoDb(getWorkspaceDbPath(wsConfig.workspace));
+
+    try {
+      // Find contracts matching this symbol
+      const contracts = db.getContractBySymbol(symbol);
+      if (contracts.length === 0) {
+        // Try with Type.field pattern
+        const fieldContracts = db.getContractBySymbol(`%.${symbol}`);
+        if (fieldContracts.length === 0) {
+          return null; // No cross-repo contracts for this symbol
+        }
+        return formatCrossImpact(db, fieldContracts, wsConfig.workspace);
+      }
+      return formatCrossImpact(db, contracts, wsConfig.workspace);
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null; // Silently skip cross-repo if anything fails
+  }
+}
+
+function formatCrossImpact(
+  db: CrossRepoDb,
+  contracts: InterfaceContract[],
+  workspaceName: string
+): string | null {
+  const parts: string[] = [`\n## Cross-repo impact (workspace: ${workspaceName})`];
+  let totalEdges = 0;
+
+  for (const contract of contracts) {
+    const edges = db.getCrossEdgesForContract(contract.id!);
+    if (edges.length === 0) continue;
+    totalEdges += edges.length;
+
+    parts.push(`\n### ${contract.symbolName} (${contract.interfaceType} ${contract.symbolKind})`);
+    parts.push(`  defined in: \`${contract.sourceFile}:${contract.fileLine || "?"}\``);
+
+    // Group edges by project
+    const byProject = new Map<string, typeof edges>();
+    for (const edge of edges) {
+      const arr = byProject.get(edge.consumerProjectId) || [];
+      arr.push(edge);
+      byProject.set(edge.consumerProjectId, arr);
+    }
+
+    for (const [projectId, projectEdges] of byProject) {
+      const project = db.getProject(projectId);
+      const projectName = project?.name || projectId;
+      parts.push(`\n  **${projectName}** (${projectEdges.length} reference${projectEdges.length === 1 ? "" : "s"}):`);
+      for (const edge of projectEdges.slice(0, 20)) {
+        const conf = edge.confidence < 1.0 ? ` (confidence: ${edge.confidence})` : "";
+        parts.push(`    · \`${edge.consumerFile}:${edge.consumerLine || "?"}\` — ${edge.consumerSymbol} [${edge.edgeType}]${conf}`);
+      }
+      if (projectEdges.length > 20) {
+        parts.push(`    _...and ${projectEdges.length - 20} more_`);
+      }
+    }
+  }
+
+  if (totalEdges === 0) return null;
+
+  parts.unshift(""); // blank line before section
   return parts.join("\n");
 }

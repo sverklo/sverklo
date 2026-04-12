@@ -90,6 +90,39 @@ if (command === "doctor" || command === "diagnose" || command === "check") {
 
 if (command === "workspace") {
   const sub = args[1];
+
+  // --- Cross-repo workspace commands (new YAML-based) ---
+
+  if (sub === "init") {
+    const name = args[2];
+    const paths = args.slice(3);
+    if (!name || paths.length === 0) {
+      console.error("Usage: sverklo workspace init <name> <path1> <path2> ...");
+      process.exit(1);
+    }
+    const { workspaceInit } = await import("../src/workspace/cli.js");
+    await workspaceInit(name, paths);
+    process.exit(0);
+  }
+
+  if (sub === "status") {
+    const name = args[2]; // optional
+    const { workspaceStatus } = await import("../src/workspace/cli.js");
+    const output = await workspaceStatus(name);
+    console.log(output);
+    process.exit(0);
+  }
+
+  if (sub === "index") {
+    const name = args[2];
+    if (!name) { console.error("Usage: sverklo workspace index <name>"); process.exit(1); }
+    const { workspaceIndex } = await import("../src/workspace/cli.js");
+    await workspaceIndex(name);
+    process.exit(0);
+  }
+
+  // --- Legacy workspace commands (JSON-based, kept for backwards compat) ---
+
   const {
     createWorkspace,
     loadWorkspace,
@@ -156,11 +189,14 @@ if (command === "workspace") {
 sverklo workspace — manage multi-repo workspaces
 
 Usage:
-  sverklo workspace create <name> [paths...]    Create a workspace
-  sverklo workspace add <name> [path]           Add a repo to a workspace
-  sverklo workspace remove <name> <path>        Remove a repo from a workspace
-  sverklo workspace list                        List all workspaces
-  sverklo workspace show <name>                 Show repos in a workspace
+  sverklo workspace init <name> <p1> <p2> ...   Create cross-repo workspace (YAML)
+  sverklo workspace status [name]                Show workspace health & staleness
+  sverklo workspace index <name>                 Index all projects in a workspace
+  sverklo workspace create <name> [paths...]     Create a workspace (legacy JSON)
+  sverklo workspace add <name> [path]            Add a repo to a workspace
+  sverklo workspace remove <name> <path>         Remove a repo from a workspace
+  sverklo workspace list                         List all workspaces
+  sverklo workspace show <name>                  Show repos in a workspace
 `);
   process.exit(0);
 }
