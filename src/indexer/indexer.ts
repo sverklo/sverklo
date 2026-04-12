@@ -28,6 +28,7 @@ import { extractReferences } from "./symbol-extractor.js";
 import { createIgnoreFilter } from "../utils/ignore.js";
 import { estimateTokens } from "../utils/tokens.js";
 import { log, logError } from "../utils/logger.js";
+import { loadSverkloConfig, type SverkloConfig } from "../utils/config-file.js";
 import { track } from "../telemetry/index.js";
 import type { ProjectConfig, ImportRef, IndexStatus } from "../types/index.js";
 
@@ -48,6 +49,7 @@ export class Indexer {
   // had no effect. We lazily select a provider on the first index() call,
   // then use it everywhere via the public embed() method below.
   private embeddingProvider: EmbeddingProvider | null = null;
+  public sverkloConfig: SverkloConfig | null = null;
   private indexing = false;
   private progress = { done: 0, total: 0 };
   private lastIndexedTime: number | null = null;
@@ -73,6 +75,9 @@ export class Indexer {
     this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
     this.symbolRefStore = new SymbolRefStore(this.db);
     this.memoryJournal = new MemoryJournal(config.rootPath);
+
+    // Load .sverklo.yaml config if present
+    this.sverkloConfig = loadSverkloConfig(config.rootPath);
 
     // Run any outstanding data migrations before any query code touches
     // the stores. Migrations are surgical — they operate on the existing

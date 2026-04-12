@@ -321,18 +321,29 @@ export function packResults(
 ): SearchResult[] {
   const results: SearchResult[] = [];
   let remaining = tokenBudget;
+  let totalNeeded = 0;
 
   for (const candidate of candidates) {
     // Estimate overhead per result (file path, line numbers, formatting)
     const overhead = 30;
     const cost = candidate.chunk.token_count + overhead;
+    totalNeeded += cost;
 
     if (cost <= remaining) {
       results.push(candidate);
       remaining -= cost;
-    } else {
-      break;
     }
+  }
+
+  // Attach overflow metadata so formatResults can surface a budget hint.
+  // We stash it on a non-enumerable property to avoid changing the
+  // SearchResult type or the return signature (backwards compat).
+  const overflow = candidates.length - results.length;
+  if (overflow > 0) {
+    (results as SearchResult[] & { __overflow?: { count: number; totalNeeded: number } }).__overflow = {
+      count: overflow,
+      totalNeeded,
+    };
   }
 
   return results;
@@ -374,6 +385,15 @@ export function formatResults(
 
     parts.push("```");
     parts.push("");
+  }
+
+  // Surface budget hint when results were truncated by packResults
+  const overflow = (results as SearchResult[] & { __overflow?: { count: number; totalNeeded: number } }).__overflow;
+  if (overflow) {
+    parts.push(
+      `_${overflow.count} additional match${overflow.count === 1 ? "" : "es"} (~${overflow.totalNeeded} tokens total). ` +
+      `Re-run with token_budget:${overflow.totalNeeded} to include all._`
+    );
   }
 
   return parts.join("\n");

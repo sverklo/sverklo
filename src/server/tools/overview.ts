@@ -1,5 +1,6 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { formatOverview, type OverviewEntry } from "../../search/token-budget.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 export const overviewTool = {
   name: "sverklo_overview",
@@ -14,7 +15,7 @@ export const overviewTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 2000)",
+        description: "Max tokens to return (default: 3000)",
       },
     },
   },
@@ -25,7 +26,7 @@ export function handleOverview(
   args: Record<string, unknown>
 ): string {
   const path = args.path as string | undefined;
-  const tokenBudget = (args.token_budget as number) || 2000;
+  const tokenBudget = resolveBudget(args, "overview", null, 3000);
 
   const files = indexer.fileStore.getAll(); // already sorted by pagerank DESC
 

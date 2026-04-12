@@ -6,6 +6,7 @@ import type { CodeChunk, FileRecord } from "../../types/index.js";
 import { computeRiskScore, formatRiskBadge, type RiskScore } from "./risk-score.js";
 import { isTestPath, candidateTestNames } from "./test-paths.js";
 import { getDiffHunks, runAllHeuristics, type HeuristicFinding } from "./diff-heuristics.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 export const reviewDiffTool = {
   name: "sverklo_review_diff",
@@ -35,7 +36,7 @@ export const reviewDiffTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return. Default: 2500.",
+        description: "Max tokens to return. Default: 4000.",
       },
     },
   },
@@ -63,7 +64,7 @@ export function handleReviewDiff(
   const ref = (args.ref as string) || "main..HEAD";
   const includeSimilarity = args.include_added_similarity !== false;
   const maxFiles = (args.max_files as number) || 25;
-  const tokenBudget = (args.token_budget as number) || 2500;
+  const tokenBudget = resolveBudget(args, "review_diff", null, 4000);
 
   // ─── 1. Get list of changed files ───
   const changedFiles = getChangedFiles(indexer.rootPath, ref);
@@ -286,53 +287,77 @@ export function handleReviewDiff(
   const diffHunks = getDiffHunks(indexer.rootPath, ref);
   const heuristicFindings: HeuristicFinding[] = runAllHeuristics(diffHunks);
 
-  // ─── 7. Format output ───
-  const parts: string[] = [];
+  // ─── 7. Format output with section-level budgeting ───
+  const sections: string[] = [];
+  let usedTokens = 0;
+  const maxTokens = tokenBudget;
 
-  parts.push(`# Diff Review: \`${ref}\``);
-  parts.push("");
-  parts.push(
-    `**${changedFiles.length} file${changedFiles.length === 1 ? "" : "s"} changed** ` +
-      `(${addedSymbols.length} added, ${removedSymbols.length} removed, ${modifiedFiles.length} modified)`
-  );
-  if (truncated) {
-    parts.push(`_Showing first ${maxFiles} files; ${changedFiles.length - maxFiles} more not analyzed._`);
+  function addSection(section: string): boolean {
+    const cost = Math.ceil(section.length / 3.5);
+    if (usedTokens + cost > maxTokens) {
+      sections.push("\n_[remaining sections omitted to fit token_budget]_");
+      return false;
+    }
+    sections.push(section);
+    usedTokens += cost;
+    return true;
   }
-  parts.push("");
+
+  // Header
+  {
+    const headerLines: string[] = [];
+    headerLines.push(`# Diff Review: \`${ref}\``);
+    headerLines.push("");
+    headerLines.push(
+      `**${changedFiles.length} file${changedFiles.length === 1 ? "" : "s"} changed** ` +
+        `(${addedSymbols.length} added, ${removedSymbols.length} removed, ${modifiedFiles.length} modified)`
+    );
+    if (truncated) {
+      headerLines.push(`_Showing first ${maxFiles} files; ${changedFiles.length - maxFiles} more not analyzed._`);
+    }
+    headerLines.push("");
+    if (!addSection(headerLines.join("\n"))) return sections.join("\n");
+  }
 
   // Changed files table
-  parts.push("## Changed files");
-  for (const cf of cappedFiles) {
-    const indexed = fileCache.get(cf.path);
-    const pr = indexed ? ` (PR ${indexed.pagerank.toFixed(2)})` : "";
-    const impact = fileImpact.get(cf.path);
-    const impactNote = impact && impact.importers > 0 ? ` ← ${impact.importers} importer${impact.importers === 1 ? "" : "s"}` : "";
-    const risk = riskByFile.get(cf.path);
-    const riskNote = risk ? ` · ${formatRiskBadge(risk)}` : "";
-    parts.push(`- **${cf.status}** \`${cf.path}\` +${cf.added} -${cf.removed}${pr}${impactNote}${riskNote}`);
+  {
+    const cfLines: string[] = [];
+    cfLines.push("## Changed files");
+    for (const cf of cappedFiles) {
+      const indexed = fileCache.get(cf.path);
+      const pr = indexed ? ` (PR ${indexed.pagerank.toFixed(2)})` : "";
+      const impact = fileImpact.get(cf.path);
+      const impactNote = impact && impact.importers > 0 ? ` ← ${impact.importers} importer${impact.importers === 1 ? "" : "s"}` : "";
+      const risk = riskByFile.get(cf.path);
+      const riskNote = risk ? ` · ${formatRiskBadge(risk)}` : "";
+      cfLines.push(`- **${cf.status}** \`${cf.path}\` +${cf.added} -${cf.removed}${pr}${impactNote}${riskNote}`);
+    }
+    cfLines.push("");
+    if (!addSection(cfLines.join("\n"))) return sections.join("\n");
   }
-  parts.push("");
 
-  // Risk hot-list: surface high/critical files with their reasons so a
-  // reviewer can immediately see *why* a file is flagged.
+  // Risk hot-list
   const riskRanked = [...riskByFile.entries()]
     .filter(([, r]) => r.level === "high" || r.level === "critical")
     .sort((a, b) => b[1].total - a[1].total);
   if (riskRanked.length > 0) {
-    parts.push("## ⚠️ Highest-risk files");
-    parts.push("_Risk score combines: untested, security-sensitive paths, fan-in, caller count, dangling refs, churn._");
+    const riskLines: string[] = [];
+    riskLines.push("## ⚠️ Highest-risk files");
+    riskLines.push("_Risk score combines: untested, security-sensitive paths, fan-in, caller count, dangling refs, churn._");
     for (const [path, score] of riskRanked.slice(0, 8)) {
-      parts.push(`- ${formatRiskBadge(score)} \`${path}\``);
+      riskLines.push(`- ${formatRiskBadge(score)} \`${path}\``);
       if (score.reasons.length > 0) {
-        parts.push(`  _${score.reasons.join("; ")}_`);
+        riskLines.push(`  _${score.reasons.join("; ")}_`);
       }
     }
-    parts.push("");
+    riskLines.push("");
+    if (!addSection(riskLines.join("\n"))) return sections.join("\n");
   }
 
   // Removed symbols + dangling refs (the most important section for safety)
   if (removedSymbols.length > 0) {
-    parts.push("## Removed symbols");
+    const remLines: string[] = [];
+    remLines.push("## Removed symbols");
     let dangerCount = 0;
     for (const sym of removedSymbols.slice(0, 15)) {
       const refs = danglingRefs.get(sym.name);
@@ -342,45 +367,48 @@ export function handleReviewDiff(
         refCount === 0
           ? "0 dangling refs (safe to remove)"
           : `**${refCount} dangling reference${refCount === 1 ? "" : "s"}** in ${refs!.files.length} file${refs!.files.length === 1 ? "" : "s"}`;
-      parts.push(`- ${danger} \`${sym.name}\` (${sym.type}) @ ${sym.file}:${sym.line} — ${refLabel}`);
+      remLines.push(`- ${danger} \`${sym.name}\` (${sym.type}) @ ${sym.file}:${sym.line} — ${refLabel}`);
       if (refCount > 0) {
         dangerCount++;
         for (const f of refs!.files.slice(0, 3)) {
-          parts.push(`    · ${f}`);
+          remLines.push(`    · ${f}`);
         }
         if (refs!.files.length > 3) {
-          parts.push(`    · ...and ${refs!.files.length - 3} more (call sverklo_impact for full list)`);
+          remLines.push(`    · ...and ${refs!.files.length - 3} more (call sverklo_impact for full list)`);
         }
       }
     }
     if (dangerCount > 0) {
-      parts.push("");
-      parts.push(`**⚠️ ${dangerCount} removed symbol${dangerCount === 1 ? " has" : "s have"} remaining references — review carefully.**`);
+      remLines.push("");
+      remLines.push(`**⚠️ ${dangerCount} removed symbol${dangerCount === 1 ? " has" : "s have"} remaining references — review carefully.**`);
     }
-    parts.push("");
+    remLines.push("");
+    if (!addSection(remLines.join("\n"))) return sections.join("\n");
   }
 
   // Added symbols + duplication warnings
   if (addedSymbols.length > 0) {
-    parts.push("## Added symbols");
+    const addLines: string[] = [];
+    addLines.push("## Added symbols");
     for (const sym of addedSymbols.slice(0, 15)) {
-      parts.push(`- \`${sym.name}\` (${sym.type}) @ ${sym.file}:${sym.line}`);
+      addLines.push(`- \`${sym.name}\` (${sym.type}) @ ${sym.file}:${sym.line}`);
     }
     if (addedSymbols.length > 15) {
-      parts.push(`  _...and ${addedSymbols.length - 15} more_`);
+      addLines.push(`  _...and ${addedSymbols.length - 15} more_`);
     }
-    parts.push("");
+    addLines.push("");
 
     if (duplicateCandidates.length > 0) {
-      parts.push("### ⚠️ Possible duplicates");
+      addLines.push("### ⚠️ Possible duplicates");
       for (const dup of duplicateCandidates) {
-        parts.push(`- **${dup.added.name}** added in \`${dup.added.file}\` — already exists in:`);
+        addLines.push(`- **${dup.added.name}** added in \`${dup.added.file}\` — already exists in:`);
         for (const s of dup.similar.slice(0, 3)) {
-          parts.push(`    · ${s.file}:${s.line}`);
+          addLines.push(`    · ${s.file}:${s.line}`);
         }
       }
-      parts.push("");
+      addLines.push("");
     }
+    if (!addSection(addLines.join("\n"))) return sections.join("\n");
   }
 
   // Modified files with high impact (> 3 importers)
@@ -388,22 +416,24 @@ export function handleReviewDiff(
     .filter(([, v]) => v.importers >= 3)
     .sort((a, b) => b[1].importers - a[1].importers);
   if (highImpactFiles.length > 0) {
-    parts.push("## High-impact modifications");
-    parts.push("_These files are imported by many others — changes cascade widely._");
+    const hiLines: string[] = [];
+    hiLines.push("## High-impact modifications");
+    hiLines.push("_These files are imported by many others — changes cascade widely._");
     for (const [path, impact] of highImpactFiles.slice(0, 10)) {
-      parts.push(`- \`${path}\` ← ${impact.importers} importer${impact.importers === 1 ? "" : "s"}`);
+      hiLines.push(`- \`${path}\` ← ${impact.importers} importer${impact.importers === 1 ? "" : "s"}`);
     }
-    parts.push("");
+    hiLines.push("");
+    if (!addSection(hiLines.join("\n"))) return sections.join("\n");
   }
 
   // Structural heuristic findings (unguarded stream calls, etc.)
   if (heuristicFindings.length > 0) {
-    parts.push("## ⚠️ Structural warnings");
-    parts.push(
+    const hLines: string[] = [];
+    hLines.push("## ⚠️ Structural warnings");
+    hLines.push(
       "_These are heuristic matches over the diff text. Some may be false positives; " +
         "each finding carries a short explanation so you can triage quickly._"
     );
-    // Group by heuristic so the reviewer can judge each class at a glance.
     const grouped = new Map<string, HeuristicFinding[]>();
     for (const f of heuristicFindings) {
       const arr = grouped.get(f.heuristic) || [];
@@ -411,44 +441,43 @@ export function handleReviewDiff(
       grouped.set(f.heuristic, arr);
     }
     for (const [heuristic, findings] of grouped) {
-      parts.push(`### ${heuristic} (${findings.length})`);
+      hLines.push(`### ${heuristic} (${findings.length})`);
       for (const f of findings.slice(0, 6)) {
         const badge = f.severity === "high" ? "🔴" : f.severity === "medium" ? "🟡" : "🟢";
-        parts.push(`- ${badge} \`${f.file}:${f.line}\` — ${f.message}`);
-        parts.push(`    \`${f.snippet}\``);
+        hLines.push(`- ${badge} \`${f.file}:${f.line}\` — ${f.message}`);
+        hLines.push(`    \`${f.snippet}\``);
       }
       if (findings.length > 6) {
-        parts.push(`  _...and ${findings.length - 6} more_`);
+        hLines.push(`  _...and ${findings.length - 6} more_`);
       }
     }
-    parts.push("");
+    hLines.push("");
+    if (!addSection(hLines.join("\n"))) return sections.join("\n");
   }
 
   // Recommendations
-  parts.push("## Suggested next checks");
-  if (removedSymbols.length > 0) {
-    const dangerNames = removedSymbols
-      .filter((s) => (danglingRefs.get(s.name)?.count ?? 0) > 0)
-      .map((s) => s.name);
-    if (dangerNames.length > 0) {
-      parts.push(`- Run \`sverklo_impact symbol:"${dangerNames[0]}"\` to see all callers of removed symbols`);
+  {
+    const recLines: string[] = [];
+    recLines.push("## Suggested next checks");
+    if (removedSymbols.length > 0) {
+      const dangerNames = removedSymbols
+        .filter((s) => (danglingRefs.get(s.name)?.count ?? 0) > 0)
+        .map((s) => s.name);
+      if (dangerNames.length > 0) {
+        recLines.push(`- Run \`sverklo_impact symbol:"${dangerNames[0]}"\` to see all callers of removed symbols`);
+      }
     }
+    if (modifiedFiles.length > 0) {
+      recLines.push(`- Run \`sverklo_diff_search query:"..."\` to search semantically within these files`);
+    }
+    if (addedSymbols.length > 0 && duplicateCandidates.length === 0) {
+      recLines.push(`- New symbols look unique — no duplication detected against indexed code`);
+    }
+    recLines.push(`- For exact-match checks, fall back to \`grep -r 'symbol' .\``);
+    addSection(recLines.join("\n"));
   }
-  if (modifiedFiles.length > 0) {
-    parts.push(`- Run \`sverklo_diff_search query:"..."\` to search semantically within these files`);
-  }
-  if (addedSymbols.length > 0 && duplicateCandidates.length === 0) {
-    parts.push(`- New symbols look unique — no duplication detected against indexed code`);
-  }
-  parts.push(`- For exact-match checks, fall back to \`grep -r 'symbol' .\``);
 
-  let output = parts.join("\n");
-  // Enforce token budget
-  const maxChars = tokenBudget * 3.5;
-  if (output.length > maxChars) {
-    output = output.slice(0, maxChars) + "\n\n_[truncated to fit token budget]_";
-  }
-  return output;
+  return sections.join("\n");
 }
 
 // ─── git helpers ───

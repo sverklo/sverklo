@@ -1,4 +1,5 @@
 import type { Indexer } from "../../indexer/indexer.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 export const auditTool = {
   name: "sverklo_audit",
@@ -9,7 +10,7 @@ export const auditTool = {
     properties: {
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default 4000)",
+        description: "Max tokens to return (default: 4000)",
       },
     },
   },
@@ -21,7 +22,7 @@ interface GodNode {
 }
 
 export function handleAudit(indexer: Indexer, args: Record<string, unknown>): string {
-  const tokenBudget = (args.token_budget as number) || 2000;
+  const tokenBudget = resolveBudget(args, "audit", null, 4000);
   const files = indexer.fileStore.getAll();
   const chunkCount = indexer.chunkStore.count();
   const symbolRefCount = indexer.symbolRefStore.count();
@@ -118,88 +119,121 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
-  // ─── Build markdown report ───
-  const parts: string[] = [];
+  // ─── Build markdown report with section-level budgeting ───
+  const sections: string[] = [];
+  let usedTokens = 0;
+  const maxTokens = tokenBudget;
 
-  parts.push(`# Sverklo Project Audit\n`);
+  function addSection(section: string): boolean {
+    const cost = Math.ceil(section.length / 3.5);
+    if (usedTokens + cost > maxTokens) {
+      sections.push("\n_[remaining sections omitted to fit token_budget]_");
+      return false;
+    }
+    sections.push(section);
+    usedTokens += cost;
+    return true;
+  }
 
-  // Overview
-  parts.push(`## Overview\n`);
-  parts.push(`- **${files.length}** files indexed`);
-  parts.push(`- **${chunkCount}** code symbols extracted`);
-  parts.push(`- **${symbolRefCount}** symbol references tracked`);
-  parts.push(`- **${memoryCount}** active memories (${coreMemories.length} core, ${staleMemories.length} stale)`);
-  parts.push(`- Languages: ${sortedLangs.map(([l, c]) => `${l} (${c})`).join(", ")}`);
-  parts.push("");
+  // Header + Overview
+  const overviewLines: string[] = [];
+  overviewLines.push(`# Sverklo Project Audit\n`);
+  overviewLines.push(`## Overview\n`);
+  overviewLines.push(`- **${files.length}** files indexed`);
+  overviewLines.push(`- **${chunkCount}** code symbols extracted`);
+  overviewLines.push(`- **${symbolRefCount}** symbol references tracked`);
+  overviewLines.push(`- **${memoryCount}** active memories (${coreMemories.length} core, ${staleMemories.length} stale)`);
+  overviewLines.push(`- Languages: ${sortedLangs.map(([l, c]) => `${l} (${c})`).join(", ")}`);
+  overviewLines.push("");
+  if (!addSection(overviewLines.join("\n"))) return sections.join("\n");
 
   // God nodes
   if (godNodes.length > 0) {
-    parts.push(`## God Nodes (most-referenced symbols)`);
-    parts.push(`These are the symbols your codebase depends on most. Changes here have the largest blast radius.`);
-    parts.push("");
+    const godLines: string[] = [];
+    godLines.push(`## God Nodes (most-referenced symbols)`);
+    godLines.push(`These are the symbols your codebase depends on most. Changes here have the largest blast radius.`);
+    godLines.push("");
     for (const g of godNodes.slice(0, 10)) {
-      parts.push(`- **${g.name}** — ${g.refCount} references`);
+      godLines.push(`- **${g.name}** — ${g.refCount} references`);
     }
-    parts.push("");
+    godLines.push("");
+    if (!addSection(godLines.join("\n"))) return sections.join("\n");
   }
 
   // Hub files
-  parts.push(`## Hub Files (highest PageRank)`);
-  parts.push(`Core architectural files — imported by many others.`);
-  parts.push("");
-  for (const h of hubFiles) {
-    if (h.pagerank > 0) {
-      parts.push(`- \`${h.path}\` (${h.pagerank.toFixed(2)})`);
+  {
+    const hubLines: string[] = [];
+    hubLines.push(`## Hub Files (highest PageRank)`);
+    hubLines.push(`Core architectural files — imported by many others.`);
+    hubLines.push("");
+    for (const h of hubFiles) {
+      if (h.pagerank > 0) {
+        hubLines.push(`- \`${h.path}\` (${h.pagerank.toFixed(2)})`);
+      }
     }
+    hubLines.push("");
+    if (!addSection(hubLines.join("\n"))) return sections.join("\n");
   }
-  parts.push("");
 
   // Orphans / dead code candidates
-  if (orphans.length > 0) {
-    parts.push(`## Orphans (potential dead code)`);
-    parts.push(`Named ${orphans[0].type}s with zero detected references. Could be dead code, public API exports, or referenced dynamically.`);
-    parts.push("");
-    for (const o of orphans.slice(0, 10)) {
-      parts.push(`- **${o.name}** — \`${o.file}:${o.line}\``);
+  {
+    const orphanLines: string[] = [];
+    if (orphans.length > 0) {
+      orphanLines.push(`## Orphans (potential dead code)`);
+      orphanLines.push(`Named ${orphans[0].type}s with zero detected references. Could be dead code, public API exports, or referenced dynamically.`);
+      orphanLines.push("");
+      for (const o of orphans.slice(0, 10)) {
+        orphanLines.push(`- **${o.name}** — \`${o.file}:${o.line}\``);
+      }
+      orphanLines.push("");
+    } else {
+      orphanLines.push(`## Orphans`);
+      orphanLines.push(`No obvious dead code — every named symbol has at least one reference.`);
+      orphanLines.push("");
     }
-    parts.push("");
-  } else {
-    parts.push(`## Orphans`);
-    parts.push(`No obvious dead code — every named symbol has at least one reference.`);
-    parts.push("");
+    if (!addSection(orphanLines.join("\n"))) return sections.join("\n");
+  }
+
+  // Coupling (high PageRank files)
+  if (coupledFiles.length > 0) {
+    const couplingLines: string[] = [];
+    couplingLines.push(`## Coupling (high-PageRank files)`);
+    for (const f of coupledFiles) {
+      couplingLines.push(`- \`${f.path}\` (${f.pagerank.toFixed(2)})`);
+    }
+    couplingLines.push("");
+    if (!addSection(couplingLines.join("\n"))) return sections.join("\n");
   }
 
   // Memory health
   if (memoryCount > 0) {
-    parts.push(`## Memory Health`);
-    parts.push(`- **${coreMemories.length}** core memories (auto-injected each session)`);
-    parts.push(`- **${memoryCount - coreMemories.length}** archive memories (searched on demand)`);
+    const memLines: string[] = [];
+    memLines.push(`## Memory Health`);
+    memLines.push(`- **${coreMemories.length}** core memories (auto-injected each session)`);
+    memLines.push(`- **${memoryCount - coreMemories.length}** archive memories (searched on demand)`);
     if (staleMemories.length > 0) {
-      parts.push(`- **${staleMemories.length}** stale memories — consider \`sverklo_forget\` or \`sverklo_remember\` to update`);
+      memLines.push(`- **${staleMemories.length}** stale memories — consider \`sverklo_forget\` or \`sverklo_remember\` to update`);
     }
-    parts.push("");
+    memLines.push("");
+    if (!addSection(memLines.join("\n"))) return sections.join("\n");
   }
 
   // Suggested queries
   if (godNodes.length > 0) {
-    parts.push(`## Suggested Next Steps`);
+    const suggestLines: string[] = [];
+    suggestLines.push(`## Suggested Next Steps`);
     if (godNodes.length > 0) {
-      parts.push(`- Before refactoring **${godNodes[0].name}**, run \`sverklo_impact\` to see the ${godNodes[0].refCount} call sites`);
+      suggestLines.push(`- Before refactoring **${godNodes[0].name}**, run \`sverklo_impact\` to see the ${godNodes[0].refCount} call sites`);
     }
     if (hubFiles[0]) {
-      parts.push(`- \`${hubFiles[0].path}\` is your most-imported file — changes here cascade widely`);
+      suggestLines.push(`- \`${hubFiles[0].path}\` is your most-imported file — changes here cascade widely`);
     }
     if (orphans.length > 3) {
-      parts.push(`- ${orphans.length}+ potential orphans detected — audit for dead code`);
+      suggestLines.push(`- ${orphans.length}+ potential orphans detected — audit for dead code`);
     }
-    parts.push("");
+    suggestLines.push("");
+    addSection(suggestLines.join("\n"));
   }
 
-  const output = parts.join("\n");
-  // Enforce token budget (rough)
-  const maxChars = tokenBudget * 3.5;
-  if (output.length > maxChars) {
-    return output.slice(0, maxChars) + "\n\n_[truncated to fit token budget]_";
-  }
-  return output;
+  return sections.join("\n");
 }

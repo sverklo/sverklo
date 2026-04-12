@@ -122,7 +122,7 @@ describe("handleSearch — confidence footer", () => {
     expect(call.type).toBe("function");
   });
 
-  it("defaults token budget to 2000 when not provided", async () => {
+  it("defaults token budget to 4000 when not provided", async () => {
     mockedHybrid.mockClear();
     mockedHybrid.mockResolvedValueOnce({
       results: [],
@@ -134,6 +134,6 @@ describe("handleSearch — confidence footer", () => {
     await handleSearch({} as never, { query: "x" });
 
     const call = mockedHybrid.mock.calls[0][1];
-    expect(call.tokenBudget).toBe(2000);
+    expect(call.tokenBudget).toBe(4000);
   });
 });

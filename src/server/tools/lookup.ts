@@ -1,6 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { formatLookup } from "../../search/token-budget.js";
 import type { FileRecord, ChunkType } from "../../types/index.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 // Issue #6: on the first call, sverklo_lookup paid a ~1.6s penalty while
 // warming up prepared statements via fileStore.getAll() to build a
@@ -33,7 +34,7 @@ export const lookupTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 1200)",
+        description: "Max tokens to return (default: 2000)",
       },
     },
     required: ["symbol"],
@@ -57,7 +58,7 @@ export function handleLookup(
     );
   }
   const type = (args.type as ChunkType | "any") || "any";
-  const tokenBudget = (args.token_budget as number) || 1200;
+  const tokenBudget = resolveBudget(args, "lookup", null, 2000);
 
   // Single JOIN'd query — chunks come back pre-sorted by pagerank DESC
   // and carry the containing file's path, so no full fileStore scan.

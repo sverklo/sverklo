@@ -1,5 +1,6 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import type { FileRecord } from "../../types/index.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 export const dependenciesTool = {
   name: "sverklo_deps",
@@ -23,7 +24,7 @@ export const dependenciesTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 1200)",
+        description: "Max tokens to return (default: 1500)",
       },
     },
     required: ["path"],
@@ -37,7 +38,7 @@ export function handleDependencies(
   const path = args.path as string;
   const direction = (args.direction as string) || "both";
   const depth = (args.depth as number) || 1;
-  const tokenBudget = (args.token_budget as number) || 1200;
+  const tokenBudget = resolveBudget(args, "deps", null, 1500);
 
   const file = indexer.fileStore.getByPath(path);
   if (!file) {

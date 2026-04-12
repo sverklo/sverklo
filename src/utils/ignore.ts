@@ -1,6 +1,7 @@
 import ignore, { type Ignore } from "ignore";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { loadSverkloConfig } from "./config-file.js";
 
 const HARDCODED_IGNORES = [
   "node_modules",
@@ -76,6 +77,12 @@ export function createIgnoreFilter(rootPath: string): Ignore {
   const customIgnorePath = join(rootPath, ".sverkloignore");
   if (existsSync(customIgnorePath)) {
     ig.add(readFileSync(customIgnorePath, "utf-8"));
+  }
+
+  // Merge ignore patterns from .sverklo.yaml if present
+  const sverkloConfig = loadSverkloConfig(rootPath);
+  if (sverkloConfig?.ignore) {
+    ig.add(sverkloConfig.ignore);
   }
 
   return ig;

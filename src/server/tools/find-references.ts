@@ -1,5 +1,6 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import type { FileRecord } from "../../types/index.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 export const findReferencesTool = {
   name: "sverklo_refs",
@@ -19,7 +20,7 @@ export const findReferencesTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 1500)",
+        description: "Max tokens to return (default: 2000)",
       },
     },
     required: ["symbol"],
@@ -61,7 +62,7 @@ export function handleFindReferences(
     return 'Error: `symbol` is required. Usage: sverklo_refs symbol:"MyClass".';
   }
   const exact = args.exact !== false; // default true
-  const tokenBudget = (args.token_budget as number) || 1500;
+  const tokenBudget = resolveBudget(args, "refs", null, 2000);
   const matches = buildSymbolMatcher(symbol, exact);
 
   // Use FTS to find candidate chunks mentioning the symbol at all.

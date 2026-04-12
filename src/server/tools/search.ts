@@ -1,6 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { hybridSearchWithConfidence, formatResults } from "../../search/hybrid-search.js";
 import type { ChunkType } from "../../types/index.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 export const searchTool = {
   name: "sverklo_search",
@@ -24,7 +25,7 @@ export const searchTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return (default: 2000)",
+        description: "Max tokens to return (default: 4000)",
       },
       scope: {
         type: "string",
@@ -48,9 +49,10 @@ export async function handleSearch(
   indexer: Indexer,
   args: Record<string, unknown>
 ): Promise<string> {
+  const tokenBudget = resolveBudget(args, "search", null, 4000);
   const response = await hybridSearchWithConfidence(indexer, {
     query: args.query as string,
-    tokenBudget: (args.token_budget as number) || 2000,
+    tokenBudget,
     scope: args.scope as string | undefined,
     language: args.language as string | undefined,
     type: (args.type as ChunkType | "any") || "any",

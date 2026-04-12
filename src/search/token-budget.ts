@@ -113,9 +113,17 @@ export function formatLookup(
   //
   //   2. Some fit, some didn't → list the ones that didn't so the
   //      caller knows they exist. This is the bug-B fix.
+  //
+  // In both cases, compute the total tokens needed to fit everything
+  // so we can suggest an exact budget value.
   if (!fittedAny) {
+    const totalNeeded = chunks.reduce((sum, c) => {
+      const headerCost = Math.ceil(80 / 3.5); // approximate header
+      return sum + headerCost + c.token_count + 10;
+    }, 0);
     parts.push(
-      `_All ${chunks.length} match${chunks.length === 1 ? "" : "es"} exceed token_budget=${tokenBudget}. Showing locations only — re-run with a larger token_budget or use Read for the full body._`
+      `_All ${chunks.length} match${chunks.length === 1 ? "" : "es"} exceed token_budget=${tokenBudget} (~${totalNeeded} tokens needed). ` +
+      `Re-run with token_budget:${totalNeeded} or use Read for the full body._`
     );
     parts.push("");
     for (const chunk of chunks.slice(0, 10)) {
@@ -127,9 +135,12 @@ export function formatLookup(
       );
     }
   } else if (skipped.length > 0) {
+    const skippedTokens = skipped.reduce((sum, c) => sum + c.token_count + 10, 0);
+    const totalNeeded = tokenBudget - remaining + skippedTokens;
     parts.push("");
     parts.push(
-      `_${skipped.length} additional match${skipped.length === 1 ? "" : "es"} too large to fit token_budget=${tokenBudget}:_`
+      `_${skipped.length} additional match${skipped.length === 1 ? "" : "es"} didn't fit token_budget=${tokenBudget} (~${totalNeeded} tokens total). ` +
+      `Re-run with token_budget:${totalNeeded} to include all._`
     );
     for (const chunk of skipped.slice(0, 10)) {
       const file = files.get(chunk.file_id);
@@ -142,9 +153,6 @@ export function formatLookup(
     if (skipped.length > 10) {
       parts.push(`- _...and ${skipped.length - 10} more_`);
     }
-    parts.push(
-      `_Raise token_budget or call sverklo_lookup with the specific symbol to see the body._`
-    );
   }
 
   return parts.join("\n");

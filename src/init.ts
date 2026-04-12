@@ -309,4 +309,7 @@ export async function initProject(
   console.log("  claude                # start coding — sverklo tools are preferred automatically");
   console.log("  sverklo ui             # optional: open the web dashboard for visual exploration");
   console.log("                          (dependency graph, search playground, memory viewer)");
+  console.log("");
+  console.log("Tip: create a .sverklo.yaml to fine-tune indexing (weights, ignore patterns, search budgets).");
+  console.log("  See https://sverklo.com/docs/config for the full schema.");
 }

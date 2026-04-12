@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import type { Indexer } from "../../indexer/indexer.js";
 import { hybridSearch, formatResults } from "../../search/hybrid-search.js";
 import type { ChunkType } from "../../types/index.js";
+import { resolveBudget } from "../../utils/budget.js";
 
 export const diffSearchTool = {
   name: "sverklo_diff_search",
@@ -29,7 +30,7 @@ export const diffSearchTool = {
       },
       token_budget: {
         type: "number",
-        description: "Max tokens to return. Default: 2000.",
+        description: "Max tokens to return. Default: 3000.",
       },
       type: {
         type: "string",
@@ -48,7 +49,7 @@ export async function handleDiffSearch(
   const query = args.query as string;
   const ref = (args.ref as string) || "main..HEAD";
   const includeCallers = (args.include_callers as number) || 0;
-  const tokenBudget = (args.token_budget as number) || 2000;
+  const tokenBudget = resolveBudget(args, "diff_search", null, 3000);
   const type = (args.type as ChunkType | "any") || "any";
 
   if (!query) return "Error: query required";

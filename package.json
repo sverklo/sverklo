@@ -1,6 +1,6 @@
 {
   "name": "sverklo",
-  "version": "0.2.16",
+  "version": "0.3.0",
   "description": "Sverklo — local-first code intelligence MCP server. Diff-aware MR review, risk scoring, hybrid semantic search, PageRank ranking, persistent memory. Zero config.",
   "type": "module",
   "bin": {
@@ -74,11 +74,14 @@
     "better-sqlite3": "^11.7.0",
     "chokidar": "^4.0.0",
     "ignore": "^7.0.0",
-    "onnxruntime-node": "^1.21.0"
+    "onnxruntime-node": "^1.21.0",
+    "picomatch": "^4.0.4",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
+    "@types/picomatch": "^4.0.3",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

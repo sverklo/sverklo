@@ -3,6 +3,7 @@ import type { ImportRef } from "../types/index.js";
 import type { FileStore } from "../storage/file-store.js";
 import type { GraphStore } from "../storage/graph-store.js";
 import { computePageRank } from "../search/pagerank.js";
+import { loadSverkloConfig, getWeight } from "../utils/config-file.js";
 import { log } from "../utils/logger.js";
 
 // File extension resolution for relative imports
@@ -64,10 +65,19 @@ export function buildGraph(
   // Compute PageRank
   const fileIds = allFiles.map((f) => f.id);
   const ranks = computePageRank(fileIds, edges);
+  const config = loadSverkloConfig(rootPath);
 
-  // Write ranks back to file store
+  // Build reverse map for weight lookups
+  const idToPath = new Map<number, string>();
+  for (const [path, id] of pathToId) {
+    idToPath.set(id, path);
+  }
+
+  // Write ranks back to file store, applying config weight multipliers
   for (const [id, rank] of ranks) {
-    fileStore.updatePagerank(id, rank);
+    const filePath = idToPath.get(id);
+    const weight = filePath ? getWeight(config, filePath) : 1.0;
+    fileStore.updatePagerank(id, rank * weight);
   }
 
   log(`Graph built: ${edges.length} edges, PageRank computed for ${fileIds.length} files`);
