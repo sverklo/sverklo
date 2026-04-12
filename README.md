@@ -93,6 +93,26 @@ Grouped by job. Every tool runs locally, every tool is free.
 | `sverklo_deps` | File dependency graph — both directions, importers and imports |
 | `sverklo_audit` | Surface god nodes, hub files, dead code candidates in one call |
 
+### Cross-repo impact analysis (v0.4.0+)
+
+Link multiple projects into a workspace and trace symbol impact across repo boundaries:
+
+```bash
+# Link multiple projects into a workspace
+sverklo workspace init myapp ./api ./frontend ./cms
+
+# Index cross-repo relationships
+sverklo workspace index myapp
+```
+
+Then ask your agent:
+
+```
+sverklo_impact symbol:"User.email" cross_repo:true
+```
+
+This walks the symbol graph across all linked repos and returns the full blast radius — which API routes, frontend components, and CMS templates touch `User.email`, ranked by depth. Currently GraphQL-first (schema stitching and federation are resolved automatically). REST/OpenAPI support is next.
+
 ### Review — diff-aware MR review with risk scoring
 | Tool | What |
 |------|------|
@@ -328,8 +348,38 @@ Sverklo is the only tool that combines **hybrid code search + symbol graph + mem
 |---------|----------|
 | Model files | `~/.sverklo/models/` (auto-downloaded) |
 | Index database | `~/.sverklo/<project>/index.db` |
+| Project config | `.sverklo.yaml` in project root |
 | Custom ignores | `.sverkloignore` in project root |
 | Debug logging | `SVERKLO_DEBUG=1` |
+
+### `.sverklo.yaml` (v0.3.0+)
+
+Drop a `.sverklo.yaml` in your project root to tune indexing and search behavior per-repo:
+
+```yaml
+# .sverklo.yaml — customize Sverklo's behavior
+weights:
+  - glob: "src/core/**"
+    weight: 2.0          # boost core modules in search ranking
+  - glob: "src/generated/**"
+    weight: 0.1          # suppress generated code
+  - glob: "vendor/**"
+    weight: 0.2
+
+ignore:
+  - "*.generated.ts"
+  - ".next/**"
+
+search:
+  defaultTokenBudget: 6000
+  budgets:
+    search: 8000
+    audit: 5000
+```
+
+**Weights** are multiplicative on PageRank only — they don't affect BM25 or embedding scores. Range is 0.0 to 10.0, last matching glob wins. Use them to boost code you care about and suppress generated or vendored files without fully ignoring them.
+
+**Token budgets** control how much context each tool returns per call. The defaults were raised in v0.3.0 (search: 8000, audit: 5000). Override them here or per-call via the `budget` parameter on any search tool.
 
 ## Telemetry
 
