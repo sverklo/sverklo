@@ -13,6 +13,24 @@ export interface SverkloConfig {
     budgets?: Record<string, number>;
   };
   indexing?: { extensions?: Record<string, string> };
+  embeddings?: {
+    /** Embedding provider: 'onnx' (default) or 'ollama'. */
+    provider?: 'onnx' | 'ollama';
+    /** Model name — provider-specific. Default depends on provider. */
+    model?: string;
+    /** Vector dimensions. Auto-detected from provider if omitted. */
+    dimensions?: number;
+    ollama?: {
+      /** Ollama API base URL. Default: 'http://localhost:11434' */
+      baseUrl?: string;
+      /** Ollama embedding model. Default: 'nomic-embed-text' */
+      model?: string;
+    };
+    onnx?: {
+      /** Path to a custom ONNX model file. */
+      modelPath?: string;
+    };
+  };
 }
 
 const CONFIG_FILENAMES = [".sverklo.yaml", ".sverklo.yml"];

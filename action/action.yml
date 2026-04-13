@@ -1,0 +1,103 @@
+name: 'Sverklo Code Review'
+description: 'AI-powered code review with risk scoring, impact analysis, and structural heuristics'
+branding:
+  icon: 'shield'
+  color: 'orange'
+
+inputs:
+  github-token:
+    description: 'GitHub token for posting PR comments'
+    required: true
+    default: '${{ github.token }}'
+  fail-on:
+    description: 'Fail if risk level exceeds threshold (critical, high, medium, low, none)'
+    required: false
+    default: 'none'
+  ref:
+    description: 'Git ref range for diff (auto-detected from PR if omitted)'
+    required: false
+  max-files:
+    description: 'Maximum files to review'
+    required: false
+    default: '25'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install Sverklo
+      shell: bash
+      run: npm install -g sverklo@latest
+
+    - name: Run review
+      id: review
+      shell: bash
+      env:
+        SVERKLO_REF: ${{ inputs.ref }}
+        SVERKLO_MAX_FILES: ${{ inputs.max-files }}
+        SVERKLO_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        cd "$GITHUB_WORKSPACE"
+
+        REF_FLAG=""
+        if [ -n "$SVERKLO_REF" ]; then
+          REF_FLAG="--ref $SVERKLO_REF"
+        fi
+
+        sverklo review --ci --format markdown \
+          $REF_FLAG \
+          --max-files "$SVERKLO_MAX_FILES" \
+          --fail-on none \
+          > /tmp/sverklo-review.md 2>/tmp/sverklo-review.log || true
+
+        # Store output for comment step
+        {
+          echo 'REVIEW_BODY<<SVERKLO_DELIM'
+          cat /tmp/sverklo-review.md
+          echo 'SVERKLO_DELIM'
+        } >> "$GITHUB_ENV"
+
+    - name: Post PR comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const review = process.env.REVIEW_BODY || '_No review output._';
+          const body = `## Sverklo Code Review\n\n${review}\n\n---\n_Risk scored by [Sverklo](https://sverklo.com) — local-first code intelligence_`;
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          const existing = comments.find(c => c.body && c.body.includes('Sverklo Code Review'));
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
+
+    - name: Check risk threshold
+      if: inputs.fail-on != 'none'
+      shell: bash
+      run: |
+        sverklo review --ci --format markdown \
+          --max-files "${{ inputs.max-files }}" \
+          --fail-on "${{ inputs.fail-on }}" \
+          > /dev/null 2>&1

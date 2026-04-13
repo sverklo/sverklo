@@ -162,37 +162,47 @@ class OpenAIProvider implements EmbeddingProvider {
 // Provider: ollama (local endpoint, any embedding model)
 // ────────────────────────────────────────────────────────────────────
 //
-// For users running Ollama locally. No API key. Endpoint defaults to
-// http://localhost:11434/api/embeddings, model defaults to
-// nomic-embed-text. Users can override with SVERKLO_OLLAMA_URL and
-// SVERKLO_OLLAMA_MODEL.
+// For users running Ollama locally. No API key. Uses the batch
+// /api/embed endpoint (Ollama 0.4+) which accepts an array of inputs
+// in a single request. Base URL defaults to http://localhost:11434,
+// model defaults to nomic-embed-text.
+//
+// Dimensions are auto-detected from the first embedding response when
+// not explicitly configured. This avoids requiring users to know or
+// specify the output dimension of their chosen model.
 
-interface OllamaEmbeddingResponse {
-  embedding: number[];
+interface OllamaEmbedResponse {
+  embeddings: number[][];
 }
 
 class OllamaProvider implements EmbeddingProvider {
   readonly name: string;
-  readonly dimensions: number;
-  private endpoint: string;
+  // Mutable until the first embed() auto-detects the real value.
+  private _dimensions: number;
+  private _dimensionsDetected = false;
+  private baseUrl: string;
   private model: string;
 
-  constructor(opts: { endpoint?: string; model?: string; dimensions?: number }) {
-    this.endpoint = opts.endpoint || "http://localhost:11434/api/embeddings";
+  get dimensions(): number {
+    return this._dimensions;
+  }
+
+  constructor(opts: { baseUrl?: string; model?: string; dimensions?: number }) {
+    this.baseUrl = (opts.baseUrl || "http://localhost:11434").replace(/\/+$/, "");
     this.model = opts.model || "nomic-embed-text";
-    // Nomic embed text is 768 dims. Users swapping models must set
-    // SVERKLO_OLLAMA_DIMENSIONS to match.
-    this.dimensions = opts.dimensions || 768;
+    // If the caller supplied explicit dimensions, trust them. Otherwise
+    // we'll auto-detect on the first embed() call. Use 768 as a
+    // reasonable placeholder for nomic-embed-text until then.
+    this._dimensions = opts.dimensions || 768;
+    this._dimensionsDetected = !!opts.dimensions;
     this.name = `ollama:${this.model}`;
   }
 
   async init(): Promise<void> {
-    // Probe with the read-only /api/tags listing endpoint instead of
-    // firing a real embedding request. Derives the tags endpoint from
-    // the embeddings endpoint so custom SVERKLO_OLLAMA_URL overrides
-    // still work. Failure falls back to the bundled provider via the
-    // factory wrapper.
-    const tagsEndpoint = this.endpoint.replace(/\/api\/embeddings\/?$/, "/api/tags");
+    // Probe with the read-only /api/tags listing endpoint. If Ollama
+    // is not reachable, throw — the factory wrapper falls back to the
+    // bundled provider with a warning.
+    const tagsEndpoint = `${this.baseUrl}/api/tags`;
     try {
       const res = await fetch(tagsEndpoint, { method: "GET" });
       if (!res.ok) {
@@ -204,36 +214,66 @@ class OllamaProvider implements EmbeddingProvider {
           `Is Ollama running? Original error: ${(err as Error).message}`
       );
     }
+
+    // Auto-detect dimensions by embedding a short probe string. This
+    // fires one real request but saves users from having to look up
+    // and configure dimensions for every model they try.
+    if (!this._dimensionsDetected) {
+      try {
+        const probeRes = await fetch(`${this.baseUrl}/api/embed`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ model: this.model, input: ["dimension probe"] }),
+        });
+        if (probeRes.ok) {
+          const probeJson = (await probeRes.json()) as OllamaEmbedResponse;
+          if (probeJson.embeddings?.[0]?.length) {
+            this._dimensions = probeJson.embeddings[0].length;
+            this._dimensionsDetected = true;
+          }
+        }
+      } catch {
+        // Non-fatal — we'll use the placeholder and detect on the
+        // first real embed() call instead.
+      }
+    }
   }
 
   async embed(texts: string[]): Promise<Float32Array[]> {
-    // Ollama's embeddings endpoint takes one prompt per request, so
-    // we parallelize with a bounded concurrency of 4.
-    const out: Float32Array[] = new Array(texts.length);
-    const CONCURRENCY = 4;
-    let next = 0;
+    if (texts.length === 0) return [];
 
-    async function worker(this: OllamaProvider) {
-      while (true) {
-        const i = next++;
-        if (i >= texts.length) return;
-        const res = await fetch(this.endpoint, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: this.model, prompt: texts[i] }),
-        });
-        if (!res.ok) {
-          throw new Error(`Ollama embeddings failed on index ${i}: ${res.status}`);
-        }
-        const json = (await res.json()) as OllamaEmbeddingResponse;
-        out[i] = new Float32Array(json.embedding);
+    // Use the batch /api/embed endpoint (Ollama 0.4+). Ollama handles
+    // arbitrary batch sizes internally, but we cap at 128 to keep
+    // memory predictable on the server side.
+    const out: Float32Array[] = [];
+    const BATCH = 128;
+
+    for (let i = 0; i < texts.length; i += BATCH) {
+      const batch = texts.slice(i, i + BATCH);
+      const res = await fetch(`${this.baseUrl}/api/embed`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: this.model, input: batch }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "<no body>");
+        throw new Error(
+          `Ollama embed failed: ${res.status} ${res.statusText} — ${body.slice(0, 200)}`
+        );
+      }
+      const json = (await res.json()) as OllamaEmbedResponse;
+
+      // Auto-detect dimensions from the first real response.
+      if (!this._dimensionsDetected && json.embeddings?.[0]?.length) {
+        this._dimensions = json.embeddings[0].length;
+        this._dimensionsDetected = true;
+      }
+
+      for (const emb of json.embeddings) {
+        out.push(new Float32Array(emb));
       }
     }
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY, texts.length) }, () =>
-      worker.call(this)
-    );
-    await Promise.all(workers);
     return out;
   }
 }
@@ -242,16 +282,31 @@ class OllamaProvider implements EmbeddingProvider {
 // Factory
 // ────────────────────────────────────────────────────────────────────
 //
-// Reads config (env vars for now; .sverklo/config.json later) and
-// returns the selected provider. If init() throws, falls back to the
-// bundled default with a warning.
+// Resolution order for provider selection:
+//   1. .sverklo.yaml `embeddings.provider` (config-first — declarative,
+//      version-controlled, no env-var gymnastics for the user).
+//   2. SVERKLO_EMBEDDING_PROVIDER env var (backwards-compatible escape
+//      hatch, useful for CI overrides).
+//   3. "default" — bundled ONNX all-MiniLM-L6-v2.
+//
+// If init() throws, falls back to the bundled default with a warning.
 
 import { log } from "../utils/logger.js";
+import type { SverkloConfig } from "../utils/config-file.js";
 
 export async function createEmbeddingProvider(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  sverkloConfig?: SverkloConfig | null
 ): Promise<EmbeddingProvider> {
-  const providerName = (env.SVERKLO_EMBEDDING_PROVIDER || "default").toLowerCase();
+  const embCfg = sverkloConfig?.embeddings;
+
+  // Determine the effective provider name. Config file takes precedence
+  // over env var so that a checked-in .sverklo.yaml is authoritative.
+  const providerName = (
+    embCfg?.provider ||
+    env.SVERKLO_EMBEDDING_PROVIDER ||
+    "default"
+  ).toLowerCase();
 
   let provider: EmbeddingProvider;
 
@@ -273,15 +328,29 @@ export async function createEmbeddingProvider(
         });
         break;
 
-      case "ollama":
-        provider = new OllamaProvider({
-          endpoint: env.SVERKLO_OLLAMA_URL,
-          model: env.SVERKLO_OLLAMA_MODEL,
-          dimensions: env.SVERKLO_OLLAMA_DIMENSIONS
+      case "ollama": {
+        // Merge config-file settings with env-var overrides. Config
+        // file is the primary source; env vars act as fallback for
+        // fields not specified in the YAML.
+        const ollamaCfg = embCfg?.ollama;
+        const baseUrl =
+          ollamaCfg?.baseUrl ||
+          env.SVERKLO_OLLAMA_URL ||
+          undefined;
+        const model =
+          ollamaCfg?.model ||
+          embCfg?.model ||
+          env.SVERKLO_OLLAMA_MODEL ||
+          undefined;
+        const dimensions =
+          embCfg?.dimensions ||
+          (env.SVERKLO_OLLAMA_DIMENSIONS
             ? parseInt(env.SVERKLO_OLLAMA_DIMENSIONS, 10)
-            : undefined,
-        });
+            : undefined);
+
+        provider = new OllamaProvider({ baseUrl, model, dimensions });
         break;
+      }
 
       default:
         log(
@@ -291,9 +360,9 @@ export async function createEmbeddingProvider(
     }
 
     await provider.init();
-    if (providerName !== "default") {
+    if (providerName !== "default" && providerName !== "bundled" && providerName !== "onnx") {
       log(
-        `[embedding] Using ${provider.name} (${provider.dimensions} dims) — override with SVERKLO_EMBEDDING_PROVIDER.`
+        `[embedding] Using ${provider.name} (${provider.dimensions} dims) — configured via ${embCfg?.provider ? ".sverklo.yaml" : "SVERKLO_EMBEDDING_PROVIDER env var"}.`
       );
     }
     return provider;

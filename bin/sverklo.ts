@@ -351,6 +351,189 @@ Design doc: https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md
   process.exit(0);
 }
 
+if (command === "review") {
+  // CI-friendly review subcommand: indexes the repo, runs review_diff,
+  // prints markdown (or JSON) to stdout, and optionally exits non-zero if
+  // the highest risk level exceeds a threshold.
+  //
+  //   sverklo review [--ref <ref>] [--ci] [--format markdown|json]
+  //                  [--max-files 25] [--fail-on critical|high|medium|low|none]
+
+  const flags = args.slice(1);
+  const flagVal = (name: string, fallback: string): string => {
+    const idx = flags.indexOf(name);
+    return idx !== -1 && flags[idx + 1] ? flags[idx + 1] : fallback;
+  };
+
+  const ref = flagVal("--ref", "");
+  const ci = flags.includes("--ci");
+  const format = flagVal("--format", "markdown") as "markdown" | "json";
+  const maxFiles = parseInt(flagVal("--max-files", "25"), 10) || 25;
+  const failOn = flagVal("--fail-on", "none") as
+    | "critical"
+    | "high"
+    | "medium"
+    | "low"
+    | "none";
+
+  // Auto-detect ref: if inside a PR (GH Actions sets GITHUB_BASE_REF),
+  // use origin/$GITHUB_BASE_REF..HEAD. Otherwise default to main..HEAD.
+  const effectiveRef =
+    ref ||
+    (process.env.GITHUB_BASE_REF
+      ? `origin/${process.env.GITHUB_BASE_REF}..HEAD`
+      : "main..HEAD");
+
+  const projectPath = resolve(process.cwd());
+
+  // Ensure model is available
+  const { existsSync: modelExists } = await import("node:fs");
+  const { join: joinPath } = await import("node:path");
+  const { homedir: hd } = await import("node:os");
+  const mDir = joinPath(hd(), ".sverklo", "models");
+  if (!modelExists(joinPath(mDir, "model.onnx"))) {
+    if (ci) process.stderr.write("[sverklo] Downloading embedding model...\n");
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { handleReviewDiff } = await import(
+    "../src/server/tools/review-diff.js"
+  );
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  const markdown = handleReviewDiff(indexer, {
+    ref: effectiveRef,
+    max_files: maxFiles,
+    token_budget: 8000,
+  });
+
+  indexer.close();
+
+  if (format === "json") {
+    // Wrap the markdown in a JSON envelope with parsed risk level
+    const riskLevels = ["low", "medium", "high", "critical"] as const;
+    type RiskLevel = (typeof riskLevels)[number];
+    let maxRisk: RiskLevel = "low";
+    for (const level of riskLevels) {
+      if (markdown.includes(`(${level})`)) maxRisk = level;
+    }
+    const output = {
+      ref: effectiveRef,
+      max_risk: maxRisk,
+      review: markdown,
+    };
+    process.stdout.write(JSON.stringify(output, null, 2) + "\n");
+  } else {
+    process.stdout.write(markdown + "\n");
+  }
+
+  // Check fail-on threshold
+  if (failOn !== "none") {
+    const levelOrder: Record<string, number> = {
+      low: 1,
+      medium: 2,
+      high: 3,
+      critical: 4,
+    };
+    const threshold = levelOrder[failOn] || 0;
+    const riskLevels = ["critical", "high", "medium", "low"];
+    let maxFound = 0;
+    for (const level of riskLevels) {
+      if (markdown.includes(`(${level})`)) {
+        maxFound = Math.max(maxFound, levelOrder[level] || 0);
+      }
+    }
+    if (maxFound >= threshold) {
+      process.stderr.write(
+        `[sverklo] Risk threshold exceeded: found issues at or above '${failOn}'\n`
+      );
+      process.exit(1);
+    }
+  }
+
+  process.exit(0);
+}
+
+if (command === "audit") {
+  // CLI audit subcommand: indexes the repo, runs audit analysis,
+  // outputs markdown, HTML, or JSON.
+  //
+  //   sverklo audit [--format markdown|html|json] [--output <path>] [--open]
+
+  const flags = args.slice(1);
+  const flagVal = (name: string, fallback: string): string => {
+    const idx = flags.indexOf(name);
+    return idx !== -1 && flags[idx + 1] ? flags[idx + 1] : fallback;
+  };
+
+  const format = flagVal("--format", "markdown") as "markdown" | "html" | "json";
+  const outputPath = flagVal("--output", format === "html" ? "sverklo-audit.html" : "");
+  const shouldOpen = flags.includes("--open");
+
+  const projectPath = resolve(process.cwd());
+
+  const { existsSync: modelExists } = await import("node:fs");
+  const { join: joinPath } = await import("node:path");
+  const { homedir: hd } = await import("node:os");
+  const mDir = joinPath(hd(), ".sverklo", "models");
+  if (!modelExists(joinPath(mDir, "model.onnx"))) {
+    console.log("Downloading embedding model (~90MB)...");
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { handleAudit } = await import("../src/server/tools/audit.js");
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  const mdOutput = handleAudit(indexer, { token_budget: 16000 });
+  indexer.close();
+
+  if (format === "json") {
+    // Wrap in a simple JSON envelope
+    const json = JSON.stringify({ format: "sverklo-audit", version: "0.4.0", content: mdOutput }, null, 2);
+    if (outputPath) {
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(outputPath, json);
+      console.log(`Audit written to ${outputPath}`);
+    } else {
+      process.stdout.write(json + "\n");
+    }
+  } else if (format === "html") {
+    const { generateAuditHtml } = await import("../src/server/audit-html.js");
+    const html = generateAuditHtml(mdOutput, config.name, projectPath);
+    const { writeFileSync } = await import("node:fs");
+    const out = outputPath || "sverklo-audit.html";
+    writeFileSync(out, html);
+    console.log(`Audit report written to ${out}`);
+    if (shouldOpen) {
+      const { execSync } = await import("node:child_process");
+      const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+      try { execSync(`${cmd} ${out}`); } catch { /* ignore */ }
+    }
+  } else {
+    if (outputPath) {
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(outputPath, mdOutput);
+      console.log(`Audit written to ${outputPath}`);
+    } else {
+      process.stdout.write(mdOutput + "\n");
+    }
+  }
+
+  process.exit(0);
+}
+
 if (command === "ui" || command === "dashboard") {
   const projectPath = resolve(args[1] || process.cwd());
   const { existsSync } = await import("node:fs");
