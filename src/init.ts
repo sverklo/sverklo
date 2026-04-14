@@ -1,8 +1,12 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { track, hasBeenNudged, markNudged } from "./telemetry/index.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const CLAUDE_MD_SNIPPET = `
 ## Sverklo — Code Intelligence
@@ -49,6 +53,68 @@ function buildAutoCaptureHook() {
         type: "command",
         command:
           "echo 'If this edit represents a design decision, architectural choice, or pattern worth remembering, call sverklo_remember to save it. Skip if it is a routine fix.'",
+        timeout: 3,
+      },
+    ],
+  };
+}
+
+/**
+ * Install sverklo skill files into .claude/skills/ in the target project.
+ * Idempotent: does not overwrite files the user may have customized.
+ */
+function installSkills(projectPath: string): void {
+  // Skills source: src/skills/ relative to this file (works in both source and dist)
+  // In dist: dist/src/init.js -> ../../src/skills/
+  // In source (ts-node / tsx): src/init.ts -> ./skills/
+  const candidateDirs = [
+    join(__dirname, "skills"),                    // source layout: src/skills/
+    join(__dirname, "..", "..", "src", "skills"),  // dist layout: dist/src/ -> ../../src/skills/
+  ];
+
+  const skillsSourceDir = candidateDirs.find(
+    (d) => existsSync(d) && readdirSync(d).some((f) => f.endsWith(".md"))
+  );
+
+  if (!skillsSourceDir) {
+    console.log("  .claude/skills/ — skill source files not found, skipping");
+    return;
+  }
+
+  const skillsTargetDir = join(projectPath, ".claude", "skills");
+  mkdirSync(skillsTargetDir, { recursive: true });
+
+  const skillFiles = readdirSync(skillsSourceDir).filter((f) => f.endsWith(".md"));
+  let installed = 0;
+  let skipped = 0;
+
+  for (const file of skillFiles) {
+    const targetPath = join(skillsTargetDir, file);
+    if (existsSync(targetPath)) {
+      skipped++;
+    } else {
+      copyFileSync(join(skillsSourceDir, file), targetPath);
+      installed++;
+    }
+  }
+
+  if (installed > 0) {
+    console.log(`  .claude/skills/ — installed ${installed} skill(s)${skipped > 0 ? ` (${skipped} already existed, skipped)` : ""}`);
+  } else {
+    console.log(`  .claude/skills/ — all ${skipped} skill(s) already installed`);
+  }
+}
+
+/**
+ * Build the PostToolUse hook that triggers incremental reindex after file writes.
+ */
+function buildReindexHook() {
+  return {
+    matcher: "Edit|Write",
+    hooks: [
+      {
+        type: "command" as const,
+        command: "sverklo wakeup . 2>/dev/null &",
         timeout: 3,
       },
     ],
@@ -156,11 +222,31 @@ export async function initProject(
     }
   }
 
+  // PostToolUse reindex hook: trigger incremental reindex after file writes
+  {
+    if (!settings.hooks) settings.hooks = {};
+    if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+
+    const existingPost = settings.hooks.PostToolUse as Array<{ hooks?: Array<{ command?: string }> }>;
+    const alreadyHasReindex = existingPost.some((h) =>
+      h.hooks?.some((hook) => hook.command?.includes("sverklo wakeup"))
+    );
+
+    if (!alreadyHasReindex) {
+      existingPost.push(buildReindexHook() as unknown as { hooks?: Array<{ command?: string }> });
+      settingsChanged = true;
+    }
+  }
+
   if (settingsChanged) {
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
     const bits: string[] = [];
     if (!hasSverklo) bits.push("auto-allow for sverklo tools");
     if (options.autoCapture) bits.push("PostToolUse auto-capture hook");
+    // Check if reindex hook was just added (not previously present)
+    const postHooks = settings.hooks?.PostToolUse as Array<{ hooks?: Array<{ command?: string }> }> | undefined;
+    const hasReindex = postHooks?.some((h) => h.hooks?.some((hook) => hook.command?.includes("sverklo wakeup")));
+    if (hasReindex) bits.push("PostToolUse reindex hook");
     console.log(`  .claude/settings.local.json — added ${bits.join(" + ")}`);
   } else {
     console.log("  .claude/settings.local.json — sverklo permissions already set");

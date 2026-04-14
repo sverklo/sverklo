@@ -8,9 +8,19 @@ _Sverklo_ (Russian: **сверкло**, _SVERK-lo_) — archaic past tense of "�
 [![License: MIT](https://img.shields.io/badge/license-MIT-E85A2A.svg)](LICENSE)
 [![Local-first](https://img.shields.io/badge/local--first-no%20cloud-E85A2A)](#)
 
+> **MIT Licensed** — the only fully open-source code intelligence MCP. Free for commercial use, no restrictions. [Compare with alternatives →](#why-not-as-of-2026-04)
+
+[![Star History Chart](https://api.star-history.com/svg?repos=sverklo/sverklo&type=Date)](https://star-history.com/#sverklo/sverklo&Date)
+
 ## Stop re-explaining your codebase to your AI.
 
 Sverklo is a local-first code intelligence MCP server that gives **Claude Code, Cursor, Windsurf, VS Code, JetBrains, and Google Antigravity** the same mental model of your repo that a senior engineer has. Hybrid semantic search, symbol-level blast-radius analysis, diff-aware PR review, and memory pinned to git state — running entirely on your laptop.
+
+### The problem
+
+Your AI agent edits `UserService.validate()`. It doesn't know that 47 other functions call it. Breaking changes ship. Tests pass because they mock the dependency.
+
+Sverklo gives your agent the dependency graph, the blast radius, and the risk score — before it writes a single line.
 
 <table>
 <tr>
@@ -26,6 +36,19 @@ cd your-project && sverklo init
 ```
 
 `sverklo init` auto-detects your installed AI coding agents, writes the right MCP config files, appends sverklo instructions to your `CLAUDE.md`, and runs `sverklo doctor` to verify the setup. MIT licensed. Zero config. No API keys.
+
+### Works with every MCP editor
+
+| Editor | MCP | Skills | Hooks | Auto-setup |
+|--------|:---:|:------:|:-----:|:----------:|
+| Claude Code | ✓ | ✓ | ✓ | `sverklo init` |
+| Cursor | ✓ | — | — | `sverklo init` |
+| Windsurf | ✓ | — | — | `sverklo init` |
+| Zed | ✓ | — | — | `sverklo init` |
+| VS Code | ✓ | — | — | manual |
+| JetBrains | ✓ | — | — | manual |
+| Antigravity | ✓ | — | — | `sverklo init` |
+| OpenCode | ✓ | — | — | manual |
 
 > **First 5 minutes:** see [`FIRST_RUN.md`](FIRST_RUN.md) for three scripted prompts that demonstrate the tools sverklo adds that grep can't replace.
 
@@ -162,14 +185,20 @@ Pipe the output into `pbcopy` / `xclip` and paste into Claude Code, or save it t
 
 ## How It Works
 
-```
-Your code → Parse (10 languages) → Embed (ONNX, local)
-                                  → Build dependency graph
-                                  → Compute PageRank
-                                        ↓
-Agent query → BM25 text search ──┐
-            → Vector similarity ──┼→ RRF fusion → Token-budgeted response
-            → PageRank boost ────┘
+```mermaid
+graph LR
+    A[Your Code] --> B[Parse<br/>20+ languages]
+    B --> C[Embed<br/>ONNX/Ollama]
+    B --> D[Build Graph<br/>imports/exports]
+    D --> E[PageRank<br/>importance]
+    
+    F[Agent Query] --> G[BM25]
+    F --> H[Vector Search]
+    E --> I[PageRank Boost]
+    G --> J[RRF Fusion]
+    H --> J
+    I --> J
+    J --> K[Token-Budgeted<br/>Response]
 ```
 
 1. **Parses** your codebase into functions, classes, types (TS, JS, Python, Go, Rust, Java, C, C++, Ruby, PHP)
@@ -327,18 +356,18 @@ Still stuck? File an issue with the output of `sverklo doctor` attached. We tria
 
 ## Why not... (as of 2026-04)
 
-| Alternative | Local | OSS | Code search | Symbol graph | Memory | MR review | Cost |
-|---|---|---|---|---|---|---|---|
-| **Sverklo** | ✓ | ✓ MIT | ✓ hybrid + PageRank | ✓ | ✓ git-aware | ✓ risk-scored | $0 |
-| Built-in grep / Read | ✓ | ✓ | text only | ✗ | ✗ | ✗ | $0 |
-| [Cursor's @codebase](https://docs.cursor.com/context/codebase-indexing) | ✗ cloud | ✗ | ✓ | partial | ✗ | ✗ | with Cursor sub |
-| [Sourcegraph Cody](https://sourcegraph.com/cody) | ✗ cloud | ✗ source-available | ✓ | ✓ | ✗ | partial | $9–19/dev/mo |
-| [Continue.dev](https://continue.dev) | partial | ✓ | ✓ basic | ✗ | ✗ | ✗ | $0 |
-| [Claude Context (Zilliz)](https://github.com/zilliztech/claude-context) | ✗ Milvus | ✓ | ✓ vector only | ✗ | ✗ | ✗ | $0 + Milvus |
-| [Aider repo-map](https://aider.chat/docs/repomap.html) | ✓ | ✓ | ✗ | ✓ basic | ✗ | ✗ | $0 |
-| [Greptile](https://greptile.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | ✓ | $30/dev/mo |
-| [Augment](https://augmentcode.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | partial | $20–200/mo |
-| [claude-mem](https://github.com/themanojdesai/claude-mem) | ✓ | ✓ | ✗ | ✗ | ✓ ChromaDB | ✗ | $0 |
+| Alternative | Local | OSS | Code search | Symbol graph | Memory | MR review | License | Cost |
+|---|---|---|---|---|---|---|---|---|
+| **Sverklo** | ✓ | ✓ MIT | ✓ hybrid + PageRank | ✓ | ✓ git-aware | ✓ risk-scored | MIT | $0 |
+| Built-in grep / Read | ✓ | ✓ | text only | ✗ | ✗ | ✗ | varies | $0 |
+| [Cursor's @codebase](https://docs.cursor.com/context/codebase-indexing) | ✗ cloud | ✗ | ✓ | partial | ✗ | ✗ | proprietary | with Cursor sub |
+| [Sourcegraph Cody](https://sourcegraph.com/cody) | ✗ cloud | ✗ source-available | ✓ | ✓ | ✗ | partial | source-available | $9–19/dev/mo |
+| [Continue.dev](https://continue.dev) | partial | ✓ | ✓ basic | ✗ | ✗ | ✗ | Apache 2.0 | $0 |
+| [Claude Context (Zilliz)](https://github.com/zilliztech/claude-context) | ✗ Milvus | ✓ | ✓ vector only | ✗ | ✗ | ✗ | MIT | $0 + Milvus |
+| [Aider repo-map](https://aider.chat/docs/repomap.html) | ✓ | ✓ | ✗ | ✓ basic | ✗ | ✗ | Apache 2.0 | $0 |
+| [Greptile](https://greptile.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | ✓ | proprietary | $30/dev/mo |
+| [Augment](https://augmentcode.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | partial | proprietary | $20–200/mo |
+| [claude-mem](https://github.com/themanojdesai/claude-mem) | ✓ | ✓ | ✗ | ✗ | ✓ ChromaDB | ✗ | MIT | $0 |
 
 Sverklo is the only tool that combines **hybrid code search + symbol graph + memory + diff-aware review** in one local-first MCP server.
 
