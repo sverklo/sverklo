@@ -1,6 +1,6 @@
 # Sverklo
 
-_Sverklo_ (Russian: **сверло**, _SVER-lo_) — "drill." Code intelligence that drills through your repo so your AI assistant stops guessing.
+_Sverklo_ (Russian: **сверкло**, _SVERK-lo_) — archaic past tense of "сверкнуть," to flash or gleam. Code intelligence that illuminates your repo so your AI assistant stops guessing.
 
 [![npm version](https://img.shields.io/npm/v/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![npm downloads](https://img.shields.io/npm/dw/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
