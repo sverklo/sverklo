@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import type { Indexer } from "../../indexer/indexer.js";
 
 export const astGrepTool = {
@@ -38,31 +38,37 @@ export function handleAstGrep(
     return NOT_INSTALLED_MESSAGE;
   }
 
-  const cmdParts = ["ast-grep", "--pattern", JSON.stringify(pattern)];
+  const args_list = ["--pattern", pattern];
   if (language) {
-    cmdParts.push("--lang", language);
+    args_list.push("--lang", language);
   }
-  cmdParts.push(JSON.stringify(path));
+  args_list.push(path);
 
   let output: string;
   try {
-    output = execSync(cmdParts.join(" "), {
+    const result = spawnSync("ast-grep", args_list, {
       encoding: "utf-8",
       timeout: 30000,
       maxBuffer: 10 * 1024 * 1024,
     });
-  } catch (err) {
-    const e = err as { status?: number; stdout?: string; stderr?: string; message?: string };
+    if (result.error) {
+      if (/ENOENT/i.test(result.error.message)) {
+        return NOT_INSTALLED_MESSAGE;
+      }
+      throw result.error;
+    }
     // ast-grep returns non-zero when no matches; treat stdout as authoritative
-    if (e.stdout) {
-      output = e.stdout;
-    } else {
-      const stderr = (e.stderr || e.message || "").toString().trim();
+    if (result.status !== 0 && !result.stdout) {
+      const stderr = (result.stderr || "").trim();
       if (/not found|ENOENT/i.test(stderr)) {
         return NOT_INSTALLED_MESSAGE;
       }
       return `ast-grep error: ${stderr || "unknown error"}`;
     }
+    output = result.stdout;
+  } catch (err) {
+    const e = err as { message?: string };
+    return `ast-grep error: ${e.message || "unknown error"}`;
   }
 
   const trimmed = output.trim();

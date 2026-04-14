@@ -333,10 +333,32 @@ export async function createEmbeddingProvider(
         // file is the primary source; env vars act as fallback for
         // fields not specified in the YAML.
         const ollamaCfg = embCfg?.ollama;
-        const baseUrl =
+        const rawBaseUrl =
           ollamaCfg?.baseUrl ||
           env.SVERKLO_OLLAMA_URL ||
           undefined;
+
+        // SSRF protection: only allow localhost URLs for the Ollama
+        // endpoint. A malicious .sverklo.yaml could point at an
+        // internal service and exfiltrate embedding content.
+        let baseUrl = rawBaseUrl;
+        if (baseUrl) {
+          try {
+            const parsed = new URL(baseUrl);
+            const host = parsed.hostname.toLowerCase();
+            if (host !== "localhost" && host !== "127.0.0.1" && host !== "::1" && host !== "[::1]") {
+              log(
+                `[embedding] Ollama baseUrl '${baseUrl}' is not a localhost address. ` +
+                  `Refusing to connect to non-local endpoints to prevent SSRF. ` +
+                  `Falling back to default localhost.`
+              );
+              baseUrl = undefined;
+            }
+          } catch {
+            log(`[embedding] Ollama baseUrl '${baseUrl}' is not a valid URL. Ignoring.`);
+            baseUrl = undefined;
+          }
+        }
         const model =
           ollamaCfg?.model ||
           embCfg?.model ||

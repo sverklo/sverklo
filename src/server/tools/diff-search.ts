@@ -1,8 +1,9 @@
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import type { Indexer } from "../../indexer/indexer.js";
 import { hybridSearch, formatResults } from "../../search/hybrid-search.js";
 import type { ChunkType } from "../../types/index.js";
 import { resolveBudget } from "../../utils/budget.js";
+import { validateGitRef } from "../../utils/git-validation.js";
 
 export const diffSearchTool = {
   name: "sverklo_diff_search",
@@ -53,14 +54,19 @@ export async function handleDiffSearch(
   const type = (args.type as ChunkType | "any") || "any";
 
   if (!query) return "Error: query required";
+  if (!validateGitRef(ref)) {
+    return `Error: invalid git ref \`${ref}\`. Ref must match a safe refspec pattern (no shell metacharacters).`;
+  }
 
   // Get changed files from git diff
   let changedPaths: string[];
   try {
-    const out = execSync(
-      `git diff --name-only --diff-filter=ACMRT ${ref}`,
-      { cwd: indexer.rootPath, encoding: "utf-8", timeout: 8000, maxBuffer: 5 * 1024 * 1024 }
-    );
+    const result = spawnSync("git", ["diff", "--name-only", "--diff-filter=ACMRT", ref], {
+      cwd: indexer.rootPath, encoding: "utf-8", timeout: 8000, maxBuffer: 5 * 1024 * 1024,
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(result.stderr || `git exited with ${result.status}`);
+    const out = result.stdout;
     changedPaths = out.trim().split("\n").filter(Boolean);
   } catch {
     return `Error: not a git repository or invalid ref \`${ref}\`. Try \`sverklo_diff_search query:"..." ref:"HEAD~1..HEAD"\`.`;

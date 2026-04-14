@@ -1,11 +1,12 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import type { Indexer } from "../indexer/indexer.js";
 import type { MemoryCategory } from "../types/index.js";
 import { embed } from "../indexer/embedder.js";
 import { log } from "../utils/logger.js";
 import { getGitState } from "./git-state.js";
+import { validatePositiveInt } from "../utils/git-validation.js";
 
 interface ExtractedMemory {
   content: string;
@@ -334,12 +335,16 @@ export function importGitLog(
   projectPath: string,
   limit: number = 50
 ): ExtractedMemory[] {
+  const safeLimit = validatePositiveInt(limit, 50);
   let raw: string;
   try {
-    raw = execSync(
-      `git log --format=%H%n%s%n%b%n==END==%n -n ${limit}`,
+    const result = spawnSync(
+      "git", ["log", "--format=%H%n%s%n%b%n==END==%n", "-n", String(safeLimit)],
       { cwd: projectPath, encoding: "utf-8", timeout: 5000, maxBuffer: 5 * 1024 * 1024 }
     );
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(result.stderr || `git exited with ${result.status}`);
+    raw = result.stdout;
   } catch {
     return [];
   }

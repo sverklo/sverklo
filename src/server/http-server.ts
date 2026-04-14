@@ -30,9 +30,16 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://localhost:${port}`);
 
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    // CORS: restrict to same-origin / localhost only. The dashboard is
+    // served from the same origin so no cross-origin header is needed for
+    // normal use. For local development tools that hit the API from a
+    // different port, allow localhost origins explicitly.
+    const origin = req.headers.origin;
+    if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);

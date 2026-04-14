@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Indexer } from "../../indexer/indexer.js";
@@ -7,6 +7,7 @@ import { computeRiskScore, formatRiskBadge, type RiskScore } from "./risk-score.
 import { isTestPath, candidateTestNames } from "./test-paths.js";
 import { getDiffHunks, runAllHeuristics, type HeuristicFinding } from "./diff-heuristics.js";
 import { resolveBudget } from "../../utils/budget.js";
+import { validateGitRef } from "../../utils/git-validation.js";
 
 export const reviewDiffTool = {
   name: "sverklo_review_diff",
@@ -65,6 +66,10 @@ export function handleReviewDiff(
   const includeSimilarity = args.include_added_similarity !== false;
   const maxFiles = (args.max_files as number) || 25;
   const tokenBudget = resolveBudget(args, "review_diff", null, 4000);
+
+  if (!validateGitRef(ref)) {
+    return "Error: invalid git ref. Ref must match a safe refspec pattern (no shell metacharacters).";
+  }
 
   // ─── 1. Get list of changed files ───
   const changedFiles = getChangedFiles(indexer.rootPath, ref);
@@ -485,16 +490,22 @@ export function handleReviewDiff(
 function getChangedFiles(rootPath: string, ref: string): ChangedFile[] | null {
   try {
     // Use --diff-filter=ACDMRT and --numstat to get type + line counts
-    const out = execSync(
-      `git diff --numstat --diff-filter=ACDMRT ${ref}`,
+    const numstatResult = spawnSync(
+      "git", ["diff", "--numstat", "--diff-filter=ACDMRT", ref],
       { cwd: rootPath, encoding: "utf-8", timeout: 8000, maxBuffer: 5 * 1024 * 1024 }
     );
+    if (numstatResult.error) throw numstatResult.error;
+    if (numstatResult.status !== 0) throw new Error(numstatResult.stderr || `git exited with ${numstatResult.status}`);
+    const out = numstatResult.stdout;
 
     // Also need status (A/M/D/R)
-    const statusOut = execSync(
-      `git diff --name-status --diff-filter=ACDMRT ${ref}`,
+    const statusResult = spawnSync(
+      "git", ["diff", "--name-status", "--diff-filter=ACDMRT", ref],
       { cwd: rootPath, encoding: "utf-8", timeout: 8000, maxBuffer: 5 * 1024 * 1024 }
     );
+    if (statusResult.error) throw statusResult.error;
+    if (statusResult.status !== 0) throw new Error(statusResult.stderr || `git exited with ${statusResult.status}`);
+    const statusOut = statusResult.stdout;
 
     const statusByPath = new Map<string, string>();
     for (const line of statusOut.trim().split("\n")) {
@@ -546,13 +557,16 @@ function getOldSymbols(rootPath: string, ref: string, filePath: string): OldSymb
 
   let oldContent: string;
   try {
-    oldContent = execSync(`git show ${fromRef}:${filePath}`, {
+    const showResult = spawnSync("git", ["show", `${fromRef}:${filePath}`], {
       cwd: rootPath,
       encoding: "utf-8",
       timeout: 5000,
       maxBuffer: 5 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     });
+    if (showResult.error) throw showResult.error;
+    if (showResult.status !== 0) throw new Error("git show failed");
+    oldContent = showResult.stdout;
   } catch {
     // File didn't exist at the old ref → all symbols are added (caller handles)
     return [];

@@ -23,7 +23,8 @@
 //   2. Register it in ALL_HEURISTICS below.
 //   3. Unit-test it with representative fixtures.
 
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { validateGitRef } from "../../utils/git-validation.js";
 
 export interface DiffHunk {
   filePath: string;
@@ -234,14 +235,17 @@ export function parseUnifiedDiff(diffText: string): DiffHunk[] {
  * Convenience: pull a unified diff from git and parse it.
  */
 export function getDiffHunks(rootPath: string, ref: string): DiffHunk[] {
+  if (!validateGitRef(ref)) return [];
   try {
-    const out = execSync(`git diff --unified=10 ${ref}`, {
+    const result = spawnSync("git", ["diff", "--unified=10", ref], {
       cwd: rootPath,
       encoding: "utf-8",
       timeout: 8000,
       maxBuffer: 10 * 1024 * 1024,
     });
-    return parseUnifiedDiff(out);
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(result.stderr || `git exited with ${result.status}`);
+    return parseUnifiedDiff(result.stdout);
   } catch {
     return [];
   }

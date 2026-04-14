@@ -28,6 +28,7 @@ export function startWatcher(indexer: Indexer, rootPath: string): void {
         return false;
       }
     },
+    followSymlinks: false,
     persistent: true,
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 300 },
