@@ -173,7 +173,7 @@ Agent query → BM25 text search ──┐
 ```
 
 1. **Parses** your codebase into functions, classes, types (TS, JS, Python, Go, Rust, Java, C, C++, Ruby, PHP)
-2. **Embeds** code using all-MiniLM-L6-v2 ONNX model (384d vectors, fully local)
+2. **Embeds** code using all-MiniLM-L6-v2 ONNX model (384d, fully local) — or any Ollama model via config
 3. **Builds** a dependency graph and computes PageRank (structurally important files rank higher)
 4. **Searches** using hybrid BM25 + vector similarity + PageRank, fused via Reciprocal Rank Fusion
 5. **Remembers** decisions and patterns across sessions, linked to git state
@@ -380,6 +380,64 @@ search:
 **Weights** are multiplicative on PageRank only — they don't affect BM25 or embedding scores. Range is 0.0 to 10.0, last matching glob wins. Use them to boost code you care about and suppress generated or vendored files without fully ignoring them.
 
 **Token budgets** control how much context each tool returns per call. The defaults were raised in v0.3.0 (search: 8000, audit: 5000). Override them here or per-call via the `budget` parameter on any search tool.
+
+### Pluggable embeddings (v0.5.0+)
+
+Swap the default MiniLM-L6-v2 for any Ollama embedding model:
+
+```yaml
+# .sverklo.yaml
+embeddings:
+  provider: ollama
+  ollama:
+    model: nomic-embed-text
+    baseUrl: http://localhost:11434
+```
+
+Dimensions auto-detected from the first response. Falls back to bundled ONNX if Ollama isn't running.
+
+## CLI tools (v0.5.0+)
+
+### `sverklo review` — CI-friendly diff review
+
+```bash
+sverklo review --ci --fail-on high
+```
+
+Risk-scored diff review from the terminal. Auto-detects PR ref in GitHub Actions (`GITHUB_BASE_REF`). Exit code 1 when the threshold is exceeded — use as a CI quality gate.
+
+### `sverklo audit` — codebase health report
+
+```bash
+sverklo audit --format html --open
+```
+
+Generates a self-contained HTML report: god nodes, hub files, orphan detection, coupling analysis, language distribution. Dark theme, shareable artifact.
+
+Formats: `markdown` (default), `html`, `json`.
+
+### GitHub Action
+
+Automated PR review on every pull request:
+
+```yaml
+# .github/workflows/sverklo-review.yml
+name: Sverklo Review
+on: [pull_request]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: sverklo/sverklo/action@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on: high
+```
+
+Posts risk-scored review comments directly on PRs. Updates existing comments on subsequent pushes.
 
 ## Telemetry
 
