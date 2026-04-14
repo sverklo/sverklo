@@ -562,6 +562,45 @@ if (command === "ui" || command === "dashboard") {
   await new Promise(() => {}); // block forever
 }
 
+if (command === "wiki") {
+  // Generate a markdown wiki from the indexed codebase.
+  //
+  //   sverklo wiki [--output <dir>] [--format markdown|html]
+
+  const flags = args.slice(1);
+  const flagVal = (name: string, fallback: string): string => {
+    const idx = flags.indexOf(name);
+    return idx !== -1 && flags[idx + 1] ? flags[idx + 1] : fallback;
+  };
+
+  const output = resolve(flagVal("--output", "./sverklo-wiki"));
+  const format = flagVal("--format", "markdown") as "markdown" | "html";
+  const projectPath = resolve(process.cwd());
+
+  // Ensure model is available
+  const { existsSync: modelExists } = await import("node:fs");
+  const { join: joinPath } = await import("node:path");
+  const { homedir: hd } = await import("node:os");
+  const mDir = joinPath(hd(), ".sverklo", "models");
+  if (!modelExists(joinPath(mDir, "model.onnx"))) {
+    console.log("Downloading embedding model (~90MB)...");
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { generateWiki } = await import("../src/wiki/wiki-generator.js");
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  await generateWiki(indexer, { outputDir: output, format });
+  indexer.close();
+  process.exit(0);
+}
+
 if (command === "--help" || command === "-h") {
   console.log(`
 sverklo — code intelligence for AI agents
@@ -572,6 +611,7 @@ Usage:
   sverklo [project-path]    Start the MCP server (stdio transport)
   sverklo ui [project-path] Open the web dashboard
   sverklo wakeup            Print compressed project context (for system-prompt injection)
+  sverklo wiki              Generate a markdown wiki from the indexed codebase
   sverklo bench             Run reproducible benchmarks on gin/nestjs/react (checkout only)
   sverklo audit-prompt      Print a ready-to-paste codebase-audit prompt (hybrid workflow)
   sverklo review-prompt     Print a ready-to-paste PR/MR-review prompt (hybrid workflow)

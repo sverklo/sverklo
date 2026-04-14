@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Indexer } from "../indexer/indexer.js";
 import { log } from "../utils/logger.js";
 import { getDashboardHTML } from "./dashboard-html.js";
+import { getClustersJSON } from "./tools/clusters.js";
 
 // Read the package version once at module load so the dashboard footer
 // and any other surface can show what version is actually running.
@@ -119,6 +120,31 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
           })),
         }));
         json(res, overview);
+      } else if (url.pathname === "/api/graph") {
+        const limitParam = url.searchParams.get("limit");
+        const limit = limitParam ? parseInt(limitParam, 10) : 100;
+        const allFiles = indexer.fileStore.getAll(); // already sorted by pagerank DESC
+        const allEdges = indexer.graphStore.getAll();
+        const files = limit > 0 ? allFiles.slice(0, limit) : allFiles;
+        const fileIdSet = new Set(files.map(f => f.id));
+        const edges = allEdges.filter(
+          e => fileIdSet.has(e.source_file_id) && fileIdSet.has(e.target_file_id)
+        );
+        json(res, {
+          nodes: files.map(f => ({
+            id: f.id,
+            path: f.path,
+            language: f.language,
+            pagerank: f.pagerank,
+            size_bytes: f.size_bytes,
+          })),
+          edges: edges.map(e => ({
+            source: e.source_file_id,
+            target: e.target_file_id,
+            weight: e.reference_count,
+          })),
+          total: allFiles.length,
+        });
       } else if (url.pathname === "/api/deps") {
         const files = indexer.fileStore.getAll();
         const fileMap = new Map(files.map(f => [f.id, f.path]));
@@ -145,6 +171,9 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
           })),
           edges,
         });
+      } else if (url.pathname === "/api/clusters") {
+        const clusters = getClustersJSON(indexer);
+        json(res, clusters);
       } else if (url.pathname === "/api/search") {
         const q = url.searchParams.get("q");
         if (!q) { json(res, []); return; }

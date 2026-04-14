@@ -47,6 +47,7 @@ import {
   handlePromote,
   handleDemote,
 } from "./tools/tier.js";
+import { clustersTool, handleClusters } from "./tools/clusters.js";
 import { startHttpServer } from "./http-server.js";
 import { track } from "../telemetry/index.js";
 import { applyToolOverrides } from "./tool-overrides.js";
@@ -299,6 +300,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     diffSearchTool,
     testMapTool,
     astGrepTool,
+    clustersTool,
     ...(enableZilliz
       ? [indexCodebaseTool, searchCodeTool, clearIndexTool, getIndexingStatusTool]
       : []),
@@ -391,6 +393,9 @@ export async function startMcpServer(rootPath: string): Promise<void> {
           break;
         case "sverklo_demote":
           result = handleDemote(indexer, args || {});
+          break;
+        case "sverklo_clusters":
+          result = handleClusters(indexer, args || {});
           break;
 
         // ── Zilliz claude-context compatibility aliases ──────────────

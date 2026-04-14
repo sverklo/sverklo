@@ -9,3 +9,5 @@ models/
 benchmark/.cache/
 benchmark/results/
 !benchmark/results/.gitkeep
+.mcpregistry_github_token
+.mcpregistry_registry_token
