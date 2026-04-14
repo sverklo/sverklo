@@ -48,6 +48,8 @@ import {
   handleDemote,
 } from "./tools/tier.js";
 import { clustersTool, handleClusters } from "./tools/clusters.js";
+import { listReposTool, handleListRepos } from "./tools/list-repos.js";
+import { IndexerPool } from "../registry/indexer-pool.js";
 import { startHttpServer } from "./http-server.js";
 import { track } from "../telemetry/index.js";
 import { applyToolOverrides } from "./tool-overrides.js";
@@ -507,6 +509,341 @@ export async function startMcpServer(rootPath: string): Promise<void> {
   });
   process.on("SIGTERM", () => {
     indexer.close();
+    process.exit(0);
+  });
+}
+
+// ── Repo property for global (multi-repo) mode ───────────────────────
+
+const repoProperty = {
+  type: "string" as const,
+  description:
+    "Repository name (from sverklo_list_repos). " +
+    "Optional if only one repo is indexed.",
+};
+
+/**
+ * Clone a tool definition and inject an optional `repo` property into its
+ * inputSchema. Used in global mode so every tool accepts a repo selector.
+ */
+function injectRepoParam<T extends { name: string; description: string; inputSchema: { type: string; properties?: Record<string, unknown>; required?: string[] } }>(tool: T): T {
+  const schema = { ...tool.inputSchema };
+  schema.properties = { ...schema.properties, repo: repoProperty };
+  return { ...tool, inputSchema: schema };
+}
+
+// ── Global MCP server (multi-repo mode) ──────────────────────────────
+
+export async function startGlobalMcpServer(): Promise<void> {
+  const pool = new IndexerPool();
+  const hints = new HintEngine();
+
+  // Read version from package.json
+  let serverVersion = "0.0.0";
+  try {
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const here = dirname(fileURLToPath(import.meta.url));
+    for (const rel of ["..", "../..", "../../.."]) {
+      try {
+        const pkg = JSON.parse(readFileSync(join(here, rel, "package.json"), "utf-8"));
+        if (pkg.name === "sverklo" && pkg.version) {
+          serverVersion = pkg.version;
+          break;
+        }
+      } catch {}
+    }
+  } catch {}
+
+  const server = new Server(
+    {
+      name: "sverklo",
+      version: serverVersion,
+    },
+    {
+      capabilities: {
+        tools: {},
+        resources: {},
+        prompts: {},
+      },
+      instructions:
+        "Sverklo (global mode): code intelligence serving multiple repos. " +
+        "Use sverklo_list_repos to see available repositories, then pass the " +
+        "repo name to any tool. If only one repo is registered, the repo " +
+        "parameter is optional.",
+    }
+  );
+
+  // Resources — minimal in global mode
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [],
+  }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, async () => ({
+    contents: [],
+  }));
+
+  // Prompts
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: ALL_PROMPTS.map((p) => ({
+      name: p.name,
+      description: p.description,
+      arguments: p.arguments,
+    })),
+  }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const prompt = findPrompt(request.params.name);
+    if (!prompt) {
+      throw new Error(`Unknown prompt: ${request.params.name}`);
+    }
+    const args = (request.params.arguments || {}) as Record<string, string | undefined>;
+    return {
+      description: prompt.description,
+      messages: [
+        {
+          role: "user" as const,
+          content: { type: "text" as const, text: prompt.build(args) },
+        },
+      ],
+    };
+  });
+
+  // Build tool list: inject `repo` param into every tool + add list_repos
+  const enableZilliz = process.env.SVERKLO_ZILLIZ_COMPAT === "1";
+  const baseTools = [
+    listReposTool,  // No repo param needed for this one
+    injectRepoParam(contextTool),
+    injectRepoParam(searchTool),
+    injectRepoParam(overviewTool),
+    injectRepoParam(lookupTool),
+    injectRepoParam(findReferencesTool),
+    injectRepoParam(dependenciesTool),
+    injectRepoParam(indexStatusTool),
+    injectRepoParam(rememberTool),
+    injectRepoParam(recallTool),
+    injectRepoParam(forgetTool),
+    injectRepoParam(memoriesTool),
+    injectRepoParam(promoteTool),
+    injectRepoParam(demoteTool),
+    injectRepoParam(impactTool),
+    injectRepoParam(auditTool),
+    injectRepoParam(wakeupTool),
+    injectRepoParam(reviewDiffTool),
+    injectRepoParam(diffSearchTool),
+    injectRepoParam(testMapTool),
+    injectRepoParam(astGrepTool),
+    injectRepoParam(clustersTool),
+    ...(enableZilliz
+      ? [injectRepoParam(indexCodebaseTool), injectRepoParam(searchCodeTool), injectRepoParam(clearIndexTool), injectRepoParam(getIndexingStatusTool)]
+      : []),
+  ];
+  const visibleTools = applyToolOverrides(baseTools);
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: visibleTools,
+  }));
+
+  // Handle tool calls — resolve indexer from pool based on `repo` arg
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    // list_repos doesn't need an indexer
+    if (name === "sverklo_list_repos") {
+      const result = handleListRepos();
+      if (process.env.SVERKLO_DISABLE_HINTS !== "1") {
+        const argRecord = (args || {}) as Record<string, unknown>;
+        hints.record(name, argRecord);
+      }
+      void track("tool.call", { tool: name, outcome: "ok", duration_ms: 0 });
+      return { content: [{ type: "text", text: result }] };
+    }
+
+    const repoName = (args as Record<string, unknown> | undefined)?.repo as string | undefined;
+
+    const __telemetryStart = Date.now();
+    let __telemetryOutcome: "ok" | "error" | "timeout" = "ok";
+
+    try {
+      const indexer = pool.getIndexer(repoName);
+
+      // Wait for index on search-like operations
+      const skipWait =
+        name === "sverklo_status" ||
+        name === "get_indexing_status" ||
+        name === "clear_index" ||
+        name === "index_codebase";
+      if (!skipWait) {
+        await pool.waitForIndex(repoName);
+      }
+
+      let result: string;
+
+      switch (name) {
+        case "sverklo_context":
+          result = await handleContext(indexer, args || {});
+          break;
+        case "sverklo_search":
+          result = await handleSearch(indexer, args || {});
+          break;
+        case "sverklo_overview":
+          result = handleOverview(indexer, args || {});
+          break;
+        case "sverklo_lookup":
+          result = handleLookup(indexer, args || {});
+          break;
+        case "sverklo_refs":
+          result = handleFindReferences(indexer, args || {});
+          break;
+        case "sverklo_deps":
+          result = handleDependencies(indexer, args || {});
+          break;
+        case "sverklo_status":
+          result = handleIndexStatus(indexer);
+          break;
+        case "sverklo_remember":
+          result = await handleRemember(indexer, args || {});
+          break;
+        case "sverklo_recall":
+          result = await handleRecall(indexer, args || {});
+          break;
+        case "sverklo_forget":
+          result = handleForget(indexer, args || {});
+          break;
+        case "sverklo_memories":
+          result = handleMemories(indexer, args || {});
+          break;
+        case "sverklo_ast_grep":
+          result = handleAstGrep(indexer, args || {});
+          break;
+        case "sverklo_impact":
+          result = handleImpact(indexer, args || {});
+          break;
+        case "sverklo_audit":
+          result = handleAudit(indexer, args || {});
+          break;
+        case "sverklo_wakeup":
+          result = handleWakeup(indexer, args || {});
+          break;
+        case "sverklo_review_diff":
+          result = handleReviewDiff(indexer, args || {});
+          break;
+        case "sverklo_diff_search":
+          result = await handleDiffSearch(indexer, args || {});
+          break;
+        case "sverklo_test_map":
+          result = handleTestMap(indexer, args || {});
+          break;
+        case "sverklo_promote":
+          result = handlePromote(indexer, args || {});
+          break;
+        case "sverklo_demote":
+          result = handleDemote(indexer, args || {});
+          break;
+        case "sverklo_clusters":
+          result = handleClusters(indexer, args || {});
+          break;
+
+        // Zilliz compat aliases
+        case "search_code": {
+          const compatArgs: Record<string, unknown> = {
+            query: (args as Record<string, unknown>)?.query,
+          };
+          const a = (args || {}) as Record<string, unknown>;
+          if (a.path !== undefined) compatArgs.scope = a.path;
+          if (a.limit !== undefined) compatArgs.token_budget = a.limit;
+          if (a.scope !== undefined) compatArgs.scope = a.scope;
+          if (a.token_budget !== undefined) compatArgs.token_budget = a.token_budget;
+          if (a.language !== undefined) compatArgs.language = a.language;
+          if (a.type !== undefined) compatArgs.type = a.type;
+          result = await handleSearch(indexer, compatArgs);
+          break;
+        }
+        case "get_indexing_status":
+          result = handleIndexStatus(indexer);
+          break;
+        case "index_codebase": {
+          const status = indexer.getStatus();
+          if (status.indexing) {
+            result =
+              `Indexing already in progress: ${status.progress?.done ?? 0}/` +
+              `${status.progress?.total ?? 0} files. Use get_indexing_status to monitor.`;
+          } else {
+            indexer.index().catch((err) => {
+              logError("index_codebase: indexing failed", err);
+            });
+            result =
+              `Started indexing ${status.projectName} at ${status.rootPath}. ` +
+              `Use get_indexing_status to monitor progress.`;
+          }
+          break;
+        }
+        case "clear_index": {
+          log("clear_index: wiping index database");
+          indexer.clearIndex();
+          indexer.index().catch((err) => {
+            logError("clear_index: reindex failed", err);
+          });
+          result =
+            "Index database deleted. Reindexing started in the background — " +
+            "use get_indexing_status to monitor progress.";
+          break;
+        }
+
+        default:
+          result = `Unknown tool: ${name}`;
+      }
+
+      // Hints
+      if (process.env.SVERKLO_DISABLE_HINTS !== "1") {
+        const argRecord = (args || {}) as Record<string, unknown>;
+        hints.record(name, argRecord);
+        const hintBlock = hints.buildHint(name, argRecord);
+        if (hintBlock) result = result + "\n" + hintBlock;
+      }
+
+      if (name.startsWith("sverklo_")) {
+        void track("tool.call", {
+          tool: name,
+          outcome: __telemetryOutcome,
+          duration_ms: Date.now() - __telemetryStart,
+        });
+      }
+
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    } catch (err) {
+      __telemetryOutcome = "error";
+      if (name.startsWith("sverklo_")) {
+        void track("tool.call", {
+          tool: name,
+          outcome: "error",
+          duration_ms: Date.now() - __telemetryStart,
+        });
+      }
+      const message = err instanceof Error ? err.message : "Unknown error";
+      logError(`Tool ${name} failed`, err);
+      return {
+        content: [{ type: "text", text: `Error: ${message}` }],
+        isError: true,
+      };
+    }
+  });
+
+  // Connect via stdio
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  log("MCP server started in global mode (multi-repo)");
+
+  // Handle shutdown
+  process.on("SIGINT", () => {
+    pool.close();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    pool.close();
     process.exit(0);
   });
 }

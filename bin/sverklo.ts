@@ -31,6 +31,73 @@ if (command === "init") {
   const projectPath = resolve(positional[1] || process.cwd());
   const { initProject } = await import("../src/init.js");
   await initProject(projectPath, { autoCapture, mineChats });
+
+  // Auto-register in the global registry
+  const { basename } = await import("node:path");
+  const { registerRepo, deriveRepoName } = await import("../src/registry/registry.js");
+  const repoName = deriveRepoName(projectPath);
+  registerRepo(repoName, projectPath);
+  console.log(`  Global registry — registered as "${repoName}"`);
+
+  process.exit(0);
+}
+
+if (command === "register") {
+  const targetPath = resolve(args[1] || process.cwd());
+  const { registerRepo, deriveRepoName, getRegistryPath } = await import("../src/registry/registry.js");
+  const repoName = args[2] || deriveRepoName(targetPath);
+  registerRepo(repoName, targetPath);
+  console.log(`Registered "${repoName}" -> ${targetPath}`);
+  console.log(`Registry: ${getRegistryPath()}`);
+  process.exit(0);
+}
+
+if (command === "unregister") {
+  const name = args[1];
+  if (!name) {
+    console.error("Usage: sverklo unregister <name>");
+    console.error("Use `sverklo list` to see registered repos.");
+    process.exit(1);
+  }
+  const { unregisterRepo, getRegistry } = await import("../src/registry/registry.js");
+  const repos = getRegistry();
+  if (!repos[name]) {
+    console.error(`Repo "${name}" not found in registry.`);
+    const available = Object.keys(repos);
+    if (available.length > 0) {
+      console.error(`Available: ${available.join(", ")}`);
+    }
+    process.exit(1);
+  }
+  unregisterRepo(name);
+  console.log(`Unregistered "${name}"`);
+  process.exit(0);
+}
+
+if (command === "list") {
+  const { getRegistry, getRegistryPath } = await import("../src/registry/registry.js");
+  const repos = getRegistry();
+  const entries = Object.entries(repos);
+  if (entries.length === 0) {
+    console.log("No repositories registered.");
+    console.log("Register with: sverklo register [path] or sverklo init");
+  } else {
+    console.log(`Registered repositories (${entries.length}):`);
+    console.log("");
+    const now = Date.now();
+    for (const [name, entry] of entries) {
+      const age = now - new Date(entry.lastIndexed).getTime();
+      const ageStr = age < 60_000 ? `${Math.floor(age / 1000)}s ago`
+        : age < 3_600_000 ? `${Math.floor(age / 60_000)} min ago`
+        : age < 86_400_000 ? `${Math.floor(age / 3_600_000)} hours ago`
+        : `${Math.floor(age / 86_400_000)} days ago`;
+      console.log(`  ${name}`);
+      console.log(`    path: ${entry.path}`);
+      console.log(`    last indexed: ${ageStr}`);
+      console.log("");
+    }
+    console.log(`Registry: ${getRegistryPath()}`);
+  }
   process.exit(0);
 }
 
@@ -224,6 +291,62 @@ if (command === "wakeup" || command === "wake-up") {
 }
 
 if (command === "setup" || command === "install") {
+  if (args.includes("--global")) {
+    // Write global MCP config for Claude Code pointing to the global sverklo server
+    const { existsSync, readFileSync, writeFileSync, mkdirSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const { execSync } = await import("node:child_process");
+
+    let sverkloBin = "sverklo";
+    try {
+      sverkloBin = execSync("command -v sverklo", { encoding: "utf-8" }).trim() || "sverklo";
+    } catch {}
+
+    // Claude Code global settings: ~/.claude/settings.json
+    const claudeSettingsDir = join(homedir(), ".claude");
+    const claudeSettingsPath = join(claudeSettingsDir, "settings.json");
+    mkdirSync(claudeSettingsDir, { recursive: true });
+
+    type ClaudeSettings = {
+      mcpServers?: Record<string, { command: string; args?: string[] }>;
+      permissions?: { allow?: string[] };
+      [key: string]: unknown;
+    };
+
+    let claudeSettings: ClaudeSettings = {};
+    if (existsSync(claudeSettingsPath)) {
+      try {
+        claudeSettings = JSON.parse(readFileSync(claudeSettingsPath, "utf-8"));
+      } catch {
+        claudeSettings = {};
+      }
+    }
+
+    if (!claudeSettings.mcpServers) claudeSettings.mcpServers = {};
+    claudeSettings.mcpServers.sverklo = {
+      command: sverkloBin,
+      args: [],  // No path arg = global mode
+    };
+
+    // Auto-allow sverklo tools
+    if (!claudeSettings.permissions) claudeSettings.permissions = {};
+    if (!claudeSettings.permissions.allow) claudeSettings.permissions.allow = [];
+    const allowList = claudeSettings.permissions.allow;
+    if (!allowList.some((p: string) => p === "mcp__sverklo__*" || p.startsWith("mcp__sverklo__"))) {
+      allowList.push("mcp__sverklo__*");
+    }
+
+    writeFileSync(claudeSettingsPath, JSON.stringify(claudeSettings, null, 2) + "\n");
+    console.log(`Global MCP config written to ${claudeSettingsPath}`);
+    console.log(`  Server command: ${sverkloBin} (no args = global mode)`);
+    console.log("");
+    console.log("The global sverklo server will serve all repos in ~/.sverklo/registry.json.");
+    console.log("Register repos with: sverklo register /path/to/project");
+    console.log("Or run `sverklo init` in each project directory.");
+    process.exit(0);
+  }
+
   const { setupModels } = await import("../src/indexer/setup.js");
   await setupModels();
   process.exit(0);
@@ -608,7 +731,12 @@ sverklo — code intelligence for AI agents
 Usage:
   sverklo init              Set up sverklo in your project (.mcp.json + CLAUDE.md)
   sverklo doctor            Diagnose MCP setup issues
-  sverklo [project-path]    Start the MCP server (stdio transport)
+  sverklo [project-path]    Start the MCP server (stdio transport, single project)
+  sverklo                   Start in global mode (serves all registered repos)
+  sverklo register [path]   Add a directory to the global registry
+  sverklo unregister <name> Remove a repo from the global registry
+  sverklo list              List all registered repositories
+  sverklo setup --global    Write global MCP config for Claude Code (multi-repo)
   sverklo ui [project-path] Open the web dashboard
   sverklo wakeup            Print compressed project context (for system-prompt injection)
   sverklo wiki              Generate a markdown wiki from the indexed codebase
@@ -619,10 +747,16 @@ Usage:
   sverklo telemetry         Manage opt-in telemetry (off by default)
   sverklo --help            Show this help
 
-Quick start:
+Quick start (single project):
   npm install -g sverklo
   cd your-project && sverklo init
   claude   # start coding — sverklo tools are preferred automatically
+
+Quick start (multi-repo, global):
+  sverklo register /path/to/project-a
+  sverklo register /path/to/project-b
+  sverklo setup --global    # writes ~/.claude/settings.json
+  claude                    # sverklo serves both repos via one MCP server
 
 Environment:
   SVERKLO_DEBUG=1   Enable debug logging to stderr
@@ -652,8 +786,9 @@ if (modeResolution.mode !== "embedded") {
 
 // Strip any --mode=... arg before resolving the project path so it
 // doesn't get treated as a directory name.
-const positionalArgs = args.filter((a) => !a.startsWith("--mode="));
-const rootPath = resolve(positionalArgs[0] || process.cwd());
+const positionalArgs = args.filter((a) => !a.startsWith("--mode=") && !a.startsWith("--global"));
+const hasExplicitPath = positionalArgs.length > 0 && positionalArgs[0] !== undefined;
+const isGlobalFlag = args.includes("--global");
 
 // Auto-download model if missing (no separate setup step needed)
 const { existsSync } = await import("node:fs");
@@ -668,8 +803,36 @@ if (!existsSync(join(modelDir, "model.onnx"))) {
   });
 }
 
-const { startMcpServer } = await import("../src/index.js");
-startMcpServer(rootPath).catch((err) => {
-  console.error("Failed to start sverklo:", err);
-  process.exit(1);
-});
+// Global mode: when no project path is given (or --global is passed),
+// check if the registry has repos and start the multi-repo MCP server.
+if (isGlobalFlag || !hasExplicitPath) {
+  const { getRegistry } = await import("../src/registry/registry.js");
+  const repos = getRegistry();
+  const repoCount = Object.keys(repos).length;
+
+  if (repoCount > 0 || isGlobalFlag) {
+    // Start in global (multi-repo) mode
+    const { startGlobalMcpServer } = await import("../src/index.js");
+    startGlobalMcpServer().catch((err) => {
+      console.error("Failed to start sverklo (global mode):", err);
+      process.exit(1);
+    });
+  } else {
+    // No repos registered and no path given — fall through to single-project mode
+    // using cwd, matching the original behavior.
+    const rootPath = resolve(process.cwd());
+    const { startMcpServer } = await import("../src/index.js");
+    startMcpServer(rootPath).catch((err) => {
+      console.error("Failed to start sverklo:", err);
+      process.exit(1);
+    });
+  }
+} else {
+  // Single-project mode (backward compatible)
+  const rootPath = resolve(positionalArgs[0]);
+  const { startMcpServer } = await import("../src/index.js");
+  startMcpServer(rootPath).catch((err) => {
+    console.error("Failed to start sverklo:", err);
+    process.exit(1);
+  });
+}
