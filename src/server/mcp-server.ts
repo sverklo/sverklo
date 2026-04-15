@@ -584,13 +584,18 @@ export async function startGlobalMcpServer(): Promise<void> {
     contents: [],
   }));
 
-  // Prompts
+  // Prompts — inject `repo` argument in global mode
+  const globalPrompts = ALL_PROMPTS.map((p) => ({
+    name: p.name,
+    description: p.description,
+    arguments: [
+      { name: "repo", description: "Repository name (from sverklo_list_repos). Optional if only one repo is indexed.", required: false },
+      ...p.arguments,
+    ],
+  }));
+
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({
-    prompts: ALL_PROMPTS.map((p) => ({
-      name: p.name,
-      description: p.description,
-      arguments: p.arguments,
-    })),
+    prompts: globalPrompts,
   }));
 
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
@@ -599,12 +604,23 @@ export async function startGlobalMcpServer(): Promise<void> {
       throw new Error(`Unknown prompt: ${request.params.name}`);
     }
     const args = (request.params.arguments || {}) as Record<string, string | undefined>;
+    const repoArg = args.repo;
+    let text = prompt.build(args);
+    // In global mode, prepend a repo instruction so the agent passes repo to every tool call
+    if (repoArg) {
+      text = `**Important:** For every sverklo tool call in this workflow, include \`repo:"${repoArg}"\` as a parameter.\n\n${text}`;
+    } else {
+      const repos = pool.listRepos();
+      if (repos.length > 1) {
+        text = `**Note:** Multiple repos are indexed (${repos.join(", ")}). Specify \`repo:"<name>"\` in each tool call, or re-run this prompt with the \`repo\` argument.\n\n${text}`;
+      }
+    }
     return {
       description: prompt.description,
       messages: [
         {
           role: "user" as const,
-          content: { type: "text" as const, text: prompt.build(args) },
+          content: { type: "text" as const, text },
         },
       ],
     };
