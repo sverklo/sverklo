@@ -1,5 +1,6 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { resolveBudget } from "../../utils/budget.js";
+import { analyzeCodebase } from "../audit-analysis.js";
 
 export const auditTool = {
   name: "sverklo_audit",
@@ -119,6 +120,9 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
+  // ─── Run analysis (health score, security, circular deps) ───
+  const analysis = analyzeCodebase(indexer);
+
   // ─── Build markdown report with section-level budgeting ───
   const sections: string[] = [];
   let usedTokens = 0;
@@ -135,9 +139,21 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     return true;
   }
 
-  // Header + Overview
+  // Header with grade + health score table
+  {
+    const hsLines: string[] = [];
+    hsLines.push(`# Sverklo Project Audit — Grade: ${analysis.healthScore.grade}\n`);
+    hsLines.push(`| Dimension | Score | Detail |`);
+    hsLines.push(`|---|---|---|`);
+    for (const d of analysis.healthScore.dimensions) {
+      hsLines.push(`| ${d.name} | ${d.grade} | ${d.detail} |`);
+    }
+    hsLines.push("");
+    if (!addSection(hsLines.join("\n"))) return sections.join("\n");
+  }
+
+  // Overview
   const overviewLines: string[] = [];
-  overviewLines.push(`# Sverklo Project Audit\n`);
   overviewLines.push(`## Overview\n`);
   overviewLines.push(`- **${files.length}** files indexed`);
   overviewLines.push(`- **${chunkCount}** code symbols extracted`);
@@ -216,6 +232,55 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     }
     memLines.push("");
     if (!addSection(memLines.join("\n"))) return sections.join("\n");
+  }
+
+  // Circular Dependencies
+  if (analysis.circularDeps.length > 0) {
+    const cycleLines: string[] = [];
+    cycleLines.push(
+      `## Circular Dependencies (${analysis.circularDeps.length} cycle${analysis.circularDeps.length === 1 ? "" : "s"})`
+    );
+    cycleLines.push("");
+    for (let i = 0; i < analysis.circularDeps.length; i++) {
+      const cycle = analysis.circularDeps[i];
+      // Show as: a -> b -> c -> a (closing the loop)
+      const display = [...cycle, cycle[0]].join(" -> ");
+      cycleLines.push(`${i + 1}. ${display}`);
+    }
+    cycleLines.push("");
+    if (!addSection(cycleLines.join("\n"))) return sections.join("\n");
+  }
+
+  // Security Issues
+  if (analysis.securityIssues.length > 0) {
+    const secLines: string[] = [];
+    secLines.push(
+      `## Security Issues (${analysis.securityIssues.length} found)`
+    );
+    secLines.push("");
+    // Group by severity
+    const bySeverity = new Map<string, typeof analysis.securityIssues>();
+    for (const issue of analysis.securityIssues) {
+      if (!bySeverity.has(issue.severity)) bySeverity.set(issue.severity, []);
+      bySeverity.get(issue.severity)!.push(issue);
+    }
+    const severityOrder = ["critical", "high", "medium", "low"];
+    for (const sev of severityOrder) {
+      const group = bySeverity.get(sev);
+      if (!group || group.length === 0) continue;
+      secLines.push(`### ${sev.charAt(0).toUpperCase() + sev.slice(1)} (${group.length})`);
+      for (const issue of group.slice(0, 10)) {
+        secLines.push(
+          `- **${issue.pattern}** — \`${issue.file}:${issue.line}\``
+        );
+        secLines.push(`  \`${issue.snippet}\``);
+      }
+      if (group.length > 10) {
+        secLines.push(`- _...and ${group.length - 10} more_`);
+      }
+      secLines.push("");
+    }
+    if (!addSection(secLines.join("\n"))) return sections.join("\n");
   }
 
   // Suggested queries
