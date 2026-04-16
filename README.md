@@ -12,6 +12,8 @@ _Sverklo_ (Russian: **сверкло**, _SVERK-lo_) — archaic past tense of "�
 
 [![Star History Chart](https://api.star-history.com/svg?repos=sverklo/sverklo&type=Date)](https://star-history.com/#sverklo/sverklo&Date)
 
+![Sverklo demo — audit and badge](./docs/demo.gif)
+
 ## Stop re-explaining your codebase to your AI.
 
 Sverklo is a local-first code intelligence MCP server that gives **Claude Code, Cursor, Windsurf, VS Code, JetBrains, and Google Antigravity** the same mental model of your repo that a senior engineer has. Hybrid semantic search, symbol-level blast-radius analysis, diff-aware PR review, and memory pinned to git state — running entirely on your laptop.
