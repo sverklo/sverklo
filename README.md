@@ -367,9 +367,14 @@ Still stuck? File an issue with the output of `sverklo doctor` attached. We tria
 | [Aider repo-map](https://aider.chat/docs/repomap.html) | ✓ | ✓ | ✗ | ✓ basic | ✗ | ✗ | Apache 2.0 | $0 |
 | [Greptile](https://greptile.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | ✓ | proprietary | $30/dev/mo |
 | [Augment](https://augmentcode.com) | ✗ cloud | ✗ | ✓ | ✓ | ✗ | partial | proprietary | $20–200/mo |
+| [Serena](https://github.com/oraios/serena) | ✓ | ✓ MIT | ✓ LSP-based | ✓ | ✗ | ✗ | MIT | $0 |
+| [GitNexus](https://github.com/AkonLabs/gitnexus) | ✓ | ✗ **NonCommercial** | ✓ | ✓ graph | ✗ | ✗ | PolyForm NC | $0 personal only |
+| [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | ✓ | ✓ MIT | ✓ AST | ✓ knowledge graph | ✗ | ✗ | MIT | $0 |
+| [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext) | ✓ | ✓ MIT | ✗ | ✓ graph DB | ✗ | ✗ | MIT | $0 |
+| [Repomix](https://github.com/yamadashy/repomix) | ✓ | ✓ MIT | ✗ dump only | ✗ | ✗ | ✗ | MIT | $0 |
 | [claude-mem](https://github.com/themanojdesai/claude-mem) | ✓ | ✓ | ✗ | ✗ | ✓ ChromaDB | ✗ | MIT | $0 |
 
-Sverklo is the only tool that combines **hybrid code search + symbol graph + memory + diff-aware review** in one local-first MCP server.
+Sverklo is the only tool that combines **hybrid code search + symbol graph + memory + diff-aware review** in one local-first MCP server. GitNexus has the most stars (27.6k) but its **PolyForm Noncommercial license** prohibits commercial use — Sverklo is MIT, no restrictions.
 
 ## Configuration
 
@@ -444,6 +449,18 @@ sverklo audit --format html --open
 Generates a self-contained HTML report: god nodes, hub files, orphan detection, coupling analysis, language distribution. Dark theme, shareable artifact.
 
 Formats: `markdown` (default), `html`, `json`.
+
+### `sverklo audit --badge` — add a health grade to your README
+
+```bash
+sverklo audit --badge
+```
+
+Outputs a shields.io badge with your project's A–F health grade. Paste the markdown into your README:
+
+[![Sverklo Health: B](https://img.shields.io/badge/sverklo-B-green)](https://sverklo.com)
+
+The grade combines four dimensions: dead code %, circular dependencies, coupling (max fan-in), and security issues. [Learn more →](https://sverklo.com/badge/)
 
 ### GitHub Action
 

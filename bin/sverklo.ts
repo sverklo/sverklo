@@ -587,7 +587,7 @@ if (command === "audit") {
   // CLI audit subcommand: indexes the repo, runs audit analysis,
   // outputs markdown, HTML, or JSON.
   //
-  //   sverklo audit [--format markdown|html|json] [--output <path>] [--open]
+  //   sverklo audit [--format markdown|html|json] [--output <path>] [--open] [--badge] [--publish]
 
   const flags = args.slice(1);
   const flagVal = (name: string, fallback: string): string => {
@@ -598,6 +598,8 @@ if (command === "audit") {
   const format = flagVal("--format", "markdown") as "markdown" | "html" | "json";
   const outputPath = flagVal("--output", format === "html" ? "sverklo-audit.html" : "");
   const shouldOpen = flags.includes("--open");
+  const shouldBadge = flags.includes("--badge");
+  const shouldPublish = flags.includes("--publish");
 
   const projectPath = resolve(process.cwd());
 
@@ -621,6 +623,66 @@ if (command === "audit") {
 
   const mdOutput = handleAudit(indexer, { token_budget: 16000 });
   indexer.close();
+
+  if (shouldBadge || shouldPublish) {
+    // Extract grade from the audit output (first line: "# Sverklo Project Audit — Grade: X")
+    const gradeMatch = mdOutput.match(/Grade:\s*([ABCDF])/);
+    const grade = gradeMatch ? gradeMatch[1] : "?";
+
+    if (shouldPublish) {
+      // Detect owner/repo from git remote
+      const { execSync: exec } = await import("node:child_process");
+      let owner = "", repo = "";
+      try {
+        const remote = exec("git remote get-url origin", { cwd: projectPath, encoding: "utf8" }).trim();
+        const m = remote.match(/[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/);
+        if (m) { owner = m[1]; repo = m[2]; }
+      } catch { /* no git remote */ }
+
+      if (!owner || !repo) {
+        console.error("Could not detect owner/repo from git remote. Run from a git repo with a remote.");
+        process.exit(1);
+      }
+
+      // Extract dimensions from audit output
+      const dimLines = mdOutput.match(/\| (Dead code|Circular deps|Coupling|Security) \| ([ABCDF]) \| (.+?) \|/g) || [];
+      const dimensions = dimLines.map(line => {
+        const m = line.match(/\| (.+?) \| ([ABCDF]) \| (.+?) \|/);
+        return m ? { name: m[1], grade: m[2], detail: m[3] } : null;
+      }).filter(Boolean);
+
+      console.log(`Publishing grade ${grade} for ${owner}/${repo}...`);
+      try {
+        const res = await fetch("https://t.sverklo.com/v1/badge/publish", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ owner, repo, grade, dimensions, version: "0.8.0" }),
+        });
+        if (res.ok) {
+          const badgeUrl = `https://sverklo.com/api/badge/${owner}/${repo}.svg`;
+          console.log(`\nPublished! Your dynamic badge:`);
+          console.log(`\n[![Sverklo Health: ${grade}](${badgeUrl})](https://sverklo.com/report/${owner}/${repo})\n`);
+          console.log(`Badge URL: ${badgeUrl}`);
+        } else {
+          console.error(`Publish failed: ${res.status} ${await res.text()}`);
+        }
+      } catch (e) {
+        console.error(`Publish failed: ${e}`);
+      }
+      process.exit(0);
+    }
+
+    // --badge only (static, no publish)
+    const colorMap: Record<string, string> = { A: "brightgreen", B: "green", C: "yellow", D: "orange", F: "red" };
+    const color = colorMap[grade] || "lightgrey";
+    const badge = `[![Sverklo Health: ${grade}](https://img.shields.io/badge/sverklo-${grade}-${color})](https://sverklo.com)`;
+    console.log("\n── Sverklo Health Badge ──\n");
+    console.log("Add this to your README.md:\n");
+    console.log(badge);
+    console.log("\nFor a dynamic badge that auto-updates, run: sverklo audit --publish\n");
+    console.log("── Learn more: https://sverklo.com/badge/ ──\n");
+    process.exit(0);
+  }
 
   if (format === "json") {
     // Wrap in a simple JSON envelope

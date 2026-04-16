@@ -300,5 +300,13 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     addSection(suggestLines.join("\n"));
   }
 
+  // Badge hint at the end of every audit
+  {
+    const grade = analysis.healthScore.grade;
+    const colorMap: Record<string, string> = { A: "brightgreen", B: "green", C: "yellow", D: "orange", F: "red" };
+    const color = colorMap[grade] || "lightgrey";
+    addSection(`---\n\n**Add this badge to your README:** \`[![Sverklo Health: ${grade}](https://img.shields.io/badge/sverklo-${grade}-${color})](https://sverklo.com)\`\n\nRun \`sverklo audit --badge\` for copy-paste markdown.\n`);
+  }
+
   return sections.join("\n");
 }

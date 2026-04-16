@@ -56,7 +56,17 @@
     "refactor",
     "impact-analysis",
     "memory",
-    "git-aware"
+    "git-aware",
+    "code-review",
+    "static-analysis",
+    "dependency-graph",
+    "codebase-health",
+    "ai-code-review",
+    "code-quality",
+    "blast-radius",
+    "technical-debt",
+    "reciprocal-rank-fusion",
+    "zed"
   ],
   "homepage": "https://sverklo.com",
   "repository": {

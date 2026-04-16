@@ -246,6 +246,15 @@ export default {
       if (authResult) return authResult;
       return handleStatsUi();
     }
+    // Route: publish badge grade
+    if (url.pathname === "/v1/badge/publish") {
+      return handleBadgePublish(req, env);
+    }
+    // Route: serve badge SVG
+    const badgeMatch = url.pathname.match(/^\/v1\/badge\/([^/]+)\/([^/]+)\.svg$/);
+    if (badgeMatch && req.method === "GET") {
+      return handleBadgeSvg(badgeMatch[1], badgeMatch[2], env);
+    }
     return new Response("Not found", { status: 404 });
   },
 };
@@ -791,4 +800,175 @@ async function handleStats(
   // 60s is a cheap hit. Clone because Response bodies are single-use.
   ctx.waitUntil(caches.default.put(cacheKey, response.clone()));
   return response;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Badge API — publish + serve health grade badges
+// ────────────────────────────────────────────────────────────────────
+//
+// POST /v1/badge/publish — CLI sends audit grade for a repo.
+// GET  /v1/badge/:owner/:repo.svg — returns an SVG badge with the grade.
+//
+// Grades are stored in R2 at badges/<owner>/<repo>.json.
+// The badge is generated as inline SVG (no external dependency).
+
+const VALID_GRADES = new Set(["A", "B", "C", "D", "F"]);
+const GRADE_COLORS: Record<string, string> = {
+  A: "#4c1",
+  B: "#97ca00",
+  C: "#dfb317",
+  D: "#fe7d37",
+  F: "#e05d44",
+};
+
+interface BadgeData {
+  owner: string;
+  repo: string;
+  grade: string;
+  dimensions: { name: string; grade: string; detail: string }[];
+  version: string;
+  ts: number;
+}
+
+function isValidBadgePublish(b: unknown): b is Omit<BadgeData, "ts"> {
+  if (!b || typeof b !== "object") return false;
+  const r = b as Record<string, unknown>;
+  if (typeof r.owner !== "string" || r.owner.length < 1 || r.owner.length > 100) return false;
+  if (typeof r.repo !== "string" || r.repo.length < 1 || r.repo.length > 100) return false;
+  if (typeof r.grade !== "string" || !VALID_GRADES.has(r.grade)) return false;
+  if (typeof r.version !== "string" || r.version.length > 32) return false;
+  // owner/repo must be alphanumeric + hyphens + underscores + dots
+  if (!/^[a-zA-Z0-9._-]+$/.test(r.owner)) return false;
+  if (!/^[a-zA-Z0-9._-]+$/.test(r.repo)) return false;
+  return true;
+}
+
+async function handleBadgePublish(req: Request, env: Env): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+  const ct = req.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    return new Response("Unsupported media type", { status: 415 });
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response("Bad request", { status: 400 });
+  }
+
+  if (!isValidBadgePublish(body)) {
+    return new Response("Invalid badge data", { status: 400 });
+  }
+
+  const sanitized: BadgeData = {
+    owner: body.owner.toLowerCase(),
+    repo: body.repo.toLowerCase(),
+    grade: body.grade,
+    dimensions: Array.isArray(body.dimensions)
+      ? (body.dimensions as { name: string; grade: string; detail: string }[])
+          .slice(0, 10)
+          .map((d) => ({
+            name: String(d.name || "").slice(0, 50),
+            grade: String(d.grade || "").slice(0, 2),
+            detail: String(d.detail || "").slice(0, 200),
+          }))
+      : [],
+    version: body.version,
+    ts: Math.floor(Date.now() / 1000),
+  };
+
+  const key = `badges/${sanitized.owner}/${sanitized.repo}.json`;
+  try {
+    await env.TELEMETRY_BUCKET.put(key, JSON.stringify(sanitized));
+  } catch {
+    return new Response("Storage error", { status: 500 });
+  }
+
+  return new Response(JSON.stringify({ ok: true, badge_url: `https://t.sverklo.com/v1/badge/${sanitized.owner}/${sanitized.repo}.svg` }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "access-control-allow-origin": "*",
+    },
+  });
+}
+
+function makeBadgeSvg(grade: string): string {
+  const color = GRADE_COLORS[grade] || "#9f9f9f";
+  const labelWidth = 52;
+  const valueWidth = 28;
+  const totalWidth = labelWidth + valueWidth;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20" role="img" aria-label="sverklo: ${grade}">
+  <title>sverklo: ${grade}</title>
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="${totalWidth}" height="20" rx="3" fill="#fff"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="${labelWidth}" height="20" fill="#555"/>
+    <rect x="${labelWidth}" width="${valueWidth}" height="20" fill="${color}"/>
+    <rect width="${totalWidth}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text aria-hidden="true" x="${labelWidth * 5 + 10}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="${(labelWidth - 10) * 10}">sverklo</text>
+    <text x="${labelWidth * 5 + 10}" y="140" transform="scale(.1)" fill="#fff" textLength="${(labelWidth - 10) * 10}">sverklo</text>
+    <text aria-hidden="true" x="${(labelWidth + valueWidth / 2) * 10 + 10}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="${(valueWidth - 10) * 10}">${grade}</text>
+    <text x="${(labelWidth + valueWidth / 2) * 10 + 10}" y="140" transform="scale(.1)" fill="#fff" textLength="${(valueWidth - 10) * 10}">${grade}</text>
+  </g>
+</svg>`;
+}
+
+async function handleBadgeSvg(owner: string, repo: string, env: Env): Promise<Response> {
+  const key = `badges/${owner.toLowerCase()}/${repo.toLowerCase()}.json`;
+  let grade = "?";
+  try {
+    const obj = await env.TELEMETRY_BUCKET.get(key);
+    if (obj) {
+      const data = JSON.parse(await obj.text());
+      if (data.grade && VALID_GRADES.has(data.grade)) {
+        grade = data.grade;
+      }
+    }
+  } catch {
+    // Fall through with "?" grade
+  }
+
+  if (grade === "?") {
+    // No audit published — return a "not audited" badge
+    return new Response(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20" role="img" aria-label="sverklo: not audited">
+  <title>sverklo: not audited</title>
+  <clipPath id="r"><rect width="100" height="20" rx="3" fill="#fff"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="52" height="20" fill="#555"/>
+    <rect x="52" width="48" height="20" fill="#9f9f9f"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text x="270" y="140" transform="scale(.1)" fill="#fff" textLength="420">sverklo</text>
+    <text x="760" y="140" transform="scale(.1)" fill="#fff" textLength="380">n/a</text>
+  </g>
+</svg>`,
+      {
+        status: 200,
+        headers: {
+          "content-type": "image/svg+xml",
+          "cache-control": "public, max-age=300",
+          "access-control-allow-origin": "*",
+        },
+      }
+    );
+  }
+
+  return new Response(makeBadgeSvg(grade), {
+    status: 200,
+    headers: {
+      "content-type": "image/svg+xml",
+      "cache-control": "public, max-age=300",
+      "access-control-allow-origin": "*",
+    },
+  });
 }
