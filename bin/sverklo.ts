@@ -474,6 +474,54 @@ Design doc: https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md
   process.exit(0);
 }
 
+if (command === "trace") {
+  const { existsSync, readFileSync } = await import("node:fs");
+  const { TRACE_PATH } = await import("../src/utils/trace.js");
+
+  if (!existsSync(TRACE_PATH)) {
+    console.log("No trace log found at " + TRACE_PATH);
+    console.log("Traces are recorded when SVERKLO_DEBUG=1 or SVERKLO_TRACE=1 is set.");
+    process.exit(0);
+  }
+
+  const content = readFileSync(TRACE_PATH, "utf-8").trim();
+  if (!content) {
+    console.log("Trace log is empty.");
+    process.exit(0);
+  }
+
+  const lines = content.split("\n");
+  const count = parseInt(args[1] || "20", 10) || 20;
+  const recent = lines.slice(-count);
+
+  console.log(`\n  Sverklo Trace Log (last ${Math.min(count, recent.length)} entries)\n`);
+  console.log("  " + "-".repeat(70));
+
+  for (const line of recent) {
+    try {
+      const entry = JSON.parse(line);
+      const time = new Date(entry.ts).toISOString().replace("T", " ").replace("Z", "");
+
+      if (entry.phase === "request") {
+        const argStr = Object.keys(entry.args || {}).length > 0
+          ? " " + JSON.stringify(entry.args)
+          : "";
+        console.log(`  ${time}  ${entry.trace}  -> ${entry.tool}${argStr}`);
+      } else if (entry.phase === "response") {
+        console.log(`  ${time}  ${entry.trace}  <- ${entry.duration_ms}ms  ${entry.result_chars} chars`);
+      } else if (entry.phase === "error") {
+        console.log(`  ${time}  ${entry.trace}  !! ${entry.duration_ms}ms  ${entry.error}`);
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  console.log("  " + "-".repeat(70));
+  console.log(`  Log: ${TRACE_PATH}\n`);
+  process.exit(0);
+}
+
 if (command === "review") {
   // CI-friendly review subcommand: indexes the repo, runs review_diff,
   // prints markdown (or JSON) to stdout, and optionally exits non-zero if
@@ -843,6 +891,7 @@ Usage:
   sverklo audit-prompt      Print a ready-to-paste codebase-audit prompt (hybrid workflow)
   sverklo review-prompt     Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
   sverklo setup             Download the embedding model (~90MB)
+  sverklo trace             Show recent tool call traces (set SVERKLO_TRACE=1)
   sverklo telemetry         Manage opt-in telemetry (off by default)
   sverklo --help            Show this help
 

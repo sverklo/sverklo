@@ -53,6 +53,7 @@ import { IndexerPool } from "../registry/indexer-pool.js";
 import { startHttpServer } from "./http-server.js";
 import { track } from "../telemetry/index.js";
 import { applyToolOverrides } from "./tool-overrides.js";
+import { traceStart } from "../utils/trace.js";
 
 // Zilliz claude-context compatibility tool definitions.
 // These mirror github.com/zilliztech/claude-context tool names so users can
@@ -332,6 +333,8 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     const __telemetryStart = Date.now();
     let __telemetryOutcome: "ok" | "error" | "timeout" = "ok";
 
+    const trace = traceStart(name, (args || {}) as Record<string, unknown>);
+
     try {
       let result: string;
 
@@ -474,11 +477,14 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         });
       }
 
+      trace.end(result.length);
+
       return {
         content: [{ type: "text", text: result }],
       };
     } catch (err) {
       __telemetryOutcome = "error";
+      trace.error(err);
       if (name.startsWith("sverklo_")) {
         void track("tool.call", {
           tool: name,
@@ -680,6 +686,8 @@ export async function startGlobalMcpServer(): Promise<void> {
     const __telemetryStart = Date.now();
     let __telemetryOutcome: "ok" | "error" | "timeout" = "ok";
 
+    const trace = traceStart(name, (args || {}) as Record<string, unknown>);
+
     try {
       const indexer = pool.getIndexer(repoName);
 
@@ -826,11 +834,14 @@ export async function startGlobalMcpServer(): Promise<void> {
         });
       }
 
+      trace.end(result.length);
+
       return {
         content: [{ type: "text", text: result }],
       };
     } catch (err) {
       __telemetryOutcome = "error";
+      trace.error(err);
       if (name.startsWith("sverklo_")) {
         void track("tool.call", {
           tool: name,
