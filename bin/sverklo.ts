@@ -595,7 +595,7 @@ if (command === "audit") {
     return idx !== -1 && flags[idx + 1] ? flags[idx + 1] : fallback;
   };
 
-  const format = flagVal("--format", "markdown") as "markdown" | "html" | "json" | "graph";
+  const format = flagVal("--format", "markdown") as "markdown" | "html" | "json" | "graph" | "arch";
   const outputPath = flagVal("--output", format === "html" ? "sverklo-audit.html" : "");
   const shouldOpen = flags.includes("--open");
   const shouldBadge = flags.includes("--badge");
@@ -633,6 +633,24 @@ if (command === "audit") {
     const out = outputPath || "sverklo-graph.html";
     writeFileSync(out, html);
     console.log(`Dependency graph written to ${out}`);
+    if (shouldOpen) {
+      const { execSync } = await import("node:child_process");
+      const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+      try { execSync(`${cmd} ${out}`); } catch { /* ignore */ }
+    }
+    process.exit(0);
+  }
+
+  if (format === "arch") {
+    const { analyzeCodebase } = await import("../src/server/audit-analysis.js");
+    const { generateAuditArch } = await import("../src/server/audit-arch.js");
+    const analysis = analyzeCodebase(indexer);
+    const html = generateAuditArch(indexer, analysis, config.name);
+    indexer.close();
+    const { writeFileSync } = await import("node:fs");
+    const out = outputPath || "sverklo-arch.html";
+    writeFileSync(out, html);
+    console.log(`Architecture diagram written to ${out}`);
     if (shouldOpen) {
       const { execSync } = await import("node:child_process");
       const cmd = process.platform === "darwin" ? "open" : "xdg-open";
