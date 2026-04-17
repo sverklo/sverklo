@@ -156,6 +156,9 @@ export function scanSecurity(indexer: Indexer): SecurityIssue[] {
     Array<{ line: number; snippet: string }>
   >();
 
+  // Regex to detect comment/JSDoc/documentation lines
+  const COMMENT_LINE = /^\s*(\/\/|\/?\*|\*\/|#|<!--)/;
+
   for (const chunk of allChunks) {
     const filePath = chunk.filePath;
 
@@ -168,6 +171,12 @@ export function scanSecurity(indexer: Indexer): SecurityIssue[] {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const absoluteLine = chunk.start_line + i;
+
+      // Skip comment/JSDoc lines — they aren't executable code
+      if (COMMENT_LINE.test(line)) continue;
+
+      // Skip test/example files for all security patterns except critical (real secrets)
+      if (isTestFile) continue;
 
       // Check all security patterns
       for (const pattern of SECURITY_PATTERNS) {
@@ -223,20 +232,30 @@ export function scanSecurity(indexer: Indexer): SecurityIssue[] {
 
 // ─── Circular Dependency Detection ───
 
+/** Paths that should be excluded from structural analysis (cycles, coupling). */
+const NON_PRODUCTION_PATH =
+  /(^|\/)(tests?|__tests__|spec|specs|examples?|benchmarks?|fixtures?|scripts?|docs?|stories)(\/|$)/;
+
 export function detectCycles(
   files: Array<{ id: number; path: string }>,
   edges: Array<{ source_file_id: number; target_file_id: number }>
 ): string[][] {
-  // Build adjacency list
+  // Build adjacency list — exclude test/example files
   const adj = new Map<number, number[]>();
   const idToPath = new Map<number, string>();
+  const excludedIds = new Set<number>();
 
   for (const f of files) {
+    if (NON_PRODUCTION_PATH.test(f.path)) {
+      excludedIds.add(f.id);
+      continue;
+    }
     idToPath.set(f.id, f.path);
     adj.set(f.id, []);
   }
 
   for (const e of edges) {
+    if (excludedIds.has(e.source_file_id) || excludedIds.has(e.target_file_id)) continue;
     const neighbors = adj.get(e.source_file_id);
     if (neighbors) {
       neighbors.push(e.target_file_id);
@@ -320,6 +339,11 @@ function normalizeCycle(cycle: string[]): string[] {
 
 // ─── Coupling: max fan-in ───
 
+/** Check if a file is a barrel/re-export file (index.ts, index.js, mod.ts) */
+function isBarrelFile(path: string): boolean {
+  return /(?:^|\/)(index|mod)\.[jt]sx?$/.test(path);
+}
+
 function computeMaxFanIn(
   files: Array<{ id: number; path: string }>,
   edges: Array<{ source_file_id: number; target_file_id: number }>
@@ -331,6 +355,9 @@ function computeMaxFanIn(
 
   const importerCount = new Map<number, number>();
   for (const e of edges) {
+    // Exclude edges from test/example files
+    const sourcePath = idToPath.get(e.source_file_id);
+    if (sourcePath && NON_PRODUCTION_PATH.test(sourcePath)) continue;
     importerCount.set(
       e.target_file_id,
       (importerCount.get(e.target_file_id) || 0) + 1
@@ -340,9 +367,14 @@ function computeMaxFanIn(
   let maxFanIn = 0;
   let maxFile = "";
   for (const [fileId, count] of importerCount) {
+    const path = idToPath.get(fileId) || `file#${fileId}`;
+    // Skip barrel files (index.ts) — high fan-in on re-exports is normal, not problematic
+    if (isBarrelFile(path)) continue;
+    // Skip test/example files
+    if (NON_PRODUCTION_PATH.test(path)) continue;
     if (count > maxFanIn) {
       maxFanIn = count;
-      maxFile = idToPath.get(fileId) || `file#${fileId}`;
+      maxFile = path;
     }
   }
 
@@ -374,6 +406,25 @@ function computeDeadCodePct(indexer: Indexer): {
       !NON_SHIPPING.test(c.filePath)
   );
 
+  // Detect if this is a library (has exports in package.json or barrel files)
+  // by checking if there are barrel/index files — if so, exempt exported symbols
+  const hasBarrels = allChunks.some((c) => isBarrelFile(c.filePath));
+
+  // Collect names that are re-exported from barrel files (public API)
+  const publicApiNames = new Set<string>();
+  if (hasBarrels) {
+    for (const c of allChunks) {
+      if (isBarrelFile(c.filePath) && c.content) {
+        // Match export { X } from, export { X as Y } from, export * from
+        const exportMatches = c.content.matchAll(/export\s*\{([^}]+)\}/g);
+        for (const m of exportMatches) {
+          const names = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim());
+          for (const n of names) if (n) publicApiNames.add(n);
+        }
+      }
+    }
+  }
+
   let orphanCount = 0;
   for (const c of namedChunks) {
     if (
@@ -383,6 +434,10 @@ function computeDeadCodePct(indexer: Indexer): {
     const fullName = c.name!;
     const dot = fullName.lastIndexOf(".");
     const bareName = dot >= 0 ? fullName.slice(dot + 1) : fullName;
+
+    // Skip symbols that are part of the public API (exported from barrel files)
+    if (publicApiNames.has(bareName) || publicApiNames.has(fullName)) continue;
+
     const refs =
       (refsByName.get(fullName) || 0) +
       (dot >= 0 ? refsByName.get(bareName) || 0 : 0);
