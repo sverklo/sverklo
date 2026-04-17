@@ -595,7 +595,7 @@ if (command === "audit") {
     return idx !== -1 && flags[idx + 1] ? flags[idx + 1] : fallback;
   };
 
-  const format = flagVal("--format", "markdown") as "markdown" | "html" | "json";
+  const format = flagVal("--format", "markdown") as "markdown" | "html" | "json" | "graph";
   const outputPath = flagVal("--output", format === "html" ? "sverklo-audit.html" : "");
   const shouldOpen = flags.includes("--open");
   const shouldBadge = flags.includes("--badge");
@@ -622,6 +622,25 @@ if (command === "audit") {
   await indexer.index();
 
   const mdOutput = handleAudit(indexer, { token_budget: 16000 });
+
+  if (format === "graph") {
+    const { analyzeCodebase } = await import("../src/server/audit-analysis.js");
+    const { generateAuditGraph } = await import("../src/server/audit-graph.js");
+    const analysis = analyzeCodebase(indexer);
+    const html = generateAuditGraph(indexer, analysis, config.name);
+    indexer.close();
+    const { writeFileSync } = await import("node:fs");
+    const out = outputPath || "sverklo-graph.html";
+    writeFileSync(out, html);
+    console.log(`Dependency graph written to ${out}`);
+    if (shouldOpen) {
+      const { execSync } = await import("node:child_process");
+      const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+      try { execSync(`${cmd} ${out}`); } catch { /* ignore */ }
+    }
+    process.exit(0);
+  }
+
   indexer.close();
 
   if (shouldBadge || shouldPublish) {
