@@ -42,6 +42,13 @@ const COMMON_BUILTINS = new Set([
 // Also match `new Identifier` and `@Identifier` (decorators)
 const CALL_RE = /\b([A-Z][a-zA-Z0-9_]{2,}|[a-z_][a-zA-Z0-9_]{2,})\s*\(/g;
 const NEW_RE = /\bnew\s+([A-Z][a-zA-Z0-9_]{2,})/g;
+// JSX component usage: <MyComponent or <MyComponent/>
+const JSX_RE = /<([A-Z][a-zA-Z0-9_]{2,})\b/g;
+// Callback/argument passing: fn(handler), [handler], .use(handler), .on("event", handler)
+// Matches identifiers passed as arguments (not followed by opening paren — that's CALL_RE)
+const CALLBACK_RE = /(?:,\s*|\(\s*|,\s*['"][^'"]*['"]\s*,\s*)([a-z_][a-zA-Z0-9_]{2,})\s*[,)]/g;
+// Decorator usage: @MyDecorator
+const DECORATOR_RE = /@([A-Z][a-zA-Z0-9_]{2,})/g;
 
 /**
  * Extract referenced symbol names from a chunk's body.
@@ -90,6 +97,33 @@ export function extractReferences(
     // Constructor calls: new Foo
     NEW_RE.lastIndex = 0;
     while ((m = NEW_RE.exec(stripped)) !== null) {
+      const name = m[1];
+      if (name === selfName || KEYWORDS.has(name) || seenOnLine.has(name)) continue;
+      seenOnLine.add(name);
+      refs.push({ name, line: i });
+    }
+
+    // JSX component usage: <MyComponent
+    JSX_RE.lastIndex = 0;
+    while ((m = JSX_RE.exec(stripped)) !== null) {
+      const name = m[1];
+      if (name === selfName || KEYWORDS.has(name) || seenOnLine.has(name)) continue;
+      seenOnLine.add(name);
+      refs.push({ name, line: i });
+    }
+
+    // Callback/argument passing: fn(handler), .on("event", handler)
+    CALLBACK_RE.lastIndex = 0;
+    while ((m = CALLBACK_RE.exec(stripped)) !== null) {
+      const name = m[1];
+      if (name === selfName || KEYWORDS.has(name) || COMMON_BUILTINS.has(name) || seenOnLine.has(name)) continue;
+      seenOnLine.add(name);
+      refs.push({ name, line: i });
+    }
+
+    // Decorators: @Injectable
+    DECORATOR_RE.lastIndex = 0;
+    while ((m = DECORATOR_RE.exec(stripped)) !== null) {
       const name = m[1];
       if (name === selfName || KEYWORDS.has(name) || seenOnLine.has(name)) continue;
       seenOnLine.add(name);

@@ -87,6 +87,7 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
     name: "Hardcoded secret",
     regex: /(password|secret|api_key|apikey|token|auth)\s*[:=]\s*['"][^'"]{8,}['"]/i,
     severity: "critical",
+    // Post-filter: skip common false positives like config descriptions, placeholders
   },
   {
     name: "Private key",
@@ -106,13 +107,13 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   },
   {
     name: "SQL injection (string concat)",
-    regex: /\+\s*['"].*(?:SELECT|INSERT|UPDATE|DELETE|DROP|WHERE)/i,
+    regex: /(?:SELECT|INSERT|UPDATE|DELETE|DROP|WHERE).*['"]\s*\+/i,
     severity: "high",
   },
   // Dangerous eval
   {
     name: "eval() usage",
-    regex: /\beval\s*\(/,
+    regex: /(?<!\.)eval\s*\(/,
     severity: "high",
   },
   {
@@ -175,12 +176,28 @@ export function scanSecurity(indexer: Indexer): SecurityIssue[] {
       // Skip comment/JSDoc lines — they aren't executable code
       if (COMMENT_LINE.test(line)) continue;
 
-      // Skip test/example files for all security patterns except critical (real secrets)
-      if (isTestFile) continue;
+      // Skip test/example files except for critical severity (real leaked secrets)
+      if (isTestFile) {
+        // Still scan for actual API keys and private keys in test fixtures
+        const hasCritical = SECURITY_PATTERNS.some(
+          (p) => p.severity === "critical" && p.regex.test(line)
+        );
+        if (!hasCritical) continue;
+      }
 
       // Check all security patterns
       for (const pattern of SECURITY_PATTERNS) {
         if (pattern.regex.test(line)) {
+          // Skip hardcoded secret false positives (placeholders, descriptions, env refs)
+          if (pattern.name === "Hardcoded secret") {
+            const val = line.match(/[:=]\s*['"]([^'"]+)['"]/)?.[1] || "";
+            // Skip obvious placeholders and descriptions
+            if (/^(changeme|password|your[-_]|example|placeholder|xxx|test|dummy|TODO|CHANGE)/i.test(val)) continue;
+            if (/must be|should be|at least|characters|required/i.test(val)) continue;
+            // Skip process.env references
+            if (/process\.env\b/.test(line)) continue;
+          }
+
           const key = `${filePath}:${absoluteLine}:${pattern.name}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -431,6 +448,9 @@ function computeDeadCodePct(indexer: Indexer): {
       ["main", "default", "index", "__init__", "constructor"].includes(c.name!)
     )
       continue;
+    // Skip symbols that are default-exported — they're consumed via
+    // `import X from './file'` which uses arbitrary names
+    if (c.content && /export\s+default\s/.test(c.content)) continue;
     const fullName = c.name!;
     const dot = fullName.lastIndexOf(".");
     const bareName = dot >= 0 ? fullName.slice(dot + 1) : fullName;
