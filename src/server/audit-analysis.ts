@@ -407,6 +407,13 @@ function computeDeadCodePct(indexer: Indexer): {
 } {
   const allChunks = indexer.chunkStore.getAllWithFile();
   const allRefs = indexer.symbolRefStore.getAll();
+  const allFiles = indexer.fileStore.getAll();
+
+  // Build set of high-PageRank file paths — symbols in heavily-imported files
+  // are clearly being used even if the symbol extractor can't trace the exact pattern
+  const highPrFiles = new Set(
+    allFiles.filter((f) => f.pagerank > 0.05).map((f) => f.path)
+  );
 
   const refsByName = new Map<string, number>();
   for (const r of allRefs) {
@@ -451,6 +458,9 @@ function computeDeadCodePct(indexer: Indexer): {
     // Skip symbols that are default-exported — they're consumed via
     // `import X from './file'` which uses arbitrary names
     if (c.content && /export\s+default\s/.test(c.content)) continue;
+    // Skip symbols in high-PageRank files — the file is heavily imported,
+    // so its symbols are used even if we can't trace the exact reference
+    if (highPrFiles.has(c.filePath)) continue;
     const fullName = c.name!;
     const dot = fullName.lastIndexOf(".");
     const bareName = dot >= 0 ? fullName.slice(dot + 1) : fullName;
