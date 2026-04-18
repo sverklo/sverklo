@@ -109,7 +109,7 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   // Path traversal — common in file-serving endpoints
   {
     name: "Path traversal risk",
-    regex: /(?:readFile|readFileSync|createReadStream|writeFile|writeFileSync|access|accessSync|unlink|unlinkSync)\s*\(\s*(?:[^)]*\+|[^)]*\$\{)/,
+    regex: /(?:readFile|readFileSync|createReadStream|writeFile|writeFileSync|access|accessSync|unlink|unlinkSync)\s*\(\s*(?:[^)]*(?:req\.|params\.|query\.|body\.|input|userPath|filePath)\s*[\+\}])/,
     severity: "high",
   },
   // SQL injection
@@ -120,7 +120,7 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   },
   {
     name: "SQL injection (string concat)",
-    regex: /(?:SELECT|INSERT|UPDATE|DELETE|DROP|WHERE).*['"]\s*\+/i,
+    regex: /(?:\.query|\.execute|\.raw)\s*\(.*(?:SELECT|INSERT|UPDATE|DELETE|DROP|WHERE).*['"]\s*\+/i,
     severity: "medium",
   },
   // Dangerous eval — word boundary fix to avoid matching evalResult(), evalTemplate()
@@ -190,13 +190,12 @@ export function scanSecurity(indexer: Indexer): SecurityIssue[] {
       // Skip comment/JSDoc lines — they aren't executable code
       if (COMMENT_LINE.test(line)) continue;
 
-      // Skip test/example files except for critical severity (real leaked secrets)
+      // Skip non-production files — only scan for leaked secrets (private keys, API tokens)
       if (isTestFile) {
-        // Still scan for actual API keys and private keys in test fixtures
-        const hasCritical = SECURITY_PATTERNS.some(
-          (p) => p.severity === "critical" && p.regex.test(line)
+        const hasLeakedSecret = SECURITY_PATTERNS.some(
+          (p) => (p.name === "Private key" || p.name === "API token") && p.regex.test(line)
         );
-        if (!hasCritical) continue;
+        if (!hasLeakedSecret) continue;
       }
 
       // Check all security patterns
