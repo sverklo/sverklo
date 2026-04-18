@@ -155,7 +155,7 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
 
 /** Files that should be excluded from debug-statement scanning. */
 const NON_PRODUCTION_FILE =
-  /(^|\/)(tests?|__tests__|spec|specs|examples?|benchmarks?|fixtures?|scripts?|docs?)(\/|$)/;
+  /(^|\/)(tests?|__tests__|spec|specs|examples?|bench|benchmarks?|fixtures?|scripts?|docs?|stories)(\/|$)/;
 const ENV_EXAMPLE_FILE = /\.env\.example$/;
 
 export function scanSecurity(indexer: Indexer): SecurityIssue[] {
