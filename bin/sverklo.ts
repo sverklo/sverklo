@@ -631,6 +631,46 @@ if (command === "review") {
   process.exit(0);
 }
 
+if (command === "history") {
+  const projectPath = resolve(args[1] || process.cwd());
+  const { getAuditHistory, formatTrend } = await import("../src/utils/audit-history.js");
+  const history = getAuditHistory(projectPath);
+
+  if (history.length === 0) {
+    console.log("No audit history yet. Run `sverklo audit` first.");
+    process.exit(0);
+  }
+
+  const projectName = projectPath.split("/").pop() || "unknown";
+  console.log(`\nAudit History — ${projectName}\n`);
+
+  // Dimension short names for the compact display
+  const SHORT: Record<string, string> = {
+    "Dead code": "dead",
+    "Circular deps": "deps",
+    "Coupling": "coup",
+    "Security": "sec",
+  };
+
+  const recent = history.slice(-20);
+  for (const entry of recent) {
+    const sha = entry.sha.slice(0, 7);
+    const dims = entry.dimensions
+      .map((d) => `${SHORT[d.name] || d.name}:${d.grade}`)
+      .join("  ");
+    console.log(`${entry.date}  ${sha}  ${entry.grade}  (${entry.numericScore.toFixed(1)})  ${dims}`);
+  }
+
+  // Trend line
+  if (recent.length >= 2) {
+    const grades = recent.map((e) => e.grade);
+    console.log(`\nTrend: ${formatTrend(grades)}`);
+  }
+
+  console.log("");
+  process.exit(0);
+}
+
 if (command === "audit") {
   // CLI audit subcommand: indexes the repo, runs audit analysis,
   // outputs markdown, HTML, or JSON.
@@ -643,7 +683,7 @@ if (command === "audit") {
     return idx !== -1 && flags[idx + 1] ? flags[idx + 1] : fallback;
   };
 
-  const format = flagVal("--format", "markdown") as "markdown" | "html" | "json" | "graph" | "arch";
+  const format = flagVal("--format", "markdown") as "markdown" | "html" | "json" | "graph" | "arch" | "obsidian";
   const outputPath = flagVal("--output", format === "html" ? "sverklo-audit.html" : "");
   const shouldOpen = flags.includes("--open");
   const shouldBadge = flags.includes("--badge");
@@ -668,6 +708,14 @@ if (command === "audit") {
   const config = getProjectConfig(projectPath);
   const indexer = new Indexer(config);
   await indexer.index();
+
+  // Run analysis once for history tracking (handleAudit also calls it internally)
+  const { analyzeCodebase: runAnalysis } = await import("../src/server/audit-analysis.js");
+  const auditAnalysis = runAnalysis(indexer);
+
+  // Auto-save to audit history
+  const { appendAuditHistory } = await import("../src/utils/audit-history.js");
+  appendAuditHistory(projectPath, auditAnalysis);
 
   const mdOutput = handleAudit(indexer, { token_budget: 16000 });
 
@@ -699,6 +747,24 @@ if (command === "audit") {
     const out = outputPath || "sverklo-arch.html";
     writeFileSync(out, html);
     console.log(`Architecture diagram written to ${out}`);
+    if (shouldOpen) {
+      const { execSync } = await import("node:child_process");
+      const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+      try { execSync(`${cmd} ${out}`); } catch { /* ignore */ }
+    }
+    process.exit(0);
+  }
+
+  if (format === "obsidian") {
+    const { analyzeCodebase } = await import("../src/server/audit-analysis.js");
+    const { generateAuditObsidian } = await import("../src/server/audit-obsidian.js");
+    const analysis = analyzeCodebase(indexer);
+    const md = generateAuditObsidian(indexer, analysis, config.name);
+    indexer.close();
+    const { writeFileSync } = await import("node:fs");
+    const out = outputPath || "sverklo-obsidian.md";
+    writeFileSync(out, md);
+    console.log(`Obsidian vault file written to ${out}`);
     if (shouldOpen) {
       const { execSync } = await import("node:child_process");
       const cmd = process.platform === "darwin" ? "open" : "xdg-open";
@@ -888,6 +954,7 @@ Usage:
   sverklo wakeup            Print compressed project context (for system-prompt injection)
   sverklo wiki              Generate a markdown wiki from the indexed codebase
   sverklo bench             Run reproducible benchmarks on gin/nestjs/react (checkout only)
+  sverklo history           Show audit grade history and trend over time
   sverklo audit-prompt      Print a ready-to-paste codebase-audit prompt (hybrid workflow)
   sverklo review-prompt     Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
   sverklo setup             Download the embedding model (~90MB)

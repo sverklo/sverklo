@@ -1,6 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { resolveBudget } from "../../utils/budget.js";
 import { analyzeCodebase } from "../audit-analysis.js";
+import { getAuditHistory, formatTrend } from "../../utils/audit-history.js";
 
 export const auditTool = {
   name: "sverklo_audit",
@@ -298,6 +299,20 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     }
     suggestLines.push("");
     addSection(suggestLines.join("\n"));
+  }
+
+  // Trend from audit history (if available)
+  {
+    const history = getAuditHistory(indexer.rootPath);
+    if (history.length >= 2) {
+      const recent = history.slice(-5);
+      const grades = recent.map((e) => e.grade);
+      const trendLines: string[] = [];
+      trendLines.push(`## Trend`);
+      trendLines.push(`Last ${recent.length} audits: ${formatTrend(grades)}`);
+      trendLines.push("");
+      addSection(trendLines.join("\n"));
+    }
   }
 
   // Badge hint at the end of every audit

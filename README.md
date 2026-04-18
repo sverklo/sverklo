@@ -325,6 +325,10 @@ Full methodology in [`BENCHMARKS.md`](./BENCHMARKS.md). The detailed on-disk for
 - **Languages:** 10 (TS, JS, Python, Go, Rust, Java, C, C++, Ruby, PHP)
 - **Dependencies:** zero config, zero API keys, zero cloud calls (after the one-time ~90 MB ONNX model download)
 
+### Cost
+
+Sverklo itself is free and runs entirely locally. **It does not call any paid APIs.** The only cost is the disk space for the ONNX model (~90 MB) and the SQLite index (~4–67 MB depending on repo size). Your AI coding agent's normal token usage applies when it calls sverklo tools — but sverklo's token-budgeted responses are designed to minimize this (typically 2–8k tokens per tool call vs 20–50k for raw file reads).
+
 ## Troubleshooting
 
 Most setup issues fall into one of five buckets. Run `sverklo doctor` first — it diagnoses 90 % of them automatically. If you still need to dig, here's the manual playbook:
