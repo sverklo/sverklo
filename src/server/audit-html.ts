@@ -10,6 +10,13 @@ export function generateAuditHtml(
 ): string {
   const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
+  // Clean up project name (prefer basename of projectPath with known temp
+  // prefixes like "report-", "regen-", "rpt-", "final-", "v12-", "bench-"
+  // stripped). This prevents leaking benchmark scratch directory names into
+  // published reports.
+  const displayName = cleanProjectName(projectName, projectPath);
+  const sourceLink = deriveSourceLink(projectName, projectPath);
+
   // Parse structured data from the markdown
   const parsed = parseAuditMarkdown(markdownContent);
 
@@ -44,7 +51,7 @@ export function generateAuditHtml(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sverklo Audit — ${esc(projectName)}</title>
+<title>Sverklo Audit — ${esc(displayName)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -93,6 +100,51 @@ export function generateAuditHtml(
     margin: 0 auto;
     padding: 48px 24px 64px;
   }
+
+  /* ── Top bar (site-standard header) ── */
+  header.top {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 0;
+    position: sticky;
+    top: 0;
+    background: rgba(14, 13, 11, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 100;
+  }
+  header.top .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-decoration: none;
+    border: none;
+  }
+  .brand::before {
+    content: "\\25CC ";
+    color: var(--accent);
+  }
+  .top-nav {
+    display: flex;
+    gap: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+  .top-nav a {
+    color: var(--muted);
+    text-decoration: none;
+    border: none;
+  }
+  .top-nav a:hover { color: var(--text); }
 
   /* ── Header ── */
   .header {
@@ -369,6 +421,16 @@ export function generateAuditHtml(
 </style>
 </head>
 <body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="https://sverklo.com/">sverklo</a>
+    <nav class="top-nav">
+      <a href="https://sverklo.com/report/">← All reports</a>
+      <a href="https://github.com/sverklo/sverklo">GitHub</a>
+      <a href="https://www.npmjs.com/package/sverklo">npm</a>
+    </nav>
+  </div>
+</header>
 <div class="wrapper">
 
   <div class="header">
@@ -378,8 +440,8 @@ export function generateAuditHtml(
     </div>
     <div class="grade-label">Overall Health</div>
     <div class="meta">
-      <span class="project-name">${esc(projectName)}</span><br>
-      ${esc(projectPath)}<br>
+      <span class="project-name">${esc(displayName)}</span><br>
+      ${sourceLink ? `<a href="${esc(sourceLink)}">${esc(sourceLink)}</a><br>` : ""}
       ${now}
     </div>
   </div>
@@ -434,6 +496,55 @@ function inline(text: string): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+// Known temp/scratch directory prefixes produced by benchmark scripts. These
+// must not leak into published audit reports.
+const TEMP_PREFIXES = [
+  "report-",
+  "regen-",
+  "rpt-",
+  "final-",
+  "bench-",
+  // versioned variants: v12-, v9-, v0.12-, etc.
+];
+
+export function cleanProjectName(projectName: string, projectPath: string): string {
+  // Prefer basename of the absolute path; fall back to the provided name.
+  const base = basename(projectPath) || projectName || "project";
+  const stripped = stripTempPrefix(base);
+  // Convert "expressjs_express" style separators used by benchmark scripts
+  // into "expressjs/express".
+  return stripped.replace(/_/g, "/");
+}
+
+export function deriveSourceLink(projectName: string, projectPath: string): string {
+  const base = basename(projectPath) || projectName || "";
+  const stripped = stripTempPrefix(base);
+  // Must look like "owner_repo" to derive a GitHub URL.
+  const parts = stripped.split("_");
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    return `https://github.com/${parts[0]}/${parts[1]}`;
+  }
+  return "";
+}
+
+function stripTempPrefix(name: string): string {
+  for (const prefix of TEMP_PREFIXES) {
+    if (name.startsWith(prefix)) return name.slice(prefix.length);
+  }
+  // Strip "vN-" / "vN.N-" style version prefixes.
+  const versioned = name.match(/^v\d+(?:\.\d+)?-(.+)$/);
+  if (versioned) return versioned[1];
+  return name;
+}
+
+function basename(p: string): string {
+  if (!p) return "";
+  // Strip trailing slashes, then return everything after the last "/".
+  const trimmed = p.replace(/\/+$/, "");
+  const idx = trimmed.lastIndexOf("/");
+  return idx === -1 ? trimmed : trimmed.slice(idx + 1);
+}
+
 // ─── Markdown parser ───
 
 interface ParsedDimension {
@@ -475,27 +586,41 @@ function parseAuditMarkdown(md: string): ParsedAudit {
     i++;
   }
 
-  // Parse dimension table
+  // Parse dimension table. Skip blank lines between the grade heading and the
+  // table; only stop once we've seen at least one table row and then hit a
+  // non-table line (or a "## " section heading, which starts the next block).
+  let sawTableRow = false;
   while (i < lines.length) {
     const line = lines[i];
+    const trimmed = line.trim();
+    if (trimmed === "") {
+      // A blank line after the table ends it; before the table, keep scanning.
+      if (sawTableRow) break;
+      i++;
+      continue;
+    }
+    if (line.startsWith("## ") || line.startsWith("# ")) break;
     // Skip table header/separator rows
-    if (line.startsWith("| Dimension") || line.startsWith("|---")) {
+    if (line.startsWith("| Dimension") || /^\|\s*-/.test(line)) {
       i++;
       continue;
     }
     if (line.startsWith("|")) {
       const cells = line.split("|").filter(Boolean).map((c) => c.trim());
-      if (cells.length >= 3) {
+      if (cells.length >= 3 && /^[A-F]$/.test(cells[1])) {
         dimensions.push({
           name: cells[0],
           grade: cells[1],
           detail: cells[2],
         });
+        sawTableRow = true;
       }
       i++;
       continue;
     }
-    break;
+    // Non-table, non-blank, non-heading line — if we've seen rows, stop.
+    if (sawTableRow) break;
+    i++;
   }
 
   // Parse remaining sections (## headings)
