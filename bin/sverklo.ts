@@ -688,6 +688,7 @@ if (command === "audit") {
   const shouldOpen = flags.includes("--open");
   const shouldBadge = flags.includes("--badge");
   const shouldPublish = flags.includes("--publish");
+  const deepSecurity = flags.includes("--deep-security");
 
   const projectPath = resolve(process.cwd());
 
@@ -717,7 +718,34 @@ if (command === "audit") {
   const { appendAuditHistory } = await import("../src/utils/audit-history.js");
   appendAuditHistory(projectPath, auditAnalysis);
 
-  const mdOutput = handleAudit(indexer, { token_budget: 16000 });
+  let mdOutput = handleAudit(indexer, { token_budget: 16000 });
+
+  // Deep security scan (semgrep) — optional enhancement
+  if (deepSecurity) {
+    const { isSemgrepInstalled, runSemgrep, formatSemgrepSection, semgrepSeverityToAudit } =
+      await import("../src/utils/semgrep.js");
+    if (!(await isSemgrepInstalled())) {
+      console.error("semgrep not found. Install: brew install semgrep (or pip install semgrep)");
+      process.exit(1);
+    }
+    console.log("Running deep security scan (semgrep)...");
+    const findings = await runSemgrep(projectPath);
+    if (findings.length > 0) {
+      mdOutput += "\n" + formatSemgrepSection(findings);
+      // Merge into auditAnalysis security issues for grade recalculation
+      for (const f of findings) {
+        auditAnalysis.securityIssues.push({
+          file: f.path,
+          line: f.line,
+          pattern: `semgrep: ${f.rule}`,
+          severity: semgrepSeverityToAudit(f.severity),
+          snippet: f.message.slice(0, 120),
+        });
+      }
+    } else {
+      mdOutput += "\n## Deep Security Scan (semgrep)\n\nNo additional concerns found.\n";
+    }
+  }
 
   if (format === "graph") {
     const { analyzeCodebase } = await import("../src/server/audit-analysis.js");
