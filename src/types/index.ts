@@ -75,6 +75,7 @@ export interface Memory {
   valid_until_sha: string | null;
   invalidated_at: number | null;
   superseded_by: number | null;
+  pins: string | null;
 }
 
 export interface IndexStatus {

@@ -16,6 +16,7 @@ export class MemoryStore {
   private getCoreStmt: Database.Statement;
   private setTierStmt: Database.Statement;
   private getActiveStmt: Database.Statement;
+  private setPinsStmt: Database.Statement;
 
   constructor(private db: Database.Database) {
     this.insertStmt = db.prepare(`
@@ -66,6 +67,7 @@ export class MemoryStore {
     this.getActiveStmt = db.prepare(
       "SELECT * FROM memories WHERE valid_until_sha IS NULL ORDER BY created_at DESC LIMIT ?"
     );
+    this.setPinsStmt = db.prepare("UPDATE memories SET pins = ? WHERE id = ?");
   }
 
   insert(
@@ -163,6 +165,27 @@ export class MemoryStore {
 
   getStale(): Memory[] {
     return this.getStaleStmt.all() as Memory[];
+  }
+
+  setPins(id: number, pins: string[]): void {
+    this.setPinsStmt.run(pins.length > 0 ? JSON.stringify(pins) : null, id);
+  }
+
+  /**
+   * Find active memories pinned to a given target (file path or symbol name).
+   * Scans the `pins` JSON array column with a LIKE match.
+   */
+  getByPin(target: string, limit: number = 20): Memory[] {
+    // Use LIKE to find the target inside the JSON array string.
+    // This is simple and correct for reasonable pin counts.
+    return this.db
+      .prepare(
+        `SELECT * FROM memories
+         WHERE pins LIKE ? AND valid_until_sha IS NULL
+         ORDER BY confidence DESC, created_at DESC
+         LIMIT ?`
+      )
+      .all(`%"${target.replace(/[%_"]/g, "")}"%`, limit) as Memory[];
   }
 
   count(): number {

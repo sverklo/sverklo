@@ -181,6 +181,17 @@ export async function handleRecall(
     indexer.memoryStore.touchAccess(memory.id);
   }
 
+  // Pinned memories: if the query looks like a file path or symbol,
+  // also surface memories explicitly pinned to it.
+  const pinnedMemories = indexer.memoryStore.getByPin(query, 10);
+  const resultIds = new Set(results.map((r) => r.memory.id));
+  for (const pm of pinnedMemories) {
+    if (!resultIds.has(pm.id)) {
+      results.push({ memory: pm, score: 1.0 }); // pinned = max relevance
+      resultIds.add(pm.id);
+    }
+  }
+
   if (results.length === 0) {
     return "No memories found.";
   }

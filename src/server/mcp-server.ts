@@ -54,6 +54,8 @@ import { startHttpServer } from "./http-server.js";
 import { track } from "../telemetry/index.js";
 import { applyToolOverrides } from "./tool-overrides.js";
 import { traceStart } from "../utils/trace.js";
+import { logActivity } from "../utils/activity-log.js";
+import { pinTool, unpinTool, handlePin, handleUnpin } from "./tools/pin.js";
 
 // Zilliz claude-context compatibility tool definitions.
 // These mirror github.com/zilliztech/claude-context tool names so users can
@@ -304,6 +306,8 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     testMapTool,
     astGrepTool,
     clustersTool,
+    pinTool,
+    unpinTool,
     ...(enableZilliz
       ? [indexCodebaseTool, searchCodeTool, clearIndexTool, getIndexingStatusTool]
       : []),
@@ -402,6 +406,12 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         case "sverklo_clusters":
           result = handleClusters(indexer, args || {});
           break;
+        case "sverklo_pin":
+          result = handlePin(indexer, args || {});
+          break;
+        case "sverklo_unpin":
+          result = handleUnpin(indexer, args || {});
+          break;
 
         // ── Zilliz claude-context compatibility aliases ──────────────
         case "search_code": {
@@ -478,6 +488,10 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       }
 
       trace.end(result.length);
+      logActivity(rootPath, "tool.call", {
+        tool: name,
+        duration_ms: Date.now() - __telemetryStart,
+      });
 
       return {
         content: [{ type: "text", text: result }],
@@ -485,6 +499,10 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     } catch (err) {
       __telemetryOutcome = "error";
       trace.error(err);
+      logActivity(rootPath, "tool.error", {
+        tool: name,
+        error: err instanceof Error ? err.message : String(err),
+      });
       if (name.startsWith("sverklo_")) {
         void track("tool.call", {
           tool: name,
@@ -657,6 +675,8 @@ export async function startGlobalMcpServer(): Promise<void> {
     injectRepoParam(testMapTool),
     injectRepoParam(astGrepTool),
     injectRepoParam(clustersTool),
+    injectRepoParam(pinTool),
+    injectRepoParam(unpinTool),
     ...(enableZilliz
       ? [injectRepoParam(indexCodebaseTool), injectRepoParam(searchCodeTool), injectRepoParam(clearIndexTool), injectRepoParam(getIndexingStatusTool)]
       : []),
@@ -767,6 +787,12 @@ export async function startGlobalMcpServer(): Promise<void> {
         case "sverklo_clusters":
           result = handleClusters(indexer, args || {});
           break;
+        case "sverklo_pin":
+          result = handlePin(indexer, args || {});
+          break;
+        case "sverklo_unpin":
+          result = handleUnpin(indexer, args || {});
+          break;
 
         // Zilliz compat aliases
         case "search_code": {
@@ -835,6 +861,10 @@ export async function startGlobalMcpServer(): Promise<void> {
       }
 
       trace.end(result.length);
+      logActivity(indexer.rootPath, "tool.call", {
+        tool: name,
+        duration_ms: Date.now() - __telemetryStart,
+      });
 
       return {
         content: [{ type: "text", text: result }],
@@ -842,6 +872,11 @@ export async function startGlobalMcpServer(): Promise<void> {
     } catch (err) {
       __telemetryOutcome = "error";
       trace.error(err);
+      logActivity(
+        ((): string => { try { return pool.getIndexer(repoName).rootPath; } catch { return "unknown"; } })(),
+        "tool.error",
+        { tool: name, error: err instanceof Error ? err.message : String(err) }
+      );
       if (name.startsWith("sverklo_")) {
         void track("tool.call", {
           tool: name,

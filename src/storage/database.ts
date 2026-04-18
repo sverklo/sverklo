@@ -181,6 +181,7 @@ const MIGRATIONS = [
   "ALTER TABLE memories ADD COLUMN valid_until_sha TEXT",
   "ALTER TABLE memories ADD COLUMN invalidated_at INTEGER",
   "ALTER TABLE memories ADD COLUMN superseded_by INTEGER",
+  "ALTER TABLE memories ADD COLUMN pins TEXT",
 ];
 
 export function createDatabase(dbPath: string): Database.Database {

@@ -474,6 +474,32 @@ Design doc: https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md
   process.exit(0);
 }
 
+if (command === "activity") {
+  const projectPath = resolve(args[1] || process.cwd());
+  const count = parseInt(args[2] || "30", 10) || 30;
+  const { getActivityLog } = await import("../src/utils/activity-log.js");
+  const entries = getActivityLog(projectPath, count);
+
+  if (entries.length === 0) {
+    console.log("No activity recorded yet. Activity is logged automatically when the MCP server handles tool calls.");
+    process.exit(0);
+  }
+
+  console.log(`\n  Sverklo Activity Log (last ${entries.length} entries)\n`);
+  console.log("  " + "-".repeat(70));
+
+  for (const entry of entries) {
+    const time = new Date(entry.ts).toISOString().replace("T", " ").replace("Z", "");
+    const detail = Object.entries(entry.detail)
+      .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+      .join("  ");
+    console.log(`  ${time}  ${entry.event}  ${detail}`);
+  }
+
+  console.log("  " + "-".repeat(70) + "\n");
+  process.exit(0);
+}
+
 if (command === "trace") {
   const { existsSync, readFileSync } = await import("node:fs");
   const { TRACE_PATH } = await import("../src/utils/trace.js");
@@ -986,6 +1012,7 @@ Usage:
   sverklo audit-prompt      Print a ready-to-paste codebase-audit prompt (hybrid workflow)
   sverklo review-prompt     Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
   sverklo setup             Download the embedding model (~90MB)
+  sverklo activity           Show recent activity log (always-on audit trail)
   sverklo trace             Show recent tool call traces (set SVERKLO_TRACE=1)
   sverklo telemetry         Manage opt-in telemetry (off by default)
   sverklo --help            Show this help
