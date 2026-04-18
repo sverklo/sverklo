@@ -65,11 +65,13 @@ function couplingGrade(maxFanIn: number): string {
   return "F";
 }
 
-function securityGrade(issueCount: number): string {
-  if (issueCount === 0) return "A";
-  if (issueCount <= 2) return "B";
-  if (issueCount <= 5) return "C";
-  if (issueCount <= 10) return "D";
+function securityGrade(issues: SecurityIssue[]): string {
+  const weights: Record<string, number> = { critical: 10, high: 5, medium: 2, low: 1 };
+  const score = issues.reduce((sum, i) => sum + (weights[i.severity] || 1), 0);
+  if (score === 0) return "A";
+  if (score <= 5) return "B";
+  if (score <= 15) return "C";
+  if (score <= 30) return "D";
   return "F";
 }
 
@@ -82,12 +84,11 @@ interface SecurityPattern {
 }
 
 const SECURITY_PATTERNS: SecurityPattern[] = [
-  // Hardcoded secrets
+  // Hardcoded secrets — narrowed keywords to reduce false positives
   {
     name: "Hardcoded secret",
-    regex: /(password|secret|api_key|apikey|token|auth)\s*[:=]\s*['"][^'"]{8,}['"]/i,
+    regex: /(password|secret|api_key|apikey|api_secret|token|auth_token|auth_key|private_key|access_key)\s*[:=]\s*['"][^'"]{8,}['"]/i,
     severity: "critical",
-    // Post-filter: skip common false positives like config descriptions, placeholders
   },
   {
     name: "Private key",
@@ -96,8 +97,20 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   },
   {
     name: "API token",
-    regex: /(ghp_|gho_|github_pat_|sk-|pk_live_|pk_test_|sk_live_|sk_test_)[a-zA-Z0-9]{20,}/,
+    regex: /(ghp_|gho_|github_pat_|sk-|pk_live_|pk_test_|sk_live_|sk_test_|AKIA|xoxb-|xoxp-|xoxs-|npm_|pypi-|SG\.|sk-ant-)[a-zA-Z0-9_\-]{16,}/,
     severity: "critical",
+  },
+  // Command injection — critical for Node.js
+  {
+    name: "Command injection risk",
+    regex: /(?:child_process|exec|execSync|execFile|spawn|spawnSync)\s*\(\s*(?:`[^`]*\$\{|['"][^'"]*['"]\s*\+)/,
+    severity: "critical",
+  },
+  // Path traversal — common in file-serving endpoints
+  {
+    name: "Path traversal risk",
+    regex: /(?:readFile|readFileSync|createReadStream|writeFile|writeFileSync|access|accessSync|unlink|unlinkSync)\s*\(\s*(?:[^)]*\+|[^)]*\$\{)/,
+    severity: "high",
   },
   // SQL injection
   {
@@ -108,12 +121,13 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   {
     name: "SQL injection (string concat)",
     regex: /(?:SELECT|INSERT|UPDATE|DELETE|DROP|WHERE).*['"]\s*\+/i,
-    severity: "high",
+    severity: "medium",
   },
-  // Dangerous eval
+  // Dangerous eval — word boundary fix to avoid matching evalResult(), evalTemplate()
+  // NOTE: do not add /g flag to these regexes — test() is called multiple times per line
   {
     name: "eval() usage",
-    regex: /(?<!\.)eval\s*\(/,
+    regex: /(?<![.\w])eval\s*\(/,
     severity: "high",
   },
   {
@@ -124,14 +138,14 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   {
     name: "setTimeout with string",
     regex: /setTimeout\s*\(\s*['"`]/,
-    severity: "high",
+    severity: "medium",
   },
   {
     name: "setInterval with string",
     regex: /setInterval\s*\(\s*['"`]/,
-    severity: "high",
+    severity: "medium",
   },
-  // Debug statements — debugger is always flagged
+  // Debug statements
   {
     name: "debugger statement",
     regex: /\bdebugger\s*;/,
@@ -194,8 +208,8 @@ export function scanSecurity(indexer: Indexer): SecurityIssue[] {
             // Skip obvious placeholders and descriptions
             if (/^(changeme|password|your[-_]|example|placeholder|xxx|test|dummy|TODO|CHANGE)/i.test(val)) continue;
             if (/must be|should be|at least|characters|required/i.test(val)) continue;
-            // Skip process.env references
-            if (/process\.env\b/.test(line)) continue;
+            // Skip environment variable references
+            if (/(?:process\.env|import\.meta\.env|os\.environ|Deno\.env|System\.getenv|ENV\[)\b/.test(line)) continue;
           }
 
           const key = `${filePath}:${absoluteLine}:${pattern.name}`;
@@ -502,7 +516,7 @@ export function analyzeCodebase(indexer: Indexer): AuditAnalysis {
   const dcGrade = deadCodeGrade(deadCodePct);
   const cdGrade = circularDepsGrade(circularDeps.length);
   const cpGrade = couplingGrade(maxFanIn);
-  const scGrade = securityGrade(securityIssues.length);
+  const scGrade = securityGrade(securityIssues);
 
   const dimensions: HealthDimension[] = [
     {
@@ -529,7 +543,7 @@ export function analyzeCodebase(indexer: Indexer): AuditAnalysis {
       name: "Security",
       grade: scGrade,
       score: GRADE_VALUES[scGrade],
-      detail: `${securityIssues.length} issue${securityIssues.length === 1 ? "" : "s"} found`,
+      detail: `${securityIssues.length} concern${securityIssues.length === 1 ? "" : "s"} found`,
     },
   ];
 
