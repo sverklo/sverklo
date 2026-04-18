@@ -411,6 +411,10 @@ function computeMaxFanIn(
   return { maxFanIn, file: maxFile };
 }
 
+/** Methods decorated with these are framework entry points — invoked at runtime, not via static calls. */
+const DECORATOR_ENTRY_POINT =
+  /@(?:Get|Post|Put|Delete|Patch|Head|Options|All|Sse|Subscribe|OnEvent|OnMessage|MessagePattern|EventPattern|Cron|Interval|Timeout|UseGuards|UseInterceptors|UsePipes|UseFilters|Render|Header|Redirect|HttpCode|Query|Param|Body|Req|Res|Next|Session|UploadedFile|HostParam|Controller|Injectable|Module|Resolver|Mutation|Subscription|ResolveField|OnModuleInit|OnModuleDestroy|BeforeInsert|AfterInsert|BeforeUpdate|AfterUpdate|BeforeRemove|AfterRemove|EventSubscriber|Entity|Column|PrimaryColumn|PrimaryGeneratedColumn|CreateDateColumn|UpdateDateColumn|OneToMany|ManyToOne|ManyToMany|OneToOne)\s*\(/;
+
 // ─── Dead code percentage ───
 
 function computeDeadCodePct(indexer: Indexer): {
@@ -480,6 +484,11 @@ function computeDeadCodePct(indexer: Indexer): {
 
     // Skip symbols that are part of the public API (exported from barrel files)
     if (publicApiNames.has(bareName) || publicApiNames.has(fullName)) continue;
+
+    // Skip methods decorated with route/handler/listener decorators —
+    // these are entry points invoked by the framework at runtime, not via
+    // static call sites. Covers NestJS, Express decorators, TypeORM, MikroORM, etc.
+    if (c.content && DECORATOR_ENTRY_POINT.test(c.content)) continue;
 
     const refs =
       (refsByName.get(fullName) || 0) +

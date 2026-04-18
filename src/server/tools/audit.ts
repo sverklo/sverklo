@@ -90,6 +90,9 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     // Skip symbols in high-PageRank files — the file is heavily imported,
     // so its symbols are clearly used even if we can't trace the exact reference
     if (highPrFiles.has(c.filePath)) continue;
+    // Skip methods with route/handler/listener decorators — framework entry points
+    const DECORATOR_ENTRY = /@(?:Get|Post|Put|Delete|Patch|Head|Options|All|Sse|Subscribe|OnEvent|OnMessage|MessagePattern|EventPattern|Cron|Interval|Timeout|UseGuards|UseInterceptors|UsePipes|UseFilters|Render|Header|Redirect|HttpCode|Query|Param|Body|Req|Res|Next|Session|UploadedFile|HostParam|Controller|Injectable|Module|Resolver|Mutation|Subscription|ResolveField|OnModuleInit|OnModuleDestroy|BeforeInsert|AfterInsert|BeforeUpdate|AfterUpdate|BeforeRemove|AfterRemove|EventSubscriber|Entity|Column|PrimaryColumn|PrimaryGeneratedColumn|CreateDateColumn|UpdateDateColumn|OneToMany|ManyToOne|ManyToMany|OneToOne)\s*\(/;
+    if (c.content && DECORATOR_ENTRY.test(c.content)) continue;
     const fullName = c.name!;
     const dot = fullName.lastIndexOf(".");
     const bareName = dot >= 0 ? fullName.slice(dot + 1) : fullName;
