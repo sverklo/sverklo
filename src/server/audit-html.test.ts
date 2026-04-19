@@ -91,7 +91,8 @@ describe("generateAuditHtml", () => {
     expect(html).toContain('class="top-nav"');
     expect(html).toContain("All reports");
     expect(html).toContain("https://github.com/sverklo/sverklo");
-    expect(html).toContain("https://www.npmjs.com/package/sverklo");
+    expect(html).toContain("https://sverklo.com/vs/");
+    expect(html).toContain("https://sverklo.com/blog/");
   });
 
   it("populates dimension cards (P0-1 fix)", () => {
@@ -105,7 +106,7 @@ describe("generateAuditHtml", () => {
 
   it("uses a clean owner/repo display name in title and header (P0-7 fix)", () => {
     expect(html).toContain("<title>Sverklo Audit — expressjs/express</title>");
-    expect(html).toContain('<span class="project-name">expressjs/express</span>');
+    expect(html).toContain('<h1 class="project-name">expressjs/express</h1>');
     expect(html).not.toContain("report-expressjs_express");
   });
 

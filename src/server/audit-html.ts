@@ -188,6 +188,15 @@ export function generateAuditHtml(
   .header .meta .project-name {
     color: var(--text);
     font-weight: 600;
+    font-size: inherit;
+    margin: 0;
+    display: inline;
+  }
+  /* a11y: focus ring for keyboard nav */
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 
   /* ── Overall grade circle ── */
@@ -452,6 +461,7 @@ export function generateAuditHtml(
     </nav>
   </div>
 </header>
+<main>
 <div class="wrapper">
 
   <div class="header">
@@ -461,7 +471,7 @@ export function generateAuditHtml(
     </div>
     <div class="grade-label">Overall Health</div>
     <div class="meta">
-      <span class="project-name">${esc(displayName)}</span><br>
+      <h1 class="project-name">${esc(displayName)}</h1><br>
       ${sourceLink ? `<a href="${esc(sourceLink)}">${esc(sourceLink)}</a><br>` : ""}
       ${now}
     </div>
@@ -481,6 +491,7 @@ export function generateAuditHtml(
   </div>
 
 </div>
+</main>
 </body>
 </html>`;
 }
