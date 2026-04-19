@@ -29,7 +29,9 @@ npm install -g sverklo
 cd your-project && sverklo init
 ```
 
-That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to your `CLAUDE.md`, and runs `sverklo doctor` to verify the setup. **No API keys. No cloud. No telemetry.**
+That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to your `CLAUDE.md`, and runs `sverklo doctor` to verify the setup. **No API keys. No cloud. Telemetry off by default.**
+
+> **First-run note.** Sverklo's embedding model (`all-MiniLM-L6-v2` ONNX, ~86 MB) is downloaded from HuggingFace on first use into `~/.sverklo/models/` and cached forever — every subsequent run is fully offline. Bundling the model into the npm tarball is on the v0.13 roadmap.
 
 **Want proof before installing?** Browse the [/report leaderboard](https://sverklo.com/report) — Sverklo audits of 47 popular OSS repos (express, react-hook-form, vite, lodash, prisma, …) with grade cards for dead code, circular deps, coupling, and security.
 
@@ -75,7 +77,7 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 | `sverklo_impact` | Walk the symbol graph, return ranked transitive callers — the real blast radius. |
 | `sverklo_review_diff` | Risk-scored review of `git diff`: touched-symbol importance x coverage x churn. |
 
-[See all 20 tools below.](#full-tool-reference)
+[See all 23 tools below.](#full-tool-reference)
 
 <details>
 <summary><h2>Full tool reference</h2></summary>
@@ -262,7 +264,7 @@ Sverklo ships a CLI for CI and local use: `sverklo review --ci --fail-on high` f
 
 ## Open Source, Open Core
 
-The full MCP server is **free and open source** (MIT). All 20 tools, no limits, no telemetry, no "free tier" — that's not where the line is.
+The full MCP server is **free and open source** (MIT). All 23 tools, no limits, no telemetry, no "free tier" — that's not where the line is.
 
 **Sverklo Pro** (later this year) adds smart auto-capture of decisions, cross-project pattern learning, and larger embedding models. **Sverklo Team** adds shared team memory and on-prem deployment.
 
