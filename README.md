@@ -1,24 +1,26 @@
 # Sverklo
 
-Local-first code intelligence MCP server. Semantic search, symbol graph, blast-radius analysis, diff-aware PR review, and git-pinned memory for Claude Code, Cursor, Windsurf, and any MCP client.
+> **Hallucination-resistant code intelligence for Claude Code, Cursor, Windsurf, and Zed.**
+> Semantic search, impact analysis, persistent memory — pick 3. Local, MIT, zero config.
 
 [![npm version](https://img.shields.io/npm/v/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![npm downloads](https://img.shields.io/npm/dw/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-E85A2A.svg)](LICENSE)
+[![Audited repos](https://img.shields.io/badge/audited_repos-47-E85A2A)](https://sverklo.com/report)
 
 ![Sverklo demo — audit and badge](./docs/demo.gif)
 
-## The problem
+## Why
 
-Your AI agent edits `UserService.validate()`. It doesn't know that 47 other functions call it. Breaking changes ship. Tests pass because they mock the dependency.
+Your AI agent edits `UserService.validate()`. It doesn't know 47 other functions call it. It hallucinates an import. It forgets the design decision you made yesterday because context was compacted. Tests pass because they mock the dependency. Breaking changes ship.
 
-Sverklo gives your agent the dependency graph, the blast radius, and the risk score — before it writes a single line.
+Sverklo (Russian: *сверкло*, "drill") gives your agent a structural understanding of your codebase — symbol graph, blast radius, semantic recall, and git-pinned memory — so it stops guessing.
 
 <table>
 <tr>
-<td align="center"><b>20</b><br/>tools your agent actually uses</td>
+<td align="center"><b>20</b><br/>MCP tools your agent uses</td>
 <td align="center"><b>&lt; 2 s</b><br/>to index a 1,700-file monorepo</td>
-<td align="center"><b>0 bytes</b><br/>of your code leave your machine</td>
+<td align="center"><b>0 bytes</b><br/>of your code leave the machine</td>
 </tr>
 </table>
 
@@ -27,7 +29,9 @@ npm install -g sverklo
 cd your-project && sverklo init
 ```
 
-`sverklo init` auto-detects your installed AI coding agents, writes the right MCP config files, appends sverklo instructions to your `CLAUDE.md`, and runs `sverklo doctor` to verify the setup. MIT licensed. Zero config. No API keys.
+That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to your `CLAUDE.md`, and runs `sverklo doctor` to verify the setup. **No API keys. No cloud. No telemetry.**
+
+**Want proof before installing?** Browse the [/report leaderboard](https://sverklo.com/report) — Sverklo audits of 47 popular OSS repos (express, react-hook-form, vite, lodash, prisma, …) with grade cards for dead code, circular deps, coupling, and security.
 
 ---
 

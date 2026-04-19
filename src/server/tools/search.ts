@@ -40,6 +40,14 @@ export const searchTool = {
         enum: ["function", "class", "type", "interface", "method", "any"],
         description: "Filter by symbol type (default: any)",
       },
+      current_file: {
+        type: "string",
+        description:
+          "Optional: repo-relative path of the file the user is currently editing. " +
+          "When provided, results closer to this file (in directory distance) get a " +
+          "small ranking boost — useful for breaking ties between equally-relevant " +
+          "candidates.",
+      },
     },
     required: ["query"],
   },
@@ -56,6 +64,7 @@ export async function handleSearch(
     scope: args.scope as string | undefined,
     language: args.language as string | undefined,
     type: (args.type as ChunkType | "any") || "any",
+    currentFile: args.current_file as string | undefined,
   });
 
   const body = formatResults(response.results);

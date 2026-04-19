@@ -2,6 +2,11 @@ import type { Indexer } from "../indexer/indexer.js";
 import { cosineSimilarity } from "../indexer/embedder.js";
 import type { SearchResult, CodeChunk, FileRecord, ChunkType } from "../types/index.js";
 import { log } from "../utils/logger.js";
+import {
+  entryPointBonus,
+  pathSuffixAlignmentBonus,
+  currentFileDistancePenalty,
+} from "./boost.js";
 
 interface SearchOptions {
   query: string;
@@ -9,6 +14,13 @@ interface SearchOptions {
   scope?: string;
   language?: string;
   type?: ChunkType | "any";
+  /**
+   * Repo-relative path of the file the user is currently editing. When
+   * provided, candidates are gently penalized by directory distance so
+   * results closer to the active file rank higher in tie-breaks. Pass
+   * undefined to disable. See ./boost.ts.
+   */
+  currentFile?: string;
 }
 
 // Reciprocal Rank Fusion constant
@@ -237,7 +249,14 @@ async function rankCandidates(
 
     // Boost by PageRank
     const pagerankBoost = 1 + 0.3 * file.pagerank;
-    const finalScore = rrfScore * pagerankBoost;
+    // Cheap structural boosts borrowed from fff.nvim. Each is ≤±40% so
+    // they break ties without overwhelming the RRF + PageRank signal.
+    const entryBoost = entryPointBonus(file.path);
+    const suffixBoost = pathSuffixAlignmentBonus(query, file.path);
+    const distancePenalty = currentFileDistancePenalty(file.path, options.currentFile);
+
+    const finalScore =
+      rrfScore * pagerankBoost * entryBoost * suffixBoost * distancePenalty;
 
     candidates.push({ chunk, file, score: finalScore });
   }
