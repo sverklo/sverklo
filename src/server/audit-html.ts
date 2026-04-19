@@ -46,12 +46,31 @@ export function generateAuditHtml(
   // Badge markdown (extracted from last section if present)
   const badgeSection = parsed.badgeMarkdown;
 
+  const canonicalPath = displayName.toLowerCase();
+  const canonicalUrl = `https://sverklo.com/report/${canonicalPath}/`;
+  const seoTitle = `Sverklo Audit — ${displayName} — Grade ${parsed.overallGrade}`;
+  const seoDescription = `Sverklo code-intelligence audit of ${displayName}. Overall grade ${parsed.overallGrade}. Dead code, circular dependencies, coupling, and security analysis with reproducer.`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sverklo Audit — ${esc(displayName)}</title>
+<meta name="description" content="${esc(seoDescription)}">
+<link rel="canonical" href="${esc(canonicalUrl)}">
+<meta property="og:title" content="${esc(seoTitle)}">
+<meta property="og:description" content="${esc(seoDescription)}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="${esc(canonicalUrl)}">
+<meta property="og:site_name" content="Sverklo">
+<meta property="og:image" content="https://sverklo.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(seoTitle)}">
+<meta name="twitter:description" content="${esc(seoDescription)}">
+<meta name="twitter:image" content="https://sverklo.com/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -426,8 +445,10 @@ export function generateAuditHtml(
     <a class="brand" href="https://sverklo.com/">sverklo</a>
     <nav class="top-nav">
       <a href="https://sverklo.com/report/">← All reports</a>
+      <a href="https://sverklo.com/vs/">compare</a>
+      <a href="https://sverklo.com/benchmarks/">benchmarks</a>
+      <a href="https://sverklo.com/blog/">blog</a>
       <a href="https://github.com/sverklo/sverklo">GitHub</a>
-      <a href="https://www.npmjs.com/package/sverklo">npm</a>
     </nav>
   </div>
 </header>
