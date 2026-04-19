@@ -1,7 +1,7 @@
 {
   "name": "sverklo",
   "mcpName": "io.github.sverklo/sverklo",
-  "version": "0.12.3",
+  "version": "0.12.4",
   "description": "Sverklo — local-first code intelligence MCP server. Diff-aware MR review, risk scoring, hybrid semantic search, PageRank ranking, persistent memory. Zero config.",
   "type": "module",
   "bin": {
