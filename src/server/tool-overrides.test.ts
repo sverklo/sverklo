@@ -135,7 +135,7 @@ describe("applyToolOverrides — disable list", () => {
 describe("applyToolOverrides — combined overrides", () => {
   beforeEach(() => {
     for (const key of Object.keys(process.env)) {
-      if (key.startsWith("SVERKLO_TOOL_") || key === "SVERKLO_DISABLED_TOOLS") {
+      if (key.startsWith("SVERKLO_TOOL_") || key === "SVERKLO_DISABLED_TOOLS" || key === "SVERKLO_PROFILE") {
         delete process.env[key];
       }
     }
@@ -151,5 +151,58 @@ describe("applyToolOverrides — combined overrides", () => {
     expect(result).toHaveLength(3);
     expect(result.find((t) => t.name === "sverklo_search")?.description).toBe("custom");
     expect(result.find((t) => t.name === "sverklo_forget")).toBeUndefined();
+  });
+});
+
+describe("applyToolOverrides — SVERKLO_PROFILE filter", () => {
+  beforeEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("SVERKLO_TOOL_") || key === "SVERKLO_DISABLED_TOOLS" || key === "SVERKLO_PROFILE") {
+        delete process.env[key];
+      }
+    }
+    __resetToolOverrideCache();
+  });
+
+  it("returns all tools when no profile is set", () => {
+    const result = applyToolOverrides(fixture());
+    expect(result).toHaveLength(4);
+  });
+
+  it("returns all tools when profile=full (explicit no-op)", () => {
+    process.env.SVERKLO_PROFILE = "full";
+    __resetToolOverrideCache();
+    const result = applyToolOverrides(fixture());
+    expect(result).toHaveLength(4);
+  });
+
+  it("filters to core profile (search + refs in fixture; forget + remember out)", () => {
+    // Fixture has search + refs + forget + remember; core keeps the first two.
+    process.env.SVERKLO_PROFILE = "core";
+    __resetToolOverrideCache();
+    const result = applyToolOverrides(fixture());
+    expect(result.map((t) => t.name)).toEqual(["sverklo_search", "sverklo_refs"]);
+  });
+
+  it("filters to lean profile (keeps memory tools)", () => {
+    process.env.SVERKLO_PROFILE = "lean";
+    __resetToolOverrideCache();
+    const result = applyToolOverrides(fixture());
+    expect(result.map((t) => t.name)).toEqual(["sverklo_search", "sverklo_refs", "sverklo_remember"]);
+  });
+
+  it("ignores unknown profile names with a warning (no filter applied)", () => {
+    process.env.SVERKLO_PROFILE = "doesnotexist";
+    __resetToolOverrideCache();
+    const result = applyToolOverrides(fixture());
+    expect(result).toHaveLength(4);
+  });
+
+  it("composes with disabled list (profile + disabled both apply)", () => {
+    process.env.SVERKLO_PROFILE = "lean";
+    process.env.SVERKLO_DISABLED_TOOLS = "sverklo_remember";
+    __resetToolOverrideCache();
+    const result = applyToolOverrides(fixture());
+    expect(result.map((t) => t.name)).toEqual(["sverklo_search", "sverklo_refs"]);
   });
 });

@@ -35,8 +35,8 @@ describe("handleSearch — confidence footer", () => {
     });
 
     const out = await handleSearch({} as never, { query: "retry logic" });
-    expect(out).not.toContain("Low confidence");
-    expect(out).not.toContain("Medium confidence");
+    expect(out).not.toContain("low conf");
+    expect(out).not.toContain("med conf");
   });
 
   it("low confidence: surfaces warning + fallback hint", async () => {
@@ -48,8 +48,8 @@ describe("handleSearch — confidence footer", () => {
     });
 
     const out = await handleSearch({} as never, { query: "x" });
-    expect(out).toContain("⚠️");
-    expect(out).toContain("Low confidence");
+    expect(out).toContain("⚠");
+    expect(out).toContain("low conf");
     expect(out).toContain("no results matched");
     expect(out).toContain("Try Grep");
   });
@@ -79,7 +79,7 @@ describe("handleSearch — confidence footer", () => {
     });
 
     const out = await handleSearch({} as never, { query: "auth" });
-    expect(out).toContain("Medium confidence");
+    expect(out).toContain("med conf");
     expect(out).toContain("ambiguous top two");
   });
 
@@ -92,8 +92,8 @@ describe("handleSearch — confidence footer", () => {
     });
 
     const out = await handleSearch({} as never, { query: "x" });
-    expect(out).not.toContain("Medium confidence");
-    expect(out).not.toContain("Low confidence");
+    expect(out).not.toContain("med conf");
+    expect(out).not.toContain("low conf");
   });
 
   it("passes args through to hybridSearchWithConfidence", async () => {

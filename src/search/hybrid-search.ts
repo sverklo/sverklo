@@ -373,7 +373,7 @@ export function formatResults(
   opts: { compact?: boolean } = {}
 ): string {
   if (results.length === 0) {
-    return "No results found.";
+    return "No matches.";
   }
 
   // Compact mode (default): for chunks longer than ~15 lines, show signature
@@ -410,8 +410,7 @@ export function formatResults(
   const overflow = (results as SearchResult[] & { __overflow?: { count: number; totalNeeded: number } }).__overflow;
   if (overflow) {
     parts.push(
-      `_${overflow.count} additional match${overflow.count === 1 ? "" : "es"} (~${overflow.totalNeeded} tokens total). ` +
-      `Re-run with token_budget:${overflow.totalNeeded} to include all._`
+      `_+${overflow.count} more (~${overflow.totalNeeded} tok). Pass token_budget:${overflow.totalNeeded} for all._`
     );
   }
 

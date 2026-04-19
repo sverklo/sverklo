@@ -93,13 +93,13 @@ export async function handleContext(
   const tokenBudget = detail === "minimal" ? 1500 : detail === "normal" ? 3000 : 5000;
 
   const parts: string[] = [];
-  parts.push(`# Context for: ${task}`);
-  parts.push(`_detail: ${detail}${scope ? `, scope: ${scope}` : ""}_`);
+  parts.push(`# ${task}`);
+  parts.push(`_${detail}${scope ? ` · ${scope}` : ""}_`);
   parts.push("");
 
   // ─── 1. Codebase header ────────────────────────────────────────────
   const status = indexer.getStatus();
-  parts.push(`## Codebase`);
+  parts.push(`## repo`);
   parts.push(
     `${status.projectName} · ${status.fileCount} files · ${status.chunkCount} symbols · ${status.languages.slice(0, 4).join(", ") || "—"}`
   );
@@ -108,7 +108,7 @@ export async function handleContext(
   const coreMemories = indexer.memoryStore.getCore(detail === "minimal" ? 3 : 6);
   if (coreMemories.length > 0) {
     parts.push("");
-    parts.push("## Project invariants (core memories)");
+    parts.push("## invariants");
     for (const m of coreMemories) {
       const stale = m.is_stale ? " [STALE]" : "";
       parts.push(`- [${m.category}]${stale} ${m.content}`);
@@ -126,7 +126,7 @@ export async function handleContext(
   const topResults = searchResults.slice(0, searchLimit);
 
   if (topResults.length > 0) {
-    parts.push(`## Most relevant code (${topResults.length})`);
+    parts.push(`## code (${topResults.length})`);
     const fileCache = new Map(indexer.fileStore.getAll().map((f) => [f.id, f]));
     for (const r of topResults) {
       const file = fileCache.get(r.chunk.file_id);
@@ -167,7 +167,7 @@ export async function handleContext(
         }
       }
       if (neighbours.length > 0) {
-        parts.push(`## Dependency neighbours`);
+        parts.push(`## deps`);
         for (const n of neighbours) {
           const arrow = n.via === "imports" ? "→" : "←";
           parts.push(`- \`${n.from}\` ${arrow} \`${n.to}\``);
@@ -176,7 +176,7 @@ export async function handleContext(
       }
     }
   } else {
-    parts.push(`_No semantic matches found for "${task}". Try a more specific query, broaden the scope, or check the index status._`);
+    parts.push(`_No matches for "${task}". Try a narrower query or broaden scope._`);
     parts.push("");
   }
 

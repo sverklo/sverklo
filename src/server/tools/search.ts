@@ -75,11 +75,11 @@ export async function handleSearch(
   const footerLines: string[] = [];
   if (response.confidence === "low") {
     footerLines.push("");
-    footerLines.push(`**⚠️ Low confidence** — ${response.confidenceReason ?? "weak ranking"}`);
+    footerLines.push(`⚠ low conf: ${response.confidenceReason ?? "weak ranking"}`);
     if (response.fallbackHint) footerLines.push(response.fallbackHint);
   } else if (response.confidence === "medium" && response.fallbackHint) {
     footerLines.push("");
-    footerLines.push(`_Medium confidence — ${response.confidenceReason ?? "mixed ranking"}_`);
+    footerLines.push(`_med conf: ${response.confidenceReason ?? "mixed"}_`);
     footerLines.push(response.fallbackHint);
   }
 

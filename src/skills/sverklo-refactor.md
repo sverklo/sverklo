@@ -11,3 +11,5 @@ When the user wants to rename, move, or refactor a symbol:
 4. Call `sverklo_test_map` to identify which tests need updating
 
 Present: the full list of files that need changes, the risk level, and a step-by-step refactor plan.
+
+**Stay in scope.** Modify only what `sverklo_impact` flagged. Do not add docstrings, type annotations, formatting fixes, or "improvements" to code that wasn't part of the refactor — those changes are invisible to the impact analysis and create unrelated review noise. If you spot something worth changing, mention it; do not silently edit it.

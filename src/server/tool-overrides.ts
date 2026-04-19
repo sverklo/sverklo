@@ -1,7 +1,7 @@
 // Runtime-overridable tool descriptions and enable/disable flags.
 //
 // Power users frequently want to repurpose sverklo tools without forking.
-// The two levers exposed here are:
+// The three levers exposed here are:
 //
 //   1. Description overrides via `SVERKLO_TOOL_<NAME>_DESCRIPTION`
 //      Override the description text the agent sees for any tool. Useful
@@ -12,7 +12,18 @@
 //      Comma-separated list of tool names to hide from the `tools/list`
 //      response. Useful when a project doesn't want memory tools exposed,
 //      or when a user wants to shrink the tool surface for a specific
-//      agent that gets overwhelmed by 20 options.
+//      agent that gets overwhelmed by 23 options.
+//
+//   3. Profile shortcut via `SVERKLO_PROFILE`
+//      Pre-defined named subsets — `core` keeps only the 5 hot search/graph
+//      tools (search, lookup, overview, refs, impact) and hides everything
+//      else. `nav` adds deps + context. `lean` adds the memory layer. `full`
+//      (default) exposes all 23 tools.
+//      Inspired by mibayy/token-savior's profile system. The point is to
+//      keep the MCP `tools/list` payload small for token-conscious users
+//      who don't need the full surface.
+//      Profile filtering composes with the disabled-list — disabled tools
+//      are still hidden even inside a profile.
 //
 // Design notes:
 //
@@ -38,9 +49,47 @@ export interface ToolLike {
 interface OverrideCache {
   disabled: Set<string>;
   descriptions: Map<string, string>;
+  profile: Set<string> | null; // null = no profile filter (keep all)
 }
 
 let cache: OverrideCache | null = null;
+
+// Pre-defined profiles. Names match Token Savior's convention.
+// `full` is the implicit default and intentionally absent — when no
+// profile is set we don't filter.
+const PROFILES: Record<string, string[]> = {
+  core: [
+    // The 5 tools an agent actually reaches for in 80% of code-intel sessions.
+    "sverklo_search",
+    "sverklo_lookup",
+    "sverklo_overview",
+    "sverklo_refs",
+    "sverklo_impact",
+  ],
+  nav: [
+    "sverklo_search",
+    "sverklo_lookup",
+    "sverklo_overview",
+    "sverklo_refs",
+    "sverklo_impact",
+    "sverklo_deps",
+    "sverklo_context",
+    "sverklo_status",
+  ],
+  lean: [
+    "sverklo_search",
+    "sverklo_lookup",
+    "sverklo_overview",
+    "sverklo_refs",
+    "sverklo_impact",
+    "sverklo_deps",
+    "sverklo_context",
+    "sverklo_status",
+    "sverklo_remember",
+    "sverklo_recall",
+    "sverklo_review_diff",
+  ],
+};
 
 function normalizeEnvSuffix(name: string): string {
   // "sverklo_search" -> "SEARCH"
@@ -76,7 +125,22 @@ function buildCache(): OverrideCache {
     descriptions.set(mid, value);
   }
 
-  return { disabled, descriptions };
+  // Profile filter. Unknown profile names are treated as "no filter" with
+  // a one-time stderr warning so a typo doesn't silently nuke the tool list.
+  let profile: Set<string> | null = null;
+  const profileName = process.env.SVERKLO_PROFILE?.trim().toLowerCase();
+  if (profileName && profileName !== "full") {
+    const allowed = PROFILES[profileName];
+    if (allowed) {
+      profile = new Set(allowed);
+    } else {
+      process.stderr.write(
+        `[sverklo] SVERKLO_PROFILE=${profileName} not recognized — using full. Valid: ${Object.keys(PROFILES).join(", ")}, full\n`
+      );
+    }
+  }
+
+  return { disabled, descriptions, profile };
 }
 
 function getCache(): OverrideCache {
@@ -86,13 +150,16 @@ function getCache(): OverrideCache {
 
 /**
  * Apply env-var overrides to a list of tool definitions. Returns a new
- * array — never mutates the input. Tools whose names appear in
- * `SVERKLO_DISABLED_TOOLS` are dropped entirely.
+ * array — never mutates the input. Filtering order:
+ *   1. SVERKLO_PROFILE — keep only tools in the named subset
+ *   2. SVERKLO_DISABLED_TOOLS — drop tools by exact name
+ *   3. SVERKLO_TOOL_<NAME>_DESCRIPTION — override description text
  */
 export function applyToolOverrides<T extends ToolLike>(tools: T[]): T[] {
-  const { disabled, descriptions } = getCache();
+  const { disabled, descriptions, profile } = getCache();
   const out: T[] = [];
   for (const tool of tools) {
+    if (profile && !profile.has(tool.name)) continue;
     if (disabled.has(tool.name)) continue;
     const suffix = normalizeEnvSuffix(tool.name);
     const override = descriptions.get(suffix);

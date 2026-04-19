@@ -27,6 +27,18 @@ Sverklo is a sharper tool for specific kinds of work. Use it where it fits, not 
 - Exact string matches and literal patterns
 - Reading specific file contents or line ranges
 - Focused diff review where you know which files matter
+
+**Tool-call discipline:**
+- Avoid re-reading files you have already read unless they may have changed. When sverklo returns a path, treat it as known — use \`sverklo_lookup\` for a single symbol rather than re-reading the whole file.
+- Prefer this exploration order: \`sverklo_overview\` (1 call) → \`sverklo_search\` (1 call) → \`sverklo_lookup\` on the top hit → \`sverklo_refs\` / \`sverklo_impact\` only if you need the blast radius. If you've made 5 sverklo calls and still don't have the answer, ask a clarifying question instead of burning 10 more.
+- Stay in scope on refactors: modify only what \`sverklo_impact\` flagged. Don't add docstrings, type annotations, or "improvements" to adjacent code that wasn't part of the request — those changes are invisible to the impact analysis and create review noise.
+
+**Memory discipline (\`sverklo_remember\`):**
+- Save a memory only when (a) a bug took >1 hour to debug, (b) the same mistake repeats across sessions, (c) a non-obvious architectural decision needs to survive context loss, or (d) an audit finding requires user judgment. Do not save routine task summaries — \`sverklo_recall\` is most useful when its hits are signal-dense.
+
+**Output discipline:**
+- No preambles ("Here are the results", "Great question"), no closing affirmations, no em-dashes used as conversational pauses. State the finding, show the fix, stop.
+- User instructions always override this file.
 `;
 
 /**
