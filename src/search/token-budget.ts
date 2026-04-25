@@ -8,7 +8,8 @@ export interface OverviewEntry {
 export function formatOverview(
   entries: OverviewEntry[],
   tokenBudget: number,
-  basePath?: string
+  basePath?: string,
+  depth: 1 | 2 | 3 | 4 = 3
 ): string {
   const parts: string[] = [];
   let remaining = tokenBudget;
@@ -31,28 +32,45 @@ export function formatOverview(
     return maxB - maxA;
   });
 
+  // Depth 1 — only the directory list. Cheapest possible orientation.
+  if (depth === 1) {
+    for (const [dir] of sortedDirs) {
+      const line = `${dir}/`;
+      const cost = Math.ceil(line.length / 3.5);
+      if (remaining < cost) break;
+      parts.push(line);
+      remaining -= cost;
+    }
+    return parts.join("\n");
+  }
+
+  // depth >= 2: walk directories, listing files and (at depth >= 3) symbols.
+  const symbolCap = depth >= 4 ? 999 : 8;
   for (const [dir, dirEntries] of sortedDirs) {
     const dirLine = `${dir}/`;
-    const dirCost = 5; // tokens for dir header
+    const dirCost = 5;
     if (remaining < dirCost + 20) break;
 
     parts.push(dirLine);
     remaining -= dirCost;
 
-    // Sort files by PageRank within directory
     dirEntries.sort((a, b) => b.file.pagerank - a.file.pagerank);
 
     for (const entry of dirEntries) {
       const fileName = entry.file.path.split("/").pop() || entry.file.path;
-      const symbols = entry.chunks
-        .filter((c) => c.name)
-        .map((c) => `${c.name}()`)
-        .slice(0, 8)
-        .join(", ");
-
-      const line = `  ${fileName} [${entry.file.pagerank.toFixed(2)}] — ${symbols || "(no named exports)"}`;
+      let line: string;
+      if (depth === 2) {
+        // Files only — no symbols, much cheaper.
+        line = `  ${fileName} [${entry.file.pagerank.toFixed(2)}]`;
+      } else {
+        const symbols = entry.chunks
+          .filter((c) => c.name)
+          .map((c) => `${c.name}()`)
+          .slice(0, symbolCap)
+          .join(", ");
+        line = `  ${fileName} [${entry.file.pagerank.toFixed(2)}] — ${symbols || "(no named exports)"}`;
+      }
       const lineCost = Math.ceil(line.length / 3.5);
-
       if (remaining < lineCost) break;
       parts.push(line);
       remaining -= lineCost;
@@ -98,6 +116,13 @@ export function formatLookup(
     }
 
     parts.push(header);
+    // P1-12: surface enriched purpose when available.
+    const purposeRaw = chunk.purpose ?? null;
+    if (purposeRaw) {
+      const m = /^\[[a-f0-9]{16}\] (.*)$/.exec(purposeRaw);
+      const purpose = m ? m[1] : purposeRaw;
+      parts.push(`_${purpose}_`);
+    }
     parts.push(`\`\`\`${lang}`);
     parts.push(chunk.content);
     parts.push("```\n");

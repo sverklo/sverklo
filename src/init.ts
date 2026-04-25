@@ -142,6 +142,7 @@ export async function initProject(
 
   // 1. Add CLAUDE.md snippet
   const claudeMdPath = join(projectPath, "CLAUDE.md");
+  let claudeMdCreatedByInit = false;
   if (existsSync(claudeMdPath)) {
     const content = readFileSync(claudeMdPath, "utf-8");
     if (content.includes("sverklo_search")) {
@@ -153,6 +154,7 @@ export async function initProject(
   } else {
     writeFileSync(claudeMdPath, CLAUDE_MD_SNIPPET.trim() + "\n");
     console.log("  CLAUDE.md — created with sverklo instructions");
+    claudeMdCreatedByInit = true;
   }
 
   // 2. MCP server config — Claude Code reads .mcp.json AT PROJECT ROOT for project-scoped servers.
@@ -283,19 +285,28 @@ export async function initProject(
         agConfig = {};
       }
     }
-    if (agConfig.mcpServers?.sverklo) {
-      console.log("  ~/.gemini/antigravity/mcp_config.json — sverklo already configured");
+    if (!agConfig.mcpServers) agConfig.mcpServers = {};
+    const existing = agConfig.mcpServers.sverklo;
+    const existingProject = existing?.args?.[0];
+    if (existing && existingProject === projectPath) {
+      console.log("  ~/.gemini/antigravity/mcp_config.json — sverklo already configured for this project");
     } else {
-      if (!agConfig.mcpServers) agConfig.mcpServers = {};
-      // Antigravity's global config doesn't know about the per-project root, so we
-      // pass the absolute project path explicitly. Users with multiple projects
-      // will need to re-run `sverklo init` from each (or hand-edit).
+      // Antigravity's global config doesn't know about the per-project root, so
+      // we pass the absolute project path explicitly. If a stale entry points at
+      // a different project, rewrite it — that's what doctor's recommended fix
+      // tells the user `init` will do.
       agConfig.mcpServers.sverklo = {
         command: sverkloBin,
         args: [projectPath],
       };
       writeFileSync(antigravityConfigPath, JSON.stringify(agConfig, null, 2) + "\n");
-      console.log(`  ~/.gemini/antigravity/mcp_config.json — added sverklo (project: ${projectPath})`);
+      if (existing) {
+        console.log(
+          `  ~/.gemini/antigravity/mcp_config.json — rewired sverklo from ${existingProject ?? "<unknown>"} → ${projectPath}`
+        );
+      } else {
+        console.log(`  ~/.gemini/antigravity/mcp_config.json — added sverklo (project: ${projectPath})`);
+      }
       console.log("    Restart Antigravity to pick up the new MCP server.");
     }
   }
@@ -329,6 +340,9 @@ export async function initProject(
       const indexer = new Indexer(config);
       const result = await importExistingMemories(indexer, projectPath, {
         mineChats: options.mineChats ?? false,
+        // Don't ingest a CLAUDE.md we just created in this same run —
+        // it's our boilerplate template, not user knowledge.
+        skipPaths: claudeMdCreatedByInit ? ["CLAUDE.md"] : undefined,
       });
       indexer.close();
 
@@ -399,14 +413,20 @@ export async function initProject(
 
   console.log("");
   console.log("Restart Claude Code in this directory and sverklo will appear in /mcp.");
-  // Next-steps footer: make the dashboard visible without forcing it.
-  // Users in CI / SSH / headless environments ignore this; users who
-  // want a visual explorer have a one-command path.
+  // Next-steps footer: lead with the "wow moment" — sverklo's hand-
+  // crafted hybrid-workflow prompts that combine sverklo tools with
+  // grep/read fallbacks. They're the most differentiated artifact in
+  // the product but were buried before; promoting them to the top of
+  // post-init output gets the user a real audit in 30 seconds.
+  console.log("");
+  console.log("Try it now (30s codebase audit):");
+  console.log("  sverklo audit-prompt | claude         # paste the prompt into Claude — or any AI agent");
+  console.log("  sverklo audit                          # run a graded audit directly from the CLI");
   console.log("");
   console.log("Next steps:");
-  console.log("  claude                # start coding — sverklo tools are preferred automatically");
-  console.log("  sverklo ui             # optional: open the web dashboard for visual exploration");
-  console.log("                          (dependency graph, search playground, memory viewer)");
+  console.log("  claude                                 # start coding — sverklo tools are preferred automatically");
+  console.log("  sverklo ui                             # optional: open the web dashboard");
+  console.log("  sverklo review --ref HEAD~1..HEAD      # diff-aware risk review (CI-friendly with --fail-on high)");
   console.log("");
   console.log("Tip: create a .sverklo.yaml to fine-tune indexing (weights, ignore patterns, search budgets).");
   console.log("  See https://sverklo.com/docs/config for the full schema.");

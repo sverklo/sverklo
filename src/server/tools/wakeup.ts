@@ -3,7 +3,11 @@ import type { Indexer } from "../../indexer/indexer.js";
 export const wakeupTool = {
   name: "sverklo_wakeup",
   description:
-    "Compressed project context for non-MCP clients (system-prompt injection).",
+    "500-token codebase summary suitable for pasting into a system prompt " +
+    "when the agent has no MCP access. Use this when integrating sverklo " +
+    "intelligence into Cursor, Codex, or a CI bot that can't run the MCP " +
+    "server. For MCP-connected agents, prefer sverklo_status and the " +
+    "richer per-tool surfaces — they return more and stay in budget.",
   inputSchema: {
     type: "object" as const,
     properties: {

@@ -163,12 +163,93 @@ Do not propose code changes without identifying a specific file:line. If the sea
   },
 };
 
+// ── Research recipes (v0.14, P1-16). Leverage sverklo_investigate +
+// sverklo_verify so answers stay grounded in evidence the user can audit.
+
+const MAP_FEATURE: PromptDefinition = {
+  name: "sverklo/map-feature",
+  description:
+    "Map a feature across the codebase: entry points, key symbols, tests, and docs. " +
+    "Uses sverklo_investigate to fan-out over FTS + vector + symbol + refs in one call.",
+  arguments: [
+    {
+      name: "feature",
+      description:
+        "The feature to map, in a short phrase — 'pull request review', 'auth middleware', 'token budgeting'.",
+      required: true,
+    },
+    {
+      name: "scope",
+      description: "Optional path prefix to limit the search, e.g. 'src/server/'.",
+      required: false,
+    },
+  ],
+  build: ({ feature, scope }) => {
+    const scopeArg = scope ? `, scope:"${scope}"` : "";
+    return `Map the \`${feature}\` feature across the codebase. Use sverklo's research tools in this order:
+
+1. Call \`sverklo_investigate query:"${feature}"${scopeArg}\` for a single-pass fan-out over FTS, embeddings, symbols, and refs. Read the \`found_by\` tags — results agreed on by multiple retrievers are higher-signal than single-source hits.
+2. Pick the top 3-5 symbols from the investigation and call \`sverklo_refs\` on each to expand the surface area. Note any **Doc mentions** sections — they tell you where the feature is documented.
+3. For the two most-referenced symbols, call \`sverklo_impact\` to see blast radius before proposing any changes. If partition plans appear, pick one bucket and drill in rather than reading the full list.
+4. Call \`sverklo_test_map\` scoped to the same directories — which tests cover this feature?
+5. Summarise in this structure:
+   - **Entry points:** 1-3 files where the feature is first reached
+   - **Core symbols:** classes/functions that implement it
+   - **Supporting modules:** everything one hop away
+   - **Tests:** files that exercise it
+   - **Docs:** README / ADR sections that describe it
+   - **Open questions:** things sverklo's retrievers couldn't pin down
+
+End with a list of evidence ids (from the \`evidence\` footers) the user can \`sverklo_verify\` if they want to audit your map.`;
+  },
+};
+
+const ASSESS_IMPACT: PromptDefinition = {
+  name: "sverklo/assess-impact",
+  description:
+    "Before a refactor: enumerate the blast radius of changing a symbol, group by subsystem, " +
+    "call out weak spots (uncovered callers, cross-repo contracts), and produce a go/no-go.",
+  arguments: [
+    { name: "symbol", description: "The symbol about to be changed.", required: true },
+    {
+      name: "change",
+      description: "One-line description of the proposed change (optional but useful).",
+      required: false,
+    },
+  ],
+  build: ({ symbol, change }) => {
+    const changeLine = change
+      ? `\nProposed change: ${change}\n`
+      : "";
+    return `Assess the impact of changing \`${symbol}\`.${changeLine}
+Run these steps, in order:
+
+1. \`sverklo_lookup symbol:"${symbol}"\` — confirm exactly one definition exists. If there are multiple, pin down which one the change targets before proceeding.
+2. \`sverklo_impact symbol:"${symbol}"\` — full caller graph. If the result returns a partition plan (> 80 callers), traverse one bucket at a time rather than reading the raw list.
+3. \`sverklo_test_map symbol:"${symbol}"\` — which tests exercise the callers? Callers with zero test coverage are the highest-risk items.
+4. \`sverklo_refs symbol:"${symbol}"\` with \`exact:true\` — confirms we haven't missed documentation mentions. If any **Doc mentions** show up, flag them as places the change should also update the docs.
+5. If \`cross_repo:true\` is available (workspace configured), re-run \`sverklo_impact symbol:"${symbol}" cross_repo:true\` — cross-repo contracts are the most expensive category of breakage.
+
+Deliver a decision memo:
+- **Risk level:** LOW / MEDIUM / HIGH (justify in one sentence)
+- **Callers by subsystem:** grouped list, highest fan-in first
+- **Uncovered callers:** specific file:line with no tests
+- **Doc updates required:** if any doc mentions exist
+- **Cross-repo touches:** if any
+- **Go / no-go:** with a one-line rationale
+
+Attach the evidence ids for every claim so the user can \`sverklo_verify\` your analysis didn't go stale between reading and acting.`;
+  },
+};
+
 export const ALL_PROMPTS: PromptDefinition[] = [
   REVIEW_CHANGES,
   PRE_MERGE_CHECK,
   ONBOARD,
   ARCHITECTURE_MAP,
   DEBUG_ISSUE,
+  MAP_FEATURE,
+  ASSESS_IMPACT,
 ];
 
 export function findPrompt(name: string): PromptDefinition | undefined {

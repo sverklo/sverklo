@@ -43,12 +43,18 @@ const ADR_DIRS = [
 export async function importExistingMemories(
   indexer: Indexer,
   projectPath: string,
-  options: { mineChats?: boolean } = {}
+  options: { mineChats?: boolean; skipPaths?: string[] } = {}
 ): Promise<{ imported: number; skipped: number; sources: string[] }> {
   const allMemories: { source: string; memories: ExtractedMemory[] }[] = [];
+  // Avoid re-importing files that the caller (typically `init`) just
+  // created — otherwise we ingest our own boilerplate template as
+  // "user memories" and the user sees a misleading "imported N
+  // memories" line.
+  const skipSet = new Set((options.skipPaths ?? []).map((p) => p));
 
   // Scan known sources
   for (const src of SOURCES) {
+    if (skipSet.has(src.path)) continue;
     const fullPath = join(projectPath, src.path);
     if (existsSync(fullPath)) {
       try {

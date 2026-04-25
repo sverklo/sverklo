@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>sverklo brand preview</title>
+<style>
+  body { background: #0E0D0B; color: #EDE7D9; font-family: 'Public Sans', -apple-system, sans-serif; padding: 48px; margin: 0; }
+  .light { background: #EDE7D9; color: #0E0D0B; }
+  section { padding: 48px; border-bottom: 1px solid #2A2620; }
+  section.light { border-bottom: 1px solid #C9C2B0; }
+  h2 { font-family: 'JetBrains Mono', monospace; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #A39886; margin: 0 0 24px; }
+  section.light h2 { color: #6B6354; }
+  .row { display: flex; gap: 48px; align-items: center; flex-wrap: wrap; }
+  .swatch { display: inline-flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .swatch span { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8A8270; }
+  section.light .swatch span { color: #6B6354; }
+  img { display: block; }
+  .square-row { display: flex; gap: 32px; align-items: flex-end; }
+  .square-row > div { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .square-row span { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8A8270; }
+  section.light .square-row span { color: #6B6354; }
+</style>
+</head>
+<body>
+  <section>
+    <h2>Primary lockup — dark surfaces (README, sverklo.com hero, social cards)</h2>
+    <div class="swatch">
+      <img src="logo.svg" alt="sverklo logo on dark" width="340" height="96"/>
+      <span>logo.svg @ 340×96</span>
+    </div>
+  </section>
+
+  <section class="light">
+    <h2>Primary lockup — light surfaces (slides, light themes, print)</h2>
+    <div class="swatch">
+      <img src="logo-light.svg" alt="sverklo logo on light" width="340" height="96"/>
+      <span>logo-light.svg @ 340×96</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Logomark — square (favicon, GitHub avatar, npm card, apple-touch-icon)</h2>
+    <p style="color: #A39886; font-size: 14px; max-width: 60ch; margin: 0 0 32px;">
+      Drops the wordmark in favour of caret + 's' so the brand survives at 32px. Replace docs/logo.png with this — flat fills, no bevel, no sparkle, no gradient.
+    </p>
+    <div class="square-row">
+      <div><img src="logomark.svg" alt="sverklo logomark 256" width="256" height="256"/><span>256×256</span></div>
+      <div><img src="logomark.svg" alt="sverklo logomark 128" width="128" height="128"/><span>128×128</span></div>
+      <div><img src="logomark.svg" alt="sverklo logomark 64" width="64" height="64"/><span>64×64</span></div>
+      <div><img src="logomark.svg" alt="sverklo logomark 32" width="32" height="32"/><span>32×32</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Side-by-side: old vs new</h2>
+    <div class="row">
+      <div class="swatch">
+        <img src="logo.png" alt="current logo" width="160" height="160"/>
+        <span>current — docs/logo.png</span>
+      </div>
+      <div class="swatch">
+        <img src="logomark.svg" alt="proposed logomark" width="160" height="160"/>
+        <span>proposed — docs/logomark.svg</span>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

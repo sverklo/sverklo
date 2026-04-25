@@ -6,7 +6,11 @@ import { getAuditHistory, formatTrend } from "../../utils/audit-history.js";
 export const auditTool = {
   name: "sverklo_audit",
   description:
-    "Project report: god nodes, hub files, orphans, language mix, memory health.",
+    "One-call codebase health report: god nodes (highest blast-radius symbols), " +
+    "hub files (highest PageRank), orphan symbols (likely dead code), and " +
+    "language/memory stats. Use as the seed for a code-quality pass — pair " +
+    "with sverklo_impact for blast-radius and sverklo_deps for fan-in/fan-out. " +
+    "Cheaper than running overview + impact + dependencies separately.",
   inputSchema: {
     type: "object" as const,
     properties: {

@@ -48,6 +48,33 @@ import {
   handleDemote,
 } from "./tools/tier.js";
 import { clustersTool, handleClusters } from "./tools/clusters.js";
+import { investigateTool, handleInvestigate } from "./tools/investigate.js";
+import { verifyTool, handleVerify } from "./tools/verify.js";
+import { critiqueTool, handleCritique } from "./tools/critique.js";
+import { conceptsTool, handleConcepts } from "./tools/concepts.js";
+import {
+  ctxSliceTool,
+  ctxGrepTool,
+  ctxStatsTool,
+  handleCtxSlice,
+  handleCtxGrep,
+  handleCtxStats,
+} from "./tools/ctx-handles.js";
+import { searchIterativeTool, handleSearchIterative } from "./tools/search-iterative.js";
+import { askTool, handleAsk } from "./tools/ask.js";
+import { patternsTool, handlePatterns } from "./tools/patterns.js";
+import { trajectoryBuffer } from "./trajectory.js";
+import { buildHandleUri } from "../storage/handle-store.js";
+import { getGitState } from "../memory/git-state.js";
+import {
+  grepResultsTool,
+  headResultsTool,
+  ctxPeekTool,
+  handleGrepResults,
+  handleHeadResults,
+  handleCtxPeek,
+} from "./tools/post-filter.js";
+import { responseStore } from "./response-store.js";
 import { listReposTool, handleListRepos } from "./tools/list-repos.js";
 import { IndexerPool } from "../registry/indexer-pool.js";
 import { startHttpServer } from "./http-server.js";
@@ -308,6 +335,19 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     clustersTool,
     pinTool,
     unpinTool,
+    investigateTool,
+    searchIterativeTool,
+    askTool,
+    verifyTool,
+    critiqueTool,
+    conceptsTool,
+    patternsTool,
+    grepResultsTool,
+    headResultsTool,
+    ctxPeekTool,
+    ctxSliceTool,
+    ctxGrepTool,
+    ctxStatsTool,
     ...(enableZilliz
       ? [indexCodebaseTool, searchCodeTool, clearIndexTool, getIndexingStatusTool]
       : []),
@@ -412,6 +452,45 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         case "sverklo_unpin":
           result = handleUnpin(indexer, args || {});
           break;
+        case "sverklo_investigate":
+          result = await handleInvestigate(indexer, args || {});
+          break;
+        case "sverklo_search_iterative":
+          result = await handleSearchIterative(indexer, args || {});
+          break;
+        case "sverklo_ask":
+          result = await handleAsk(indexer, args || {});
+          break;
+        case "sverklo_verify":
+          result = handleVerify(indexer, args || {});
+          break;
+        case "sverklo_critique":
+          result = handleCritique(indexer, args || {});
+          break;
+        case "sverklo_concepts":
+          result = await handleConcepts(indexer, args || {});
+          break;
+        case "sverklo_patterns":
+          result = handlePatterns(indexer, args || {});
+          break;
+        case "sverklo_grep_results":
+          result = handleGrepResults(args || {});
+          break;
+        case "sverklo_head_results":
+          result = handleHeadResults(args || {});
+          break;
+        case "sverklo_ctx_peek":
+          result = handleCtxPeek(args || {});
+          break;
+        case "sverklo_ctx_slice":
+          result = handleCtxSlice(indexer, args || {});
+          break;
+        case "sverklo_ctx_grep":
+          result = handleCtxGrep(indexer, args || {});
+          break;
+        case "sverklo_ctx_stats":
+          result = handleCtxStats(indexer, args || {});
+          break;
 
         // ── Zilliz claude-context compatibility aliases ──────────────
         case "search_code": {
@@ -475,16 +554,48 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         if (hintBlock) result = result + "\n" + hintBlock;
       }
 
+      // Register search-family results in the response store so post-filter
+      // primitives (grep_results/head_results/ctx_peek) can refine without a
+      // second retrieval. Tools that don't return result blocks (status,
+      // memories, verify, etc.) don't register — their output isn't blockish.
+      if (
+        name === "sverklo_search" ||
+        name === "sverklo_refs" ||
+        name === "sverklo_lookup" ||
+        name === "sverklo_impact" ||
+        name === "sverklo_diff_search" ||
+        name === "sverklo_ast_grep" ||
+        name === "sverklo_investigate"
+      ) {
+        const id = responseStore.set(name, result);
+        // Persistent handle (P1-8) — survives across MCP sessions.
+        const sha = getGitState(indexer.rootPath).sha;
+        const handle = indexer.handleStore.create(name, result, sha);
+        const uri = buildHandleUri(name, handle.id);
+        result = result + `\n\n_response_id: ${id} · handle: ${uri}_`;
+      }
+
       // Fire-and-forget telemetry. Only sverklo_* names are tracked
       // (compat aliases like search_code are excluded — they pollute the
       // tool name distribution and we already account for them via the
       // underlying handlers).
       if (name.startsWith("sverklo_")) {
+        const dur = Date.now() - __telemetryStart;
+        // Bucketed response size — lets us answer "did flipping `compact`
+        // default actually save tokens?" without recording any content.
+        const sizeBucket =
+          result.length < 500 ? "xs"
+          : result.length < 2_000 ? "s"
+          : result.length < 8_000 ? "m"
+          : result.length < 32_000 ? "l"
+          : "xl";
         void track("tool.call", {
           tool: name,
           outcome: __telemetryOutcome,
-          duration_ms: Date.now() - __telemetryStart,
+          duration_ms: dur,
+          size_bucket: sizeBucket,
         });
+        trajectoryBuffer.record(name, (args || {}) as Record<string, unknown>, dur);
       }
 
       trace.end(result.length);
@@ -677,6 +788,19 @@ export async function startGlobalMcpServer(): Promise<void> {
     injectRepoParam(clustersTool),
     injectRepoParam(pinTool),
     injectRepoParam(unpinTool),
+    injectRepoParam(investigateTool),
+    injectRepoParam(searchIterativeTool),
+    injectRepoParam(askTool),
+    injectRepoParam(verifyTool),
+    injectRepoParam(critiqueTool),
+    injectRepoParam(conceptsTool),
+    injectRepoParam(patternsTool),
+    injectRepoParam(ctxSliceTool),
+    injectRepoParam(ctxGrepTool),
+    injectRepoParam(ctxStatsTool),
+    injectRepoParam(grepResultsTool),
+    injectRepoParam(headResultsTool),
+    injectRepoParam(ctxPeekTool),
     ...(enableZilliz
       ? [injectRepoParam(indexCodebaseTool), injectRepoParam(searchCodeTool), injectRepoParam(clearIndexTool), injectRepoParam(getIndexingStatusTool)]
       : []),
@@ -793,6 +917,45 @@ export async function startGlobalMcpServer(): Promise<void> {
         case "sverklo_unpin":
           result = handleUnpin(indexer, args || {});
           break;
+        case "sverklo_investigate":
+          result = await handleInvestigate(indexer, args || {});
+          break;
+        case "sverklo_search_iterative":
+          result = await handleSearchIterative(indexer, args || {});
+          break;
+        case "sverklo_ask":
+          result = await handleAsk(indexer, args || {});
+          break;
+        case "sverklo_verify":
+          result = handleVerify(indexer, args || {});
+          break;
+        case "sverklo_critique":
+          result = handleCritique(indexer, args || {});
+          break;
+        case "sverklo_concepts":
+          result = await handleConcepts(indexer, args || {});
+          break;
+        case "sverklo_patterns":
+          result = handlePatterns(indexer, args || {});
+          break;
+        case "sverklo_grep_results":
+          result = handleGrepResults(args || {});
+          break;
+        case "sverklo_head_results":
+          result = handleHeadResults(args || {});
+          break;
+        case "sverklo_ctx_peek":
+          result = handleCtxPeek(args || {});
+          break;
+        case "sverklo_ctx_slice":
+          result = handleCtxSlice(indexer, args || {});
+          break;
+        case "sverklo_ctx_grep":
+          result = handleCtxGrep(indexer, args || {});
+          break;
+        case "sverklo_ctx_stats":
+          result = handleCtxStats(indexer, args || {});
+          break;
 
         // Zilliz compat aliases
         case "search_code": {
@@ -852,12 +1015,40 @@ export async function startGlobalMcpServer(): Promise<void> {
         if (hintBlock) result = result + "\n" + hintBlock;
       }
 
+      if (
+        name === "sverklo_search" ||
+        name === "sverklo_refs" ||
+        name === "sverklo_lookup" ||
+        name === "sverklo_impact" ||
+        name === "sverklo_diff_search" ||
+        name === "sverklo_ast_grep" ||
+        name === "sverklo_investigate"
+      ) {
+        const id = responseStore.set(name, result);
+        // Persistent handle (P1-8) — survives across MCP sessions.
+        const sha = getGitState(indexer.rootPath).sha;
+        const handle = indexer.handleStore.create(name, result, sha);
+        const uri = buildHandleUri(name, handle.id);
+        result = result + `\n\n_response_id: ${id} · handle: ${uri}_`;
+      }
+
       if (name.startsWith("sverklo_")) {
+        const dur = Date.now() - __telemetryStart;
+        // Bucketed response size — lets us answer "did flipping `compact`
+        // default actually save tokens?" without recording any content.
+        const sizeBucket =
+          result.length < 500 ? "xs"
+          : result.length < 2_000 ? "s"
+          : result.length < 8_000 ? "m"
+          : result.length < 32_000 ? "l"
+          : "xl";
         void track("tool.call", {
           tool: name,
           outcome: __telemetryOutcome,
-          duration_ms: Date.now() - __telemetryStart,
+          duration_ms: dur,
+          size_bucket: sizeBucket,
         });
+        trajectoryBuffer.record(name, (args || {}) as Record<string, unknown>, dur);
       }
 
       trace.end(result.length);

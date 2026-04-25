@@ -25,7 +25,54 @@ export type ChunkType =
   | "module"
   | "block"
   | "variable"
-  | "import";
+  | "import"
+  | "doc_section"
+  | "doc_code";
+
+// ── Evidence envelope (v0.13, P0-3) ──────────────────────────────────
+//
+// Every search-family tool response carries provenance: the concrete spans
+// that were retrieved, pinned to a commit SHA + content hash. sverklo_verify
+// reads these back and reports whether they still match.
+export type RetrievalMethod =
+  | "fts"
+  | "vector"
+  | "symbol"
+  | "refs"
+  | "pagerank"
+  | "graph-expand"
+  | "doc-edge"
+  | "lookup"
+  | "audit"
+  | "investigate"
+  | "ast-grep";
+
+export interface Evidence {
+  id: string;                 // "ev_" + 12 hex chars
+  file: string;
+  lines: [number, number];
+  sha: string | null;         // repo HEAD sha at creation, null if no git
+  chunk_id?: number;
+  symbol?: string;
+  method: RetrievalMethod;
+  score: number;
+}
+
+export type VerifyStatus =
+  | "unchanged"
+  | "moved"
+  | "modified"
+  | "deleted"
+  | "file_missing";
+
+export interface VerifyResult {
+  id: string;
+  status: VerifyStatus;
+  file?: string;
+  current_lines?: [number, number];
+  similarity?: number;        // 0..1 for modified / moved
+  note?: string;
+}
 
 export interface CodeChunk {
   id: number;
@@ -38,6 +85,9 @@ export interface CodeChunk {
   content: string;
   description: string | null;
   token_count: number;
+  /** v0.15 P1-12: optional LLM-generated one-liner. Stored prefixed with
+   * a content-hash marker so re-runs can detect staleness cheaply. */
+  purpose?: string | null;
 }
 
 export interface SearchResult {
@@ -54,6 +104,12 @@ export interface DependencyEdge {
 
 export type MemoryCategory = "decision" | "preference" | "pattern" | "context" | "todo" | "procedural";
 export type MemoryTier = "core" | "archive";
+// Cognitive-science framing borrowed from Sprint 9 research (Akshay thread).
+// Orthogonal to `tier` (which is a salience axis):
+//   episodic   — a specific event/decision tied to a moment ("we picked X on Y")
+//   semantic   — a general fact/rule that doesn't decay with time ("X is faster than Y")
+//   procedural — a how-to or recipe ("steps to deploy")
+export type MemoryKind = "episodic" | "semantic" | "procedural";
 
 export interface Memory {
   id: number;
@@ -76,6 +132,7 @@ export interface Memory {
   invalidated_at: number | null;
   superseded_by: number | null;
   pins: string | null;
+  kind: MemoryKind;
 }
 
 export interface IndexStatus {
@@ -130,6 +187,8 @@ export const SUPPORTED_LANGUAGES: Record<string, string[]> = {
   haskell: [".hs", ".lhs"],
   clojure: [".clj", ".cljs", ".cljc", ".edn"],
   ocaml: [".ml", ".mli"],
+  markdown: [".md", ".markdown", ".mdx"],
+  notebook: [".ipynb"],
 };
 
 export function detectLanguage(filePath: string): string | null {

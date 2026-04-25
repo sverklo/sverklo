@@ -17,6 +17,14 @@ export const overviewTool = {
         type: "number",
         description: "Max tokens to return (default: 3000)",
       },
+      depth: {
+        type: "number",
+        description:
+          "Progressive disclosure: 1 = directories only, 2 = directories + filenames, " +
+          "3 (default) = directories + files + top symbols, 4 = include all named exports. " +
+          "Borrowed from iwe-org/iwe's `squash`/`tree` pattern. Lower depth costs fewer " +
+          "tokens — use the cheapest depth that still answers the question.",
+      },
     },
   },
 };
@@ -37,5 +45,14 @@ export function handleOverview(
     entries.push({ file, chunks });
   }
 
-  return formatOverview(entries, tokenBudget, path);
+  const depth = clampDepth(args.depth);
+  return formatOverview(entries, tokenBudget, path, depth);
+}
+
+function clampDepth(raw: unknown): 1 | 2 | 3 | 4 {
+  const n = typeof raw === "number" ? Math.floor(raw) : 3;
+  if (n <= 1) return 1;
+  if (n === 2) return 2;
+  if (n >= 4) return 4;
+  return 3;
 }

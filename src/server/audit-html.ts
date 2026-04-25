@@ -453,11 +453,12 @@ export function generateAuditHtml(
   <div class="wrap">
     <a class="brand" href="https://sverklo.com/">sverklo</a>
     <nav class="top-nav">
-      <a href="https://sverklo.com/report/">← All reports</a>
-      <a href="https://sverklo.com/vs/">compare</a>
-      <a href="https://sverklo.com/benchmarks/">benchmarks</a>
-      <a href="https://sverklo.com/blog/">blog</a>
-      <a href="https://github.com/sverklo/sverklo">GitHub</a>
+      <a href="/report/">reports</a>
+      <a href="/vs/">compare</a>
+      <a href="/benchmarks/">benchmarks</a>
+      <a href="/playground/">playground</a>
+      <a href="/blog/">blog</a>
+      <a href="https://github.com/sverklo/sverklo" target="_blank" rel="noopener">github</a>
     </nav>
   </div>
 </header>

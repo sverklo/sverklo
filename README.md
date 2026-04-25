@@ -1,7 +1,9 @@
-# Sverklo
+<p align="left">
+  <img src="./docs/logo.svg" alt="sverklo" width="280" height="79"/>
+</p>
 
-> **Hallucination-resistant code intelligence for Claude Code, Cursor, Windsurf, and Zed.**
-> Semantic search, impact analysis, persistent memory — pick 3. Local, MIT, zero config.
+> **Stop your AI from making things up about your codebase.**
+> Local-first MCP server that gives Claude Code, Cursor, Windsurf, and Zed a real symbol graph, a blast-radius lens, and a git-pinned memory — so the agent stops guessing. MIT. Zero config. Your code never leaves the machine.
 
 [![npm version](https://img.shields.io/npm/v/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![npm downloads](https://img.shields.io/npm/dw/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
@@ -12,13 +14,13 @@
 
 ## Why
 
-Your AI agent edits `UserService.validate()`. It doesn't know 47 other functions call it. It hallucinates an import. It forgets the design decision you made yesterday because context was compacted. Tests pass because they mock the dependency. Breaking changes ship.
+Your AI agent edits `UserService.validate()`. It doesn't know 47 other functions call it. It hallucinates `getUserByEmail()` because that's how its training data spelled it — your code uses `findByEmail()`. It forgets the design decision you made yesterday because context was compacted. Tests pass because they mock the dependency. Breaking changes ship.
 
-Sverklo (Russian: *сверкло*, "drill") gives your agent a structural understanding of your codebase — symbol graph, blast radius, semantic recall, and git-pinned memory — so it stops guessing.
+Sverklo drills into your repo before the agent does — symbol graph, blast radius, semantic recall, and git-pinned memory — so the agent reasons about *your* code instead of pattern-matching from training data.
 
 <table>
 <tr>
-<td align="center"><b>20</b><br/>MCP tools your agent uses</td>
+<td align="center"><b>37</b><br/>MCP tools your agent uses</td>
 <td align="center"><b>&lt; 2 s</b><br/>to index a 1,700-file monorepo</td>
 <td align="center"><b>0 bytes</b><br/>of your code leave the machine</td>
 </tr>
@@ -31,7 +33,7 @@ cd your-project && sverklo init
 
 That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to your `CLAUDE.md`, and runs `sverklo doctor` to verify the setup. **No API keys. No cloud. Telemetry off by default.**
 
-> **First-run note.** Sverklo's embedding model (`all-MiniLM-L6-v2` ONNX, ~86 MB) is downloaded from HuggingFace on first use into `~/.sverklo/models/` and cached forever — every subsequent run is fully offline. Bundling the model into the npm tarball is on the v0.13 roadmap.
+> The embedding model (`all-MiniLM-L6-v2` ONNX, ~86 MB) is downloaded from HuggingFace on first use into `~/.sverklo/models/` and cached forever — every subsequent run is fully offline.
 
 **Want proof before installing?** Browse the [/report leaderboard](https://sverklo.com/report) — Sverklo audits of 47 popular OSS repos (express, react-hook-form, vite, lodash, prisma, …) with grade cards for dead code, circular deps, coupling, and security.
 
@@ -77,7 +79,7 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 | `sverklo_impact` | Walk the symbol graph, return ranked transitive callers — the real blast radius. |
 | `sverklo_review_diff` | Risk-scored review of `git diff`: touched-symbol importance x coverage x churn. |
 
-[See all 23 tools below.](#full-tool-reference)
+[See all 37 tools below.](#full-tool-reference)
 
 <details>
 <summary><h2>Full tool reference</h2></summary>
@@ -142,6 +144,48 @@ We're honest about this. Sverklo isn't a magic 5x speedup and it doesn't replace
 - Build and test verification — only `Bash` runs `npm test`
 
 If a launch post tells you a tool is great for everything, close the tab.
+
+---
+
+## Common questions
+
+### How do I stop Claude Code from hallucinating about my codebase?
+
+Claude generates code from training-data patterns, not your repo. Without a symbol graph, it invents `getUserByEmail()` when your code uses `findByEmail()`. Sverklo grounds the agent in your actual symbol graph — `sverklo_lookup` and `sverklo_refs` resolve names to `file:line` and prove existence before the agent writes the call. Verifiable retrieval (`sverklo_verify`) lets the agent re-check that a quoted span is still present at the cited SHA, so a stale citation gets caught instead of confabulated.
+
+### Is there a local-first MCP server for codebase memory?
+
+Yes — sverklo. `sverklo_remember` and `sverklo_recall` ship a bi-temporal memory layer: every memory is pinned to the git SHA it was authored on, and `valid_until_sha` + `superseded_by` preserve a timeline of supersessions instead of overwriting. Recall is hybrid (FTS5 + cosine over an ONNX embedding) and runs entirely in embedded SQLite. No cloud, no API keys, no external vector database — unlike most "memory MCP" projects which require Zilliz, Milvus, or a managed Postgres+pgvector.
+
+### Is there an open-source alternative to Sourcegraph Cody I can run locally?
+
+Sverklo is the open-source local alternative to Sourcegraph Cody for codebase Q&A: hybrid BM25 + vector + PageRank retrieval, symbol-graph navigation, MIT-licensed instead of source-available, single-machine instead of Cody's enterprise deployment, and free instead of $9–19 per developer per month. Sverklo doesn't try to ship the same feature set — it's a primitives layer for AI coding agents (37 MCP tools), not a hosted IDE plug-in — but for the "give the agent semantic understanding of my codebase" job, it covers the same surface.
+
+### Where does my code go when I use sverklo?
+
+Nowhere. Sverklo runs entirely on your machine. Indexing, search, embeddings, audits, and PR review all execute locally with embedded SQLite plus a local ONNX embedding model. The model itself is downloaded from HuggingFace on first run (~86 MB), cached in `~/.sverklo/models/`, and never touched again. Telemetry is opt-in and off by default — sverklo makes zero network calls unless you explicitly run `sverklo telemetry enable`.
+
+### Does sverklo work with Cursor's @codebase or Cursor Tab?
+
+Sverklo runs alongside Cursor's built-in indexing rather than replacing it. Cursor's @codebase ships embedding-based search inside the IDE; sverklo adds the symbol graph, blast radius, diff-aware risk-scored review, and bi-temporal memory that Cursor doesn't expose. Wire sverklo as an MCP server in Cursor and both layers are available to the agent simultaneously. The same setup works for Claude Code, Windsurf, Zed, Antigravity, and anything else that speaks MCP.
+
+---
+
+## Three retrieval techniques you'll only find here
+
+Most code-search MCPs are a single BM25 + vector RRF on top of Milvus or pgvector. Sverklo's recall is built on three named moves that work because they exploit *codebase structure*, not just text similarity. Each one was added to close a real recall failure on real questions; together they're the reason sverklo's research benchmark hits 99% recall (31 of 32) without a managed vector database.
+
+### 1. Filename-as-signal retrieval
+
+When a query token matches a *filename* — even when the body of that file doesn't FTS-match — sverklo pulls every named definition in that file into the candidate set. Conversely, when FTS surfaces a file at all (because of a comment hit, an import line, anything), every definition in that file becomes a plausible answer. This is the single move that closes the "private helper function" gap: the function is too short for embeddings to disambiguate and uses a name no one would `grep` for, but it lives next to the code that *does* match. Implemented in `src/search/investigate.ts` (`runDefinitionsByPathTokens`, `runDefinitionsInFtsFiles`).
+
+### 2. Channelized RRF fusion
+
+Most hybrid retrievers run *one* Reciprocal Rank Fusion over `fts ∪ vector` and call it a day. Sverklo runs RRF *per channel* — FTS, vector, doc-section, path, symbol-name — then fuses the per-channel ranks with channel-specific weights. The path channel is weighted **1.5×** because filename matches are precision-skewed; doc chunks score in their own channel so a 200-line markdown section can't drown a 4-line function body. This is structural retrieval, not just lexical-vs-semantic. Implemented in `src/search/investigate.ts` (per-channel RRF + weighted fusion).
+
+### 3. Bi-temporal memory with `superseded_by` lineage
+
+Every memory carries `valid_from_sha` and `valid_until_sha`. Updating a memory doesn't overwrite — it inserts a new row, sets `valid_until_sha` on the old one, and links them via `superseded_by`. Recall queries naturally exclude invalidated rows, but the timeline view keeps everything, so you can ask "what did this team believe about the auth flow at commit `abc123`?" and get the answer that was true *then*. `sverklo prune` consolidates clusters of similar episodic memories into one semantic note while preserving the lineage. Implemented across `src/storage/memory-store.ts` and `src/memory/prune.ts`.
 
 ---
 
@@ -256,6 +300,32 @@ Sverklo ships a CLI for CI and local use: `sverklo review --ci --fail-on high` f
 
 ---
 
+## Claude Code hooks recipe
+
+Sverklo plays well with [Claude Code hooks](https://docs.claude.com/claude-code/hooks). The simplest hook to wire is a post-tool-use review: after Claude makes file edits, run `sverklo review` against the working tree and surface any high-risk findings in the agent transcript. Add this to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sverklo review --ref HEAD --format json --fail-on high || true"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The trailing `|| true` keeps the hook from blocking edits when sverklo isn't installed or the working tree has no diff yet. For project-scoped hooks, put the same block in `.claude/settings.json` at the repo root instead.
+
+---
+
 ## Telemetry
 
 **Off by default.** Sverklo makes zero network calls unless you explicitly run `sverklo telemetry enable`. If you opt in, we collect only anonymous usage metrics (no code, no queries, no file paths). Full schema and implementation details in [`TELEMETRY.md`](./TELEMETRY.md).
@@ -264,7 +334,7 @@ Sverklo ships a CLI for CI and local use: `sverklo review --ci --fail-on high` f
 
 ## Open Source, Open Core
 
-The full MCP server is **free and open source** (MIT). All 23 tools, no limits, no telemetry, no "free tier" — that's not where the line is.
+The full MCP server is **free and open source** (MIT). All 37 tools, no limits, no telemetry, no "free tier" — that's not where the line is.
 
 **Sverklo Pro** (later this year) adds smart auto-capture of decisions, cross-project pattern learning, and larger embedding models. **Sverklo Team** adds shared team memory and on-prem deployment.
 

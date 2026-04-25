@@ -7,6 +7,7 @@ import {
   pathSuffixAlignmentBonus,
   currentFileDistancePenalty,
 } from "./boost.js";
+import { dedupChunks, groupByDirectory, middleTruncate } from "./compact.js";
 
 interface SearchOptions {
   query: string;
@@ -370,20 +371,36 @@ export function packResults(
 
 export function formatResults(
   results: SearchResult[],
-  opts: { compact?: boolean } = {}
+  opts: { compact?: boolean; format?: "compact" | "full"; group?: boolean } = {}
 ): string {
   if (results.length === 0) {
     return "No matches.";
   }
 
-  // Compact mode (default): for chunks longer than ~15 lines, show signature
-  // + first 4 lines + last line + an elision marker. 3-4× more results fit
-  // in the same token budget — agents re-Read the full body when they need it.
-  // Disable with `compact: false` for callers that genuinely need full bodies.
-  const compact = opts.compact ?? true;
+  // Resolve the display mode. `format` takes precedence if set; otherwise
+  // fall back to legacy `compact` flag so existing callers keep working.
+  const compact =
+    opts.format !== undefined ? opts.format === "compact" : (opts.compact ?? true);
+  const group = opts.group ?? compact; // grouping is only useful in compact mode
   const parts: string[] = [];
 
-  for (const { chunk, file } of results) {
+  // Dedup near-duplicates in the same file; track collapse counts so we can
+  // surface them inline. In full mode we skip this entirely.
+  let display = results;
+  let dedupCounts = new Map<number, number>();
+  let groupCounts = new Map<number, { count: number; dir: string }>();
+  if (compact) {
+    const d = dedupChunks(results);
+    display = d.kept;
+    dedupCounts = d.collapsed;
+    if (group) {
+      const g = groupByDirectory(display);
+      display = g.kept;
+      groupCounts = g.groupCounts;
+    }
+  }
+
+  for (const { chunk, file } of display) {
     const header = chunk.name
       ? `## ${file.path}:${chunk.start_line}-${chunk.end_line} (${chunk.type}: ${chunk.name})`
       : `## ${file.path}:${chunk.start_line}-${chunk.end_line} (${chunk.type})`;
@@ -392,17 +409,29 @@ export function formatResults(
     parts.push(`\`\`\`${file.language || ""}`);
 
     const lines = chunk.content.split("\n");
-    if (compact && lines.length > 15) {
-      const head = lines.slice(0, 4);
-      const tail = lines[lines.length - 1];
-      parts.push(head.join("\n"));
-      parts.push(`  // … ${lines.length - 5} lines elided — Read for full body …`);
-      parts.push(tail);
+    if (compact) {
+      const trunc = middleTruncate(lines, 4, 1);
+      if (trunc && lines.length > 15) {
+        parts.push(trunc.head.join("\n"));
+        parts.push(`  // … ${trunc.elided} lines elided — Read for full body …`);
+        parts.push(trunc.tail.join("\n"));
+      } else {
+        parts.push(chunk.content);
+      }
     } else {
       parts.push(chunk.content);
     }
 
     parts.push("```");
+
+    const dupCount = dedupCounts.get(chunk.id);
+    if (dupCount) {
+      parts.push(`_+${dupCount} similar in ${file.path} collapsed — pass format:"full" to expand._`);
+    }
+    const grp = groupCounts.get(chunk.id);
+    if (grp) {
+      parts.push(`_+${grp.count} more in ${grp.dir}/ — pass format:"full" or a scope filter to expand._`);
+    }
     parts.push("");
   }
 

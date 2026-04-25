@@ -4,8 +4,12 @@ import { detectClusters, type FileCluster } from "../../search/cluster.js";
 export const clustersTool = {
   name: "sverklo_clusters",
   description:
-    "Detect functional clusters in the codebase — groups of tightly-connected files that form logical modules. " +
-    "Useful for understanding architecture, finding module boundaries, and identifying tightly-coupled subsystems.",
+    "Group files into modules by graph-community detection (label propagation " +
+    "over the import graph). Returns 3+ file clusters with their hub file. Use " +
+    "this on first contact with an unfamiliar repo — pair with sverklo_concepts " +
+    "(after running `sverklo concept-index`) for an LLM-named summary of each " +
+    "cluster. Skip if the codebase has fewer than ~20 source files; structure " +
+    "won't be informative.",
   inputSchema: {
     type: "object" as const,
     properties: {

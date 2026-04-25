@@ -123,6 +123,20 @@ export class ChunkStore {
     ).c;
   }
 
+  /** Update the purpose field on a chunk (P1-12). */
+  updatePurpose(chunkId: number, purpose: string | null): void {
+    this.db.prepare("UPDATE chunks SET purpose = ? WHERE id = ?").run(purpose, chunkId);
+  }
+
+  /** Read just the purpose for a chunk — cheap query path used by the
+   * enrichment cache check. */
+  getPurpose(chunkId: number): string | null {
+    const row = this.db
+      .prepare("SELECT purpose FROM chunks WHERE id = ?")
+      .get(chunkId) as { purpose: string | null } | undefined;
+    return row?.purpose ?? null;
+  }
+
   getAllWithFile(): (CodeChunk & { filePath: string; pagerank: number })[] {
     return this.db
       .prepare(

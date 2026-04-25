@@ -172,6 +172,9 @@ interface TrackOptions {
   tool?: string | null;
   outcome?: Outcome;
   duration_ms?: number;
+  /** Bucketed response size: xs/s/m/l/xl. Lets us compare the impact
+   * of compact-format defaults without recording any content. */
+  size_bucket?: "xs" | "s" | "m" | "l" | "xl";
 }
 
 /**

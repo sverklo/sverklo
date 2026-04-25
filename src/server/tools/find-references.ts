@@ -135,5 +135,50 @@ export function handleFindReferences(
     parts.push("");
   }
 
+  // Append doc mentions (v0.13, P0-5). If any markdown / README / ADR
+  // chunks reference this symbol by backtick or fenced code, surface them
+  // so the agent sees both the code and its documentation together.
+  try {
+    const docMentions = indexer.docEdgeStore.getBySymbol(symbol, 20);
+    if (docMentions.length > 0) {
+      // Sprint 9: split structural inclusions from associative references
+      // so callers see "this is where the symbol is documented" separately
+      // from "see also" mentions. Also dedup rows that point at the same
+      // logical doc location: when both an outer fenced chunk and the
+      // inner fence resolve to the symbol we'd otherwise emit two near-
+      // identical lines (same file, same breadcrumb, off-by-one ranges).
+      const seen = new Set<string>();
+      const dedupedAll: typeof docMentions = [];
+      for (const m of docMentions) {
+        const key = `${m.doc_file_path}|${m.doc_breadcrumb ?? ""}|${m.match_kind}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        dedupedAll.push(m);
+      }
+
+      const includes = dedupedAll.filter((m) => m.edge_kind === "includes");
+      const references = dedupedAll.filter((m) => m.edge_kind !== "includes");
+
+      const renderRow = (m: typeof docMentions[number]): string => {
+        const breadcrumb = m.doc_breadcrumb ? ` — "${m.doc_breadcrumb}"` : "";
+        const confTag = m.confidence >= 1 ? "" : ` (conf ${m.confidence.toFixed(1)})`;
+        return `- ${m.doc_file_path}:${m.doc_start_line}-${m.doc_end_line}${breadcrumb} [${m.match_kind}]${confTag}`;
+      };
+
+      if (includes.length > 0) {
+        parts.push(`## Doc mentions — includes (${includes.length})`);
+        for (const m of includes.slice(0, 10)) parts.push(renderRow(m));
+        parts.push("");
+      }
+      if (references.length > 0) {
+        parts.push(`## Doc mentions — references (${references.length})`);
+        for (const m of references.slice(0, 10)) parts.push(renderRow(m));
+        parts.push("");
+      }
+    }
+  } catch {
+    // Pre-v3 db or doc_mentions table missing — skip silently.
+  }
+
   return parts.length > 1 ? parts.join("\n") : `No references found for '${symbol}'.`;
 }

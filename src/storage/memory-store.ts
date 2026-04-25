@@ -1,5 +1,20 @@
 import type Database from "better-sqlite3";
-import type { Memory, MemoryCategory, MemoryTier } from "../types/index.js";
+import type { Memory, MemoryCategory, MemoryTier, MemoryKind } from "../types/index.js";
+
+// Default mapping from category → kind. Sprint 9: episodic/semantic/procedural
+// is orthogonal to category — we just need a sensible default for old call
+// sites that don't pass `kind` explicitly.
+function defaultKindFor(category: MemoryCategory): MemoryKind {
+  switch (category) {
+    case "procedural":
+      return "procedural";
+    case "preference":
+    case "pattern":
+      return "semantic";
+    default:
+      return "episodic";
+  }
+}
 
 export class MemoryStore {
   private insertStmt: Database.Statement;
@@ -17,11 +32,12 @@ export class MemoryStore {
   private setTierStmt: Database.Statement;
   private getActiveStmt: Database.Statement;
   private setPinsStmt: Database.Statement;
+  private setTrajectoryStmt: Database.Statement;
 
   constructor(private db: Database.Database) {
     this.insertStmt = db.prepare(`
-      INSERT INTO memories (category, content, tags, confidence, git_sha, git_branch, related_files, created_at, updated_at, last_accessed, tier, valid_from_sha)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (category, content, tags, confidence, git_sha, git_branch, related_files, created_at, updated_at, last_accessed, tier, valid_from_sha, kind)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     this.getByIdStmt = db.prepare("SELECT * FROM memories WHERE id = ?");
     // Active = not invalidated (valid_until_sha IS NULL)
@@ -68,6 +84,21 @@ export class MemoryStore {
       "SELECT * FROM memories WHERE valid_until_sha IS NULL ORDER BY created_at DESC LIMIT ?"
     );
     this.setPinsStmt = db.prepare("UPDATE memories SET pins = ? WHERE id = ?");
+    this.setTrajectoryStmt = db.prepare(
+      "UPDATE memories SET trajectory = ? WHERE id = ?"
+    );
+  }
+
+  /** P2-18: attach a JSON-serialised trajectory to a memory row. */
+  setTrajectory(id: number, trajectoryJson: string): void {
+    this.setTrajectoryStmt.run(trajectoryJson, id);
+  }
+
+  getTrajectory(id: number): string | null {
+    const row = this.db
+      .prepare("SELECT trajectory FROM memories WHERE id = ?")
+      .get(id) as { trajectory: string | null } | undefined;
+    return row?.trajectory ?? null;
   }
 
   insert(
@@ -78,9 +109,11 @@ export class MemoryStore {
     gitSha: string | null,
     gitBranch: string | null,
     relatedFiles: string[] | null,
-    tier: MemoryTier = "archive"
+    tier: MemoryTier = "archive",
+    kind?: MemoryKind
   ): number {
     const now = Date.now();
+    const resolvedKind = kind ?? defaultKindFor(category);
     const result = this.insertStmt.run(
       category,
       content,
@@ -93,9 +126,34 @@ export class MemoryStore {
       now,
       now,
       tier,
-      gitSha
+      gitSha,
+      resolvedKind
     );
     return Number(result.lastInsertRowid);
+  }
+
+  /** Filter active memories by kind. */
+  getByKind(kind: MemoryKind, limit: number = 50): Memory[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM memories WHERE kind = ? AND valid_until_sha IS NULL ORDER BY created_at DESC LIMIT ?"
+      )
+      .all(kind, limit) as Memory[];
+  }
+
+  /** Update a memory's kind in place. */
+  setKind(id: number, kind: MemoryKind): void {
+    this.db.prepare("UPDATE memories SET kind = ? WHERE id = ?").run(kind, id);
+  }
+
+  /**
+   * Run multiple memory writes atomically against the underlying SQLite
+   * connection. Callers pass a sync function — async work has to happen
+   * outside the transaction. Used by `sverklo prune` so consolidation
+   * can't half-commit a new memory without invalidating its originals.
+   */
+  transact<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
   }
 
   getById(id: number): Memory | undefined {

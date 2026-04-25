@@ -12,7 +12,36 @@ import Database from "better-sqlite3";
 //       symbol in the same chunk to one row. Upgrading triggers
 //       re-extraction of references from existing chunks (no file
 //       I/O — just regex over chunk.content).
-export const CURRENT_DATA_VERSION = 2;
+//   3 — v0.13 adds markdown chunks (doc_section, doc_code) + doc_mentions
+//       edges. Existing dbs need a re-index so .md files get parsed and
+//       doc->symbol edges are populated. The migration is incremental:
+//       the indexer detects pre-v3 dbs and schedules the extra work on
+//       the next refresh. No file content is touched.
+//   4 — v0.13 P0-3 adds the evidence table. Evidence rows pin retrieval
+//       spans to a git SHA + content hash so sverklo_verify can detect
+//       stale citations. The table is additive and ephemeral (TTL + LRU
+//       capped) — no reindex required.
+//   5 — v0.14 P1-7 adds the concepts + concept_embeddings tables for the
+//       LLM-labeled cluster layer. The layer is offline (populated by the
+//       `sverklo concept-index` CLI), so bumping the version simply
+//       declares the schema without forcing any work at indexer startup.
+//   6 — v0.15 P1-8 adds the context_handles table. Search-family tools
+//       can return ctx:// handles instead of inline text; ctx_slice /
+//       ctx_grep / ctx_stats then operate on the handle without rerunning
+//       retrieval. Handles are git-SHA-pinned so they auto-invalidate
+//       when the working tree changes.
+//       v0.15 P1-12 adds chunks.purpose for symbol-purpose enrichment.
+//   7 — v0.15 P2-17 adds the pattern_edges table for LLM-derived design-
+//       pattern annotations. P2-18 adds memories.trajectory for tool-call
+//       provenance. Both are additive; no reindex needed.
+//   8 — Sprint 9 (iwe + Akshay-thread research) adds memories.kind, an
+//       episodic/semantic/procedural axis orthogonal to tier. Default is
+//       'episodic'; auto-derived from category at insert time. Additive,
+//       no reindex required.
+//       Also adds doc_mentions.edge_kind ('includes' vs 'references') —
+//       the iwe inclusion-vs-reference split. Derived from match_kind at
+//       insert time (fenced_code → includes, backtick/bare → references).
+export const CURRENT_DATA_VERSION = 8;
 
 const SCHEMA = `
 -- Indexed files
@@ -115,7 +144,8 @@ CREATE TABLE IF NOT EXISTS memories (
   valid_from_sha TEXT,                -- git SHA when memory was created
   valid_until_sha TEXT,               -- git SHA when invalidated (NULL = still valid)
   invalidated_at INTEGER,             -- epoch ms when invalidated
-  superseded_by INTEGER                -- id of memory that replaced this one
+  superseded_by INTEGER,               -- id of memory that replaced this one
+  kind TEXT DEFAULT 'episodic'         -- 'episodic' | 'semantic' | 'procedural'
 );
 
 CREATE TABLE IF NOT EXISTS memory_embeddings (
@@ -163,6 +193,101 @@ CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_stale ON memories(is_stale);
 CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier);
 CREATE INDEX IF NOT EXISTS idx_memories_valid_until ON memories(valid_until_sha);
+-- idx_memories_kind is added in MIGRATIONS (depends on the kind column,
+-- which on upgraded dbs doesn't exist until ALTER TABLE runs).
+
+-- Pattern edges (v0.15, P2-17). LLM-derived "this symbol implements
+-- pattern X" relationships, constrained to a closed taxonomy of ~30
+-- design-pattern names. Stored separately from the symbol graph so that
+-- the deterministic graph stays load-bearing and pattern data stays
+-- advisory. Confidence-gated; rows below 0.6 confidence are dropped.
+CREATE TABLE IF NOT EXISTS pattern_edges (
+  id INTEGER PRIMARY KEY,
+  chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+  pattern TEXT NOT NULL,           -- one of the closed taxonomy values
+  role TEXT,                       -- optional sub-role (e.g. "subject" for observer)
+  confidence REAL NOT NULL,
+  content_hash TEXT NOT NULL,
+  labeled_at INTEGER NOT NULL,
+  UNIQUE(chunk_id, pattern, role)
+);
+CREATE INDEX IF NOT EXISTS idx_pattern_edges_chunk ON pattern_edges(chunk_id);
+CREATE INDEX IF NOT EXISTS idx_pattern_edges_pattern ON pattern_edges(pattern);
+
+-- Context handles (v0.15, P1-8). Persistent ctx:// handles let search-family
+-- tools return a stable id + 200-token preview; the agent then pulls slices
+-- via ctx_slice / ctx_grep / ctx_stats without rerunning retrieval. SHA
+-- pinning auto-invalidates handles whose tree state has shifted.
+CREATE TABLE IF NOT EXISTS context_handles (
+  id TEXT PRIMARY KEY,            -- "ctx_" + 16 hex
+  tool TEXT NOT NULL,
+  sha TEXT,                       -- repo HEAD at creation
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  body TEXT NOT NULL,             -- full rendered text
+  preview TEXT NOT NULL           -- ≤200 token excerpt
+);
+CREATE INDEX IF NOT EXISTS idx_handles_expires ON context_handles(expires_at);
+
+-- Concept layer (v0.14, P1-7). LLM-labeled clusters computed offline by
+-- the \`sverklo concept-index\` CLI. content_hash lets us skip re-labeling
+-- when the cluster membership hasn't changed. Embeddings land in a
+-- sibling table so semantic queries can cosine-match without a join.
+CREATE TABLE IF NOT EXISTS concepts (
+  cluster_id INTEGER PRIMARY KEY,
+  label TEXT NOT NULL,
+  summary TEXT,
+  tags TEXT,                        -- comma-separated list
+  hub_file TEXT,
+  member_count INTEGER NOT NULL,
+  content_hash TEXT NOT NULL,
+  labeled_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS concept_embeddings (
+  cluster_id INTEGER PRIMARY KEY REFERENCES concepts(cluster_id) ON DELETE CASCADE,
+  vector BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_concepts_label ON concepts(label);
+
+-- Evidence rows (v0.13, P0-3). Pin retrieval spans to a git SHA + content
+-- hash so sverklo_verify can tell whether a citation is still valid after
+-- edits. LRU/TTL eviction keeps the table bounded; the id is surfaced via
+-- a fenced [evidence] JSON footer on every search-family response.
+CREATE TABLE IF NOT EXISTS evidence (
+  id TEXT PRIMARY KEY,              -- "ev_" + 12-char hex
+  file_path TEXT NOT NULL,
+  start_line INTEGER NOT NULL,
+  end_line INTEGER NOT NULL,
+  commit_sha TEXT,
+  chunk_id INTEGER,
+  symbol_name TEXT,
+  retrieval_method TEXT NOT NULL,
+  score REAL NOT NULL,
+  content_hash TEXT NOT NULL,       -- sha256 of the span at creation time
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_created ON evidence(created_at);
+CREATE INDEX IF NOT EXISTS idx_evidence_file ON evidence(file_path);
+
+-- Doc -> code edges (v0.13, P0-5).
+-- Each row means "this doc chunk mentions this symbol name".
+-- target_chunk_id is nullable: we resolve lazily so unresolvable mentions
+-- are still recorded (they become "orphan" hints at search time).
+CREATE TABLE IF NOT EXISTS doc_mentions (
+  id INTEGER PRIMARY KEY,
+  doc_chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+  target_symbol TEXT NOT NULL,
+  target_chunk_id INTEGER REFERENCES chunks(id) ON DELETE SET NULL,
+  match_kind TEXT NOT NULL,       -- 'backtick' | 'fenced_code' | 'bare'
+  edge_kind TEXT DEFAULT 'references', -- 'includes' (structural) | 'references' (associative)
+  confidence REAL NOT NULL,       -- 0..1
+  UNIQUE(doc_chunk_id, target_symbol)
+);
+CREATE INDEX IF NOT EXISTS idx_docmentions_symbol ON doc_mentions(target_symbol);
+CREATE INDEX IF NOT EXISTS idx_docmentions_target_chunk ON doc_mentions(target_chunk_id);
+CREATE INDEX IF NOT EXISTS idx_docmentions_doc ON doc_mentions(doc_chunk_id);
+-- idx_docmentions_edge_kind is added in MIGRATIONS (depends on the
+-- edge_kind column added by ALTER TABLE on upgraded dbs).
 
 -- Key-value metadata. Used to track the data-layer version so we can
 -- run inline migrations when the code's expectations about stored
@@ -182,6 +307,21 @@ const MIGRATIONS = [
   "ALTER TABLE memories ADD COLUMN invalidated_at INTEGER",
   "ALTER TABLE memories ADD COLUMN superseded_by INTEGER",
   "ALTER TABLE memories ADD COLUMN pins TEXT",
+  "ALTER TABLE chunks ADD COLUMN purpose TEXT",
+  "ALTER TABLE memories ADD COLUMN trajectory TEXT",
+  "ALTER TABLE memories ADD COLUMN kind TEXT DEFAULT 'episodic'",
+  "ALTER TABLE doc_mentions ADD COLUMN edge_kind TEXT DEFAULT 'references'",
+  // SQLite's ADD COLUMN with DEFAULT does NOT backfill existing rows
+  // through the column metadata reliably across versions — older builds
+  // store NULL and only emit the default for new INSERTs. Without these
+  // backfills, kind-filtered recall (`memory.kind !== kindFilter`) would
+  // silently drop every row created before the migration.
+  "UPDATE memories SET kind = 'episodic' WHERE kind IS NULL",
+  "UPDATE doc_mentions SET edge_kind = 'references' WHERE edge_kind IS NULL",
+  // Indexes that depend on migration-added columns must come after the
+  // ALTER TABLE statements above.
+  "CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind)",
+  "CREATE INDEX IF NOT EXISTS idx_docmentions_edge_kind ON doc_mentions(edge_kind)",
 ];
 
 export function createDatabase(dbPath: string): Database.Database {

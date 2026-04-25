@@ -1,9 +1,35 @@
 import type { ParsedChunk, ParseResult, ImportRef, ChunkType } from "../types/index.js";
+import { parseMarkdown } from "./parser-md.js";
+import { parseIpynb } from "./parser-ipynb.js";
 
 // Regex-based parser for MVP. Fast, no native dependencies.
 // Handles the top languages well enough. Tree-sitter upgrade path for v2.
 
 export function parseFile(
+  content: string,
+  language: string
+): ParseResult {
+  const result = parseFileInner(content, language);
+  // File-level header comment (Q1 v0.15-rc.1+): most missed eval tasks
+  // were files where the answer was in the leading docstring/comment
+  // block, which lived between imports and the first symbol and never
+  // entered any chunk. Inject a synthetic module chunk holding that prose.
+  const headerChunk = extractFileHeader(content.split("\n"), language);
+  if (headerChunk) {
+    // De-dup: don't emit the header chunk if a parsed chunk already
+    // covers the same line range (e.g. parseMarkdown emits doc_section
+    // chunks at the top of the file).
+    const overlap = result.chunks.some(
+      (c) => c.startLine <= headerChunk.startLine && c.endLine >= headerChunk.endLine
+    );
+    if (!overlap) {
+      return { chunks: [headerChunk, ...result.chunks], imports: result.imports };
+    }
+  }
+  return result;
+}
+
+function parseFileInner(
   content: string,
   language: string
 ): ParseResult {
@@ -50,8 +76,166 @@ export function parseFile(
       return parseClojure(content, lines);
     case "ocaml":
       return parseOCaml(content, lines);
+    case "markdown":
+      return parseMarkdown(content, lines);
+    case "notebook":
+      return parseIpynb(content, lines);
     default:
       return { chunks: fallbackChunk(content, lines), imports: [] };
+  }
+  // unreachable — every case above returns
+  void chunks; void imports;
+}
+
+/**
+ * Extract the leading documentation block from a file. Returns a synthetic
+ * `module` chunk when the prologue is rich enough to be worth indexing
+ * (≥ 2 comment lines), null otherwise. Comment style is inferred from the
+ * language; languages without a known style (notebook, markdown, etc.)
+ * return null — those have their own structural docs.
+ */
+function extractFileHeader(lines: string[], language: string): ParsedChunk | null {
+  if (lines.length === 0) return null;
+  if (language === "markdown" || language === "notebook") return null;
+
+  const style = commentStyle(language);
+  if (!style) return null;
+
+  // Walk from the top, skipping blank lines and tolerating leading
+  // imports/use/package directives — many files put a header AFTER the
+  // first import block (see git-state.ts in our own repo).
+  const prologueLines: string[] = [];
+  let firstCommentIdx = -1;
+  let lastCommentIdx = -1;
+  const importPrefix = importPrefixFor(language);
+
+  for (let i = 0; i < Math.min(lines.length, 60); i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    // Skip blanks and import/use/package preludes.
+    if (trimmed === "") continue;
+    if (importPrefix.some((p) => trimmed.startsWith(p))) continue;
+
+    if (isCommentLine(trimmed, style)) {
+      if (firstCommentIdx < 0) firstCommentIdx = i;
+      lastCommentIdx = i;
+      prologueLines.push(stripCommentMarkers(trimmed, style));
+      continue;
+    }
+
+    // Found a non-comment, non-import line — prologue ends here.
+    break;
+  }
+
+  if (prologueLines.length < 2) return null;
+
+  // Guard against trivial license/copyright headers — too short to be
+  // useful as retrievable prose.
+  const text = prologueLines.join(" ").trim();
+  if (text.length < 60) return null;
+
+  return {
+    type: "module",
+    name: "_module",
+    signature: null,
+    startLine: firstCommentIdx + 1,
+    endLine: lastCommentIdx + 1,
+    content: lines.slice(firstCommentIdx, lastCommentIdx + 1).join("\n"),
+  };
+}
+
+type CommentStyle = "slash" | "hash" | "dash" | "semicolon";
+
+function commentStyle(language: string): CommentStyle | null {
+  switch (language) {
+    case "typescript":
+    case "javascript":
+    case "go":
+    case "rust":
+    case "java":
+    case "c":
+    case "cpp":
+    case "swift":
+    case "kotlin":
+    case "scala":
+    case "dart":
+    case "zig":
+    case "php":
+      return "slash";
+    case "python":
+    case "ruby":
+    case "elixir":
+      return "hash";
+    case "lua":
+    case "haskell":
+    case "ocaml":
+      return "dash";
+    case "clojure":
+      return "semicolon";
+    default:
+      return null;
+  }
+}
+
+function importPrefixFor(language: string): string[] {
+  switch (language) {
+    case "typescript":
+    case "javascript":
+      return ["import ", "export ", "require(", 'require "', "use strict"];
+    case "python":
+      return ["import ", "from "];
+    case "go":
+      return ["package ", "import "];
+    case "rust":
+      return ["use ", "extern ", "mod ", "#[", "#!["];
+    case "java":
+      return ["package ", "import "];
+    case "c":
+    case "cpp":
+      return ["#include", "#define", "#pragma", "#ifndef", "#ifdef"];
+    case "ruby":
+      return ["require ", "require_relative ", "module ", "class "];
+    case "php":
+      return ["<?php", "namespace ", "use "];
+    case "kotlin":
+    case "scala":
+      return ["package ", "import "];
+    case "swift":
+      return ["import "];
+    case "dart":
+      return ["import ", "library ", "part "];
+    case "elixir":
+      return ["defmodule ", "use ", "import ", "alias "];
+    case "clojure":
+      return ["(ns "];
+    default:
+      return [];
+  }
+}
+
+function isCommentLine(line: string, style: CommentStyle): boolean {
+  switch (style) {
+    case "slash":
+      return line.startsWith("//") || line.startsWith("/*") || line.startsWith("*") || line.startsWith("*/");
+    case "hash":
+      return line.startsWith("#");
+    case "dash":
+      return line.startsWith("--");
+    case "semicolon":
+      return line.startsWith(";");
+  }
+}
+
+function stripCommentMarkers(line: string, style: CommentStyle): string {
+  switch (style) {
+    case "slash":
+      return line.replace(/^\/\/+\s?|^\/\*+\s?|^\*\/?\s?/, "").trim();
+    case "hash":
+      return line.replace(/^#+\s?/, "").trim();
+    case "dash":
+      return line.replace(/^--+\s?/, "").trim();
+    case "semicolon":
+      return line.replace(/^;+\s?/, "").trim();
   }
 }
 

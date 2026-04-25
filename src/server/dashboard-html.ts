@@ -5,10 +5,26 @@ export function getDashboardHTML(): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>sverklo</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230E0D0B'/><text x='50' y='68' text-anchor='middle' font-family='JetBrains Mono,monospace' font-weight='700' font-size='60' fill='%23E85A2A'>s</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230E0D0B' rx='18' ry='18'/><rect x='27' y='28' width='10' height='44' fill='%23E85A2A'/><text x='42' y='71' font-family='JetBrains Mono,monospace' font-weight='700' font-size='56' letter-spacing='-2' fill='%23EDE7D9'>s</text></svg>">
+<!--
+  Sverklo is local-first. The dashboard never makes a network call:
+  if you have JetBrains Mono / Public Sans installed (most JetBrains
+  and Adobe-tooling users do), the @font-face below picks them up via
+  local() and the page renders pixel-identical to a Google Fonts pull.
+  Otherwise the browser falls back to the system stack (ui-monospace
+  on macOS, Cascadia Code on Windows, Consolas on older Windows,
+  DejaVu/Liberation on Linux) — still on-brand, still zero beacons.
+-->
+<style>
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 400; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 500; src: local('JetBrains Mono Medium'), local('JetBrainsMono-Medium'); }
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 600; src: local('JetBrains Mono SemiBold'), local('JetBrainsMono-SemiBold'); }
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 700; src: local('JetBrains Mono Bold'), local('JetBrainsMono-Bold'); }
+  @font-face { font-family: 'Public Sans'; font-weight: 400; src: local('Public Sans Regular'), local('PublicSans-Regular'); }
+  @font-face { font-family: 'Public Sans'; font-weight: 500; src: local('Public Sans Medium'), local('PublicSans-Medium'); }
+  @font-face { font-family: 'Public Sans'; font-weight: 600; src: local('Public Sans SemiBold'), local('PublicSans-SemiBold'); }
+  @font-face { font-family: 'Public Sans'; font-weight: 700; src: local('Public Sans Bold'), local('PublicSans-Bold'); }
+</style>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -764,6 +780,12 @@ footer.status .spacer { flex: 1; }
           <div class="view-title">memories</div>
         </div>
         <div style="display:flex;gap:16px;align-items:center;">
+          <div style="display:flex;gap:0;font-family:'JetBrains Mono',monospace;font-size:11px;" id="mem-kind-filter">
+            <div class="graph-chip on" data-kind="any" onclick="setMemKind('any')">all</div>
+            <div class="graph-chip" data-kind="episodic" onclick="setMemKind('episodic')">episodic</div>
+            <div class="graph-chip" data-kind="semantic" onclick="setMemKind('semantic')">semantic</div>
+            <div class="graph-chip" data-kind="procedural" onclick="setMemKind('procedural')">procedural</div>
+          </div>
           <div style="display:flex;gap:0;font-family:'JetBrains Mono',monospace;font-size:11px;">
             <div class="graph-chip on" id="mem-view-list" onclick="switchMemView('list')">list</div>
             <div class="graph-chip" id="mem-view-timeline" onclick="switchMemView('timeline')">timeline</div>
@@ -1167,6 +1189,7 @@ async function renderFiles() {
 
 // ────────── MEMORIES ──────────
 let memViewMode = 'list';
+let memKindFilter = 'any';
 
 function switchMemView(mode) {
   memViewMode = mode;
@@ -1177,6 +1200,14 @@ function switchMemView(mode) {
   renderMemories();
 }
 
+function setMemKind(kind) {
+  memKindFilter = kind;
+  document.querySelectorAll('#mem-kind-filter .graph-chip').forEach(el => {
+    el.classList.toggle('on', el.getAttribute('data-kind') === kind);
+  });
+  renderMemories();
+}
+
 async function renderMemories() {
   if (memViewMode === 'timeline') {
     return renderMemoryTimeline();
@@ -1184,9 +1215,30 @@ async function renderMemories() {
   if (state.memories.length === 0) {
     state.memories = await api('/api/memories');
   }
-  const total = state.memories.length;
-  const stale = state.memories.filter(m => m.is_stale).length;
-  document.getElementById('mem-stats').textContent = total + ' memories · ' + stale + ' stale';
+  const all = state.memories;
+
+  // Hide kind-filter chips that match zero rows — the alternative
+  // (always show all 4 chips) is misleading when the user clicks
+  // 'semantic' on a fresh install and sees an empty list.
+  const kindCounts = { episodic: 0, semantic: 0, procedural: 0 };
+  for (const m of all) {
+    const k = m.kind || 'episodic';
+    if (kindCounts[k] !== undefined) kindCounts[k]++;
+  }
+  document.querySelectorAll('#mem-kind-filter .graph-chip').forEach(el => {
+    const k = el.getAttribute('data-kind');
+    if (k && k !== 'any') {
+      el.style.display = kindCounts[k] > 0 ? '' : 'none';
+    }
+  });
+
+  const filtered = memKindFilter === 'any'
+    ? all
+    : all.filter(m => (m.kind || 'episodic') === memKindFilter);
+  const total = filtered.length;
+  const stale = filtered.filter(m => m.is_stale).length;
+  const kindLabel = memKindFilter === 'any' ? '' : ' · ' + memKindFilter;
+  document.getElementById('mem-stats').textContent = total + ' memories · ' + stale + ' stale' + kindLabel;
 
   if (total === 0) {
     document.getElementById('memories-list').innerHTML =
@@ -1212,10 +1264,12 @@ async function renderMemories() {
     return;
   }
 
-  const html = state.memories.map(m => {
+  const html = filtered.map(m => {
     const tags = (m.tags || []).map(t => '<span style="color:var(--text-3);margin-right:4px;">#' + esc(t) + '</span>').join('');
     const git = m.git_sha ? '<div class="git">' + esc(m.git_branch || '?') + '@' + m.git_sha.slice(0,7) + '</div>' : '';
-    return '<div class="memory' + (m.is_stale ? ' stale' : '') + '"><div class="memory-meta"><div class="cat">' + m.category + '</div><div>' + formatAge(m.created_at) + ' ago</div>' + git + '</div><div class="memory-content">' + esc(m.content) + '<div style="margin-top:6px;font-size:11px;">' + tags + '</div></div><div class="memory-stats">conf ' + m.confidence + '<br>used ' + m.access_count + 'x</div></div>';
+    const kind = m.kind || 'episodic';
+    const kindChip = '<span style="color:var(--text-3);font-size:10px;border:1px solid var(--rule);padding:1px 6px;margin-left:6px;">' + esc(kind) + '</span>';
+    return '<div class="memory' + (m.is_stale ? ' stale' : '') + '"><div class="memory-meta"><div class="cat">' + m.category + kindChip + '</div><div>' + formatAge(m.created_at) + ' ago</div>' + git + '</div><div class="memory-content">' + esc(m.content) + '<div style="margin-top:6px;font-size:11px;">' + tags + '</div></div><div class="memory-stats">conf ' + m.confidence + '<br>used ' + m.access_count + 'x</div></div>';
   }).join('');
   document.getElementById('memories-list').innerHTML = html;
 }

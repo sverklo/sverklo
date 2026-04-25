@@ -2,6 +2,11 @@ import type { Indexer } from "../../indexer/indexer.js";
 import { findWorkspaceForProject, getWorkspaceDbPath } from "../../workspace/workspace-config.js";
 import { CrossRepoDb } from "../../workspace/cross-db.js";
 import type { InterfaceContract } from "../../workspace/cross-db.js";
+import {
+  partitionPlan,
+  formatPlan,
+  DEFAULT_PARTITION_THRESHOLD,
+} from "../../search/partition.js";
 
 export const impactTool = {
   name: "sverklo_impact",
@@ -21,6 +26,12 @@ export const impactTool = {
       cross_repo: {
         type: "boolean",
         description: "Include cross-repo impact from workspace projects (default false)",
+      },
+      partition_threshold: {
+        type: "number",
+        description:
+          "When the caller count exceeds this, return a partition plan instead of a raw list " +
+          "(default 80). Set to 0 to disable partitioning and always dump the raw list.",
       },
     },
     required: ["symbol"],
@@ -63,6 +74,21 @@ export function handleImpact(indexer: Indexer, args: Record<string, unknown>): s
 
   const confidenceIcon = confidence === "DIRECT" ? "●" : confidence === "UNCERTAIN" ? "◐" : "○";
   const header = `## Impact analysis: '${symbol}' ${confidenceIcon} ${confidence}\n${count} reference${count === 1 ? "" : "s"} across ${new Set(results.map(r => r.file_path)).size} file${count === 1 ? "" : "s"}\n_${confidenceNote}_\n`;
+
+  // P1-11: partition plan when the caller set is too big to scan in one pass.
+  // Threshold 0 disables; default comes from src/search/partition.ts.
+  const thresholdArg = args.partition_threshold;
+  const threshold =
+    typeof thresholdArg === "number"
+      ? thresholdArg
+      : DEFAULT_PARTITION_THRESHOLD;
+  if (threshold > 0 && results.length > threshold) {
+    const planItems = results.map((r) => ({ path: r.file_path }));
+    const plan = partitionPlan(planItems, { threshold });
+    if (plan) {
+      return [header, formatPlan(plan)].join("\n");
+    }
+  }
 
   // If there are multiple definitions, list them
   if (definitionCount > 1) {

@@ -43,12 +43,28 @@ export function runDoctor(projectPath: string): void {
       message: sverkloBin,
     });
   } catch {
-    checks.push({
-      name: "sverklo binary",
-      status: "fail",
-      message: "not found on PATH",
-      fix: "npm install -g sverklo",
-    });
+    // Before recommending a global install, check whether sverklo is
+    // already present locally (in node_modules/.bin). Telling someone
+    // who just ran `npm install sverklo` to also run `npm install -g`
+    // overrides their explicit choice — and a project-local
+    // `npx sverklo` is the right answer in that case.
+    const localBin = join(projectPath, "node_modules", ".bin", "sverklo");
+    const hasLocal = existsSync(localBin);
+    if (hasLocal) {
+      checks.push({
+        name: "sverklo binary",
+        status: "warn",
+        message: `not on PATH, but found locally at ${localBin}`,
+        fix: "use `npx sverklo …` from this directory, or add `./node_modules/.bin` to PATH",
+      });
+    } else {
+      checks.push({
+        name: "sverklo binary",
+        status: "fail",
+        message: "not found on PATH",
+        fix: "npm install -g sverklo",
+      });
+    }
   }
 
   // 2. Version

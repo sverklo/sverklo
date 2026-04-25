@@ -6,6 +6,34 @@ import { computePageRank } from "../search/pagerank.js";
 import { loadSverkloConfig, getWeight } from "../utils/config-file.js";
 import { log } from "../utils/logger.js";
 
+// Default PageRank weight for non-code files. Without this, repos with
+// many top-level docs (BENCHMARKS.md, FIRST_RUN.md, README.md, etc.) end
+// up with markdown ranked above source — sverklo audit then claims a
+// no-deps repo deserves an A. User config can override via `weights:`
+// in `.sverklo.yaml`.
+const NON_CODE_WEIGHT = 0.1;
+const NON_CODE_PATTERNS = [
+  /\.md$/i,
+  /\.markdown$/i,
+  /\.mdx$/i,
+  /\.ya?ml$/i,
+  /\.json$/i,
+  /\.toml$/i,
+  /\.lock$/i,
+  /\.txt$/i,
+  /\.cfg$/i,
+  /\.ini$/i,
+  /\.csv$/i,
+  /\.tsv$/i,
+];
+
+function defaultFileWeight(path: string): number {
+  for (const re of NON_CODE_PATTERNS) {
+    if (re.test(path)) return NON_CODE_WEIGHT;
+  }
+  return 1.0;
+}
+
 // File extension resolution for relative imports
 const EXTENSIONS = [
   "",
@@ -73,11 +101,15 @@ export function buildGraph(
     idToPath.set(id, path);
   }
 
-  // Write ranks back to file store, applying config weight multipliers
+  // Write ranks back to file store. Non-code files get a built-in 0.1×
+  // demotion (kills markdown-dominated topFiles) UNLESS the user config
+  // explicitly weights them — user config wins.
   for (const [id, rank] of ranks) {
     const filePath = idToPath.get(id);
-    const weight = filePath ? getWeight(config, filePath) : 1.0;
-    fileStore.updatePagerank(id, rank * weight);
+    const userWeight = filePath ? getWeight(config, filePath) : 1.0;
+    const builtinWeight =
+      filePath && userWeight === 1.0 ? defaultFileWeight(filePath) : 1.0;
+    fileStore.updatePagerank(id, rank * userWeight * builtinWeight);
   }
 
   log(`Graph built: ${edges.length} edges, PageRank computed for ${fileIds.length} files`);

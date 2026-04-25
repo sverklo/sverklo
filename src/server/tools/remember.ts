@@ -1,8 +1,8 @@
 import type { Indexer } from "../../indexer/indexer.js";
-import { cosineSimilarity } from "../../indexer/embedder.js";
 import { getGitState } from "../../memory/git-state.js";
 import { track } from "../../telemetry/index.js";
-import type { MemoryCategory, MemoryTier } from "../../types/index.js";
+import type { MemoryCategory, MemoryTier, MemoryKind } from "../../types/index.js";
+import { validateEnum, requireString } from "./_validation.js";
 
 const CONFLICT_THRESHOLD = 0.85;
 
@@ -31,6 +31,14 @@ export const rememberTool = {
         enum: ["core", "archive"],
         description: "core auto-injects each session, archive is searched on demand",
       },
+      kind: {
+        type: "string",
+        enum: ["episodic", "semantic", "procedural"],
+        description:
+          "Cognitive-science axis: episodic = a moment-bound event/decision, " +
+          "semantic = a timeless fact/rule, procedural = a how-to. Defaults from " +
+          "category (procedural→procedural, preference/pattern→semantic, else→episodic).",
+      },
     },
     required: ["content"],
   },
@@ -40,8 +48,35 @@ export async function handleRemember(
   indexer: Indexer,
   args: Record<string, unknown>
 ): Promise<string> {
-  const content = args.content as string;
-  const category = (args.category as MemoryCategory) || "context";
+  const contentArg = requireString(
+    args.content,
+    "content",
+    'sverklo_remember content:"we picked SQLite for the index" [category:decision] [kind:semantic]'
+  );
+  if (!contentArg.ok) return contentArg.message;
+  const content = contentArg.value;
+
+  const categoryRes = validateEnum(
+    args.category,
+    ["decision", "preference", "pattern", "context", "todo", "procedural"] as const,
+    "category",
+    "context"
+  );
+  if (categoryRes instanceof Error) return `Error: ${categoryRes.message}`;
+  const category: MemoryCategory = categoryRes;
+
+  // kind is optional: when omitted, the store derives it from category.
+  // We only validate when the caller explicitly passes a value.
+  const ALLOWED_KINDS = ["episodic", "semantic", "procedural"] as const;
+  if (
+    args.kind !== undefined &&
+    args.kind !== null &&
+    args.kind !== "" &&
+    (typeof args.kind !== "string" || !ALLOWED_KINDS.includes(args.kind as MemoryKind))
+  ) {
+    return `Error: \`kind\` must be one of: ${ALLOWED_KINDS.join(", ")} (got ${JSON.stringify(args.kind)})`;
+  }
+
   const tags = (args.tags as string[]) || null;
   const relatedFiles = (args.related_files as string[]) || null;
   // Procedural defaults to higher confidence (they're "always" rules)
@@ -56,35 +91,36 @@ export async function handleRemember(
   const { sha, branch } = getGitState(indexer.rootPath);
 
   // ─── Conflict detection ───
-  // Check for existing active memories with high semantic similarity.
-  // If same related_files or very high similarity, invalidate the old one.
+  // Find prior memories above the conflict threshold via the streaming
+  // top-K helper. We over-fetch (top 50) instead of materialising the
+  // entire embedding map — same answer, constant memory.
   const [queryVector] = await indexer.embed([content]);
-  const existingEmbeddings = indexer.memoryEmbeddingStore.getAll();
+  const candidates = indexer.memoryEmbeddingStore.findTopK(
+    queryVector,
+    50,
+    CONFLICT_THRESHOLD
+  );
   const conflicts: { id: number; similarity: number }[] = [];
 
-  for (const [memId, vec] of existingEmbeddings) {
-    const sim = cosineSimilarity(queryVector, vec);
-    if (sim >= CONFLICT_THRESHOLD) {
-      const existingMem = indexer.memoryStore.getById(memId);
-      if (!existingMem) continue;
-      // Skip already-invalidated memories
-      if (existingMem.valid_until_sha) continue;
+  for (const { memoryId: memId, score: sim } of candidates) {
+    const existingMem = indexer.memoryStore.getById(memId);
+    if (!existingMem) continue;
+    if (existingMem.valid_until_sha) continue;
 
-      // Same related files OR very high similarity (>0.92) = conflict
-      const existingFiles: string[] = existingMem.related_files
-        ? JSON.parse(existingMem.related_files)
-        : [];
-      const sameFiles =
-        relatedFiles &&
-        existingFiles.some((f) => relatedFiles.includes(f));
+    // Same related files OR very high similarity (>0.92) = conflict
+    const existingFiles: string[] = existingMem.related_files
+      ? JSON.parse(existingMem.related_files)
+      : [];
+    const sameFiles =
+      relatedFiles && existingFiles.some((f) => relatedFiles.includes(f));
 
-      if (sim >= 0.92 || sameFiles) {
-        conflicts.push({ id: memId, similarity: sim });
-      }
+    if (sim >= 0.92 || sameFiles) {
+      conflicts.push({ id: memId, similarity: sim });
     }
   }
 
   // Insert new memory
+  const explicitKind = args.kind as MemoryKind | undefined;
   const id = indexer.memoryStore.insert(
     category,
     content,
@@ -93,8 +129,20 @@ export async function handleRemember(
     sha,
     branch,
     relatedFiles,
-    tier
+    tier,
+    explicitKind
   );
+
+  // P2-18: attach the recent tool-call trajectory so future readers can
+  // see the retrieval path that led to this memory. Best-effort — failure
+  // here must not break the remember.
+  try {
+    const { trajectoryBuffer } = await import("../trajectory.js");
+    const traj = trajectoryBuffer.snapshot(8);
+    if (traj.length > 0) {
+      indexer.memoryStore.setTrajectory(id, JSON.stringify(traj));
+    }
+  } catch { /* trajectory column missing (pre-migration) — skip */ }
 
   // Mirror to the JSONL journal so users can `cat .sverklo/memories.jsonl`
   // or commit it alongside code. Issue #7.

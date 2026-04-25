@@ -14,6 +14,11 @@ import { GraphStore } from "../storage/graph-store.js";
 import { MemoryStore } from "../storage/memory-store.js";
 import { MemoryEmbeddingStore } from "../storage/memory-embedding-store.js";
 import { SymbolRefStore } from "../storage/symbol-ref-store.js";
+import { DocEdgeStore } from "../storage/doc-edge-store.js";
+import { EvidenceStore } from "../storage/evidence-store.js";
+import { ConceptStore } from "../storage/concept-store.js";
+import { HandleStore } from "../storage/handle-store.js";
+import { PatternStore } from "../storage/pattern-store.js";
 import { MemoryJournal } from "../memory/journal.js";
 import { discoverFiles } from "./file-discovery.js";
 import { parseFile } from "./parser.js";
@@ -24,6 +29,7 @@ import {
   type EmbeddingProvider,
 } from "./embedding-providers.js";
 import { buildGraph } from "./graph-builder.js";
+import { buildDocLinks } from "./doc-linker.js";
 import { extractReferences } from "./symbol-extractor.js";
 import { createIgnoreFilter } from "../utils/ignore.js";
 import { estimateTokens } from "../utils/tokens.js";
@@ -41,6 +47,11 @@ export class Indexer {
   public memoryStore: MemoryStore;
   public memoryEmbeddingStore: MemoryEmbeddingStore;
   public symbolRefStore: SymbolRefStore;
+  public docEdgeStore: DocEdgeStore;
+  public evidenceStore: EvidenceStore;
+  public conceptStore: ConceptStore;
+  public handleStore: HandleStore;
+  public patternStore: PatternStore;
   public memoryJournal: MemoryJournal;
 
   // Issue #9 wiring (caught during dogfood session, 2026-04-08):
@@ -74,6 +85,14 @@ export class Indexer {
     this.memoryStore = new MemoryStore(this.db);
     this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
     this.symbolRefStore = new SymbolRefStore(this.db);
+    this.docEdgeStore = new DocEdgeStore(this.db);
+    this.evidenceStore = new EvidenceStore(this.db);
+    // Purge stale evidence rows on startup (cheap; bounded by LRU cap).
+    try { this.evidenceStore.purge(); } catch { /* pre-v4 db without evidence table */ }
+    this.conceptStore = new ConceptStore(this.db);
+    this.handleStore = new HandleStore(this.db);
+    try { this.handleStore.purgeExpired(); } catch { /* pre-v6 db without context_handles */ }
+    this.patternStore = new PatternStore(this.db);
     this.memoryJournal = new MemoryJournal(config.rootPath);
 
     // Load .sverklo.yaml config if present
@@ -144,6 +163,22 @@ export class Indexer {
       );
     }
 
+    if (stored < 8) {
+      // Migration 7 → 8: backfill `memories.kind` from `category` so the
+      // dashboard's semantic/procedural filter chips aren't empty on
+      // upgraded databases. Mirrors `defaultKindFor` in memory-store.ts.
+      // One-time pass gated on data_version so explicit kinds set by
+      // `sverklo_remember` after the upgrade are preserved.
+      this.db.exec(
+        "UPDATE memories SET kind = 'procedural' " +
+        "WHERE kind = 'episodic' AND category = 'procedural'"
+      );
+      this.db.exec(
+        "UPDATE memories SET kind = 'semantic' " +
+        "WHERE kind = 'episodic' AND category IN ('preference', 'pattern')"
+      );
+    }
+
     setDataVersion(this.db, CURRENT_DATA_VERSION);
   }
 
@@ -162,12 +197,18 @@ export class Indexer {
    * synchronously via the bundled ONNX module so read-path tools like
    * search / recall / remember still work during bootstrap.
    */
+  // Process-level query cache. Single-element queries get cached so a
+  // chained `sverklo_search` → `sverklo_investigate` → `sverklo_ask` on
+  // the same query embeds once instead of three times. Bounded LRU; the
+  // ONNX embedding takes ~30-60 ms for a single string, so a cache hit
+  // saves a meaningful chunk of the chained-call latency.
+  private __embedCache = new Map<string, Float32Array>();
+  private static __embedCacheMax = 64;
+
   async embed(texts: string[]): Promise<Float32Array[]> {
     if (this.embeddingProvider) {
       return this.embeddingProvider.embed(texts);
     }
-    // Fallback: lazy-init the default provider. Happens if search /
-    // recall is called before index() completes.
     await initEmbedder();
     return legacyEmbed(texts);
   }
@@ -337,6 +378,29 @@ export class Indexer {
       // 7. Build dependency graph and compute PageRank
       log("Building dependency graph...");
       buildGraph(fileImports, this.fileStore, this.graphStore, this.config.rootPath);
+
+      // 7b. Link doc chunks → symbols (v0.13, P0-5). Requires graph build
+      // first so we walk top-PageRank files for the "known symbols" gate.
+      try {
+        const allFiles = this.fileStore.getAll(); // sorted by pagerank DESC
+        const fileCache = new Map(allFiles.map((f) => [f.id, f] as const));
+        const docChunks: import("../types/index.js").CodeChunk[] = [];
+        for (const f of allFiles) {
+          if (f.language !== "markdown") continue;
+          for (const c of this.chunkStore.getByFile(f.id)) {
+            if (c.type === "doc_section" || c.type === "doc_code") docChunks.push(c);
+          }
+        }
+        if (docChunks.length > 0) {
+          const r = buildDocLinks(this.chunkStore, this.docEdgeStore, fileCache, docChunks);
+          log(
+            `Doc links: ${r.docChunksProcessed} doc chunks → ${r.mentionsCreated} mentions ` +
+              `(${r.resolvedCount} resolved to symbols)`
+          );
+        }
+      } catch (err) {
+        logError("doc-linking failed (non-fatal)", err);
+      }
 
       // 8. Update project metadata
       this.lastIndexedTime = Date.now();
@@ -555,6 +619,11 @@ export class Indexer {
     this.memoryStore = new MemoryStore(this.db);
     this.memoryEmbeddingStore = new MemoryEmbeddingStore(this.db);
     this.symbolRefStore = new SymbolRefStore(this.db);
+    this.docEdgeStore = new DocEdgeStore(this.db);
+    this.evidenceStore = new EvidenceStore(this.db);
+    this.conceptStore = new ConceptStore(this.db);
+    this.handleStore = new HandleStore(this.db);
+    this.patternStore = new PatternStore(this.db);
 
     // Reset state
     this.indexing = false;

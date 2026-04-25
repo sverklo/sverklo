@@ -1,10 +1,17 @@
 import { execSync, spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { resolve as resolvePath, sep } from "node:path";
 import type { Indexer } from "../../indexer/indexer.js";
 
 export const astGrepTool = {
   name: "sverklo_ast_grep",
   description:
-    "Structural AST search via ast-grep (if installed). For shape-matching that regex can't express.",
+    "Find code by AST shape, not text — e.g. 'every console.log($X)', " +
+    "'every catch (e) { return null }'. Requires ast-grep on PATH. Pick this " +
+    "over sverklo_search when you need exact structural matches (consistent " +
+    "transformations, lint-style queries) and over Grep when you need to " +
+    "ignore identifier names or whitespace. Falls back to a clear error if " +
+    "ast-grep is missing.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -25,10 +32,30 @@ export function handleAstGrep(
 ): string {
   const pattern = args.pattern as string;
   const language = args.language as string | undefined;
-  const path = (args.path as string | undefined) || indexer.rootPath;
+  const rawPath = (args.path as string | undefined) || indexer.rootPath;
 
   if (!pattern) {
     return "Error: pattern is required";
+  }
+
+  // Containment check: resolve symlinks, verify the requested path is
+  // inside the indexed project root. Without this an agent (or a hostile
+  // prompt) can search /etc, ~/.aws, or sibling repos through this tool.
+  let path: string;
+  try {
+    const absRoot = realpathSync(resolvePath(indexer.rootPath));
+    const absTarget = realpathSync(resolvePath(rawPath));
+    const rootWithSep = absRoot.endsWith(sep) ? absRoot : absRoot + sep;
+    if (absTarget !== absRoot && !absTarget.startsWith(rootWithSep)) {
+      return `Error: \`path\` must be inside the indexed project (${absRoot}). Got: ${absTarget}`;
+    }
+    path = absTarget;
+  } catch (err) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === "ENOENT") {
+      return `Error: path not found: ${rawPath}`;
+    }
+    return `Error: failed to resolve path: ${e.message ?? String(err)}`;
   }
 
   // Check ast-grep availability first

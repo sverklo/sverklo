@@ -1,0 +1,17 @@
+{"symbol":"EvidenceStore","file":"src/storage/evidence-store.ts","expected":["repository"]}
+{"symbol":"ChunkStore","file":"src/storage/chunk-store.ts","expected":["repository"]}
+{"symbol":"FileStore","file":"src/storage/file-store.ts","expected":["repository"]}
+{"symbol":"GraphStore","file":"src/storage/graph-store.ts","expected":["repository"]}
+{"symbol":"MemoryStore","file":"src/storage/memory-store.ts","expected":["repository"]}
+{"symbol":"DocEdgeStore","file":"src/storage/doc-edge-store.ts","expected":["repository"]}
+{"symbol":"PatternStore","file":"src/storage/pattern-store.ts","expected":["repository"]}
+{"symbol":"ConceptStore","file":"src/storage/concept-store.ts","expected":["repository"]}
+{"symbol":"HandleStore","file":"src/storage/handle-store.ts","expected":["repository"]}
+{"symbol":"SymbolRefStore","file":"src/storage/symbol-ref-store.ts","expected":["repository"]}
+{"symbol":"handleSearch","file":"src/server/tools/search.ts","expected":["controller"],"forbidden":["repository"]}
+{"symbol":"handleInvestigate","file":"src/server/tools/investigate.ts","expected":["controller"],"forbidden":["repository"]}
+{"symbol":"handleVerify","file":"src/server/tools/verify.ts","expected":["controller","validator"]}
+{"symbol":"handleCritique","file":"src/server/tools/critique.ts","expected":["validator"]}
+{"symbol":"handleAudit","file":"src/server/tools/audit.ts","expected":["controller"]}
+{"symbol":"startWatcher","file":"src/indexer/watcher.ts","expected":["observer"]}
+{"symbol":"trajectoryBuffer","file":"src/server/trajectory.ts","expected":["object_pool"]}

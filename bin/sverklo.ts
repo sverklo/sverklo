@@ -5,6 +5,83 @@ import { resolve } from "node:path";
 const args = process.argv.slice(2);
 const command = args[0];
 
+/**
+ * Resolve a project path from a subcommand's flag list. If the first
+ * non-flag arg is set, treat it as the project path; otherwise fall
+ * back to cwd. Errors and exits when the resolved path doesn't exist.
+ * Use this in any subcommand that historically hard-coded process.cwd().
+ */
+async function resolveProjectPath(flags: string[]): Promise<string> {
+  const { existsSync, statSync } = await import("node:fs");
+  const positional = flags.find((a) => !a.startsWith("-"));
+  const target = resolve(positional ?? process.cwd());
+  if (!existsSync(target)) {
+    console.error(`\n✗ project path not found: ${target}\n`);
+    process.exit(2);
+  }
+  if (!statSync(target).isDirectory()) {
+    console.error(`\n✗ project path is not a directory: ${target}\n`);
+    process.exit(2);
+  }
+  return target;
+}
+
+// Global --help / -h interceptor.
+//
+// Without this, `--help` falls through to whatever subcommand the user
+// typed. That used to be catastrophic: `sverklo wiki --help` wrote 61
+// markdown files into the user's repo, `sverklo init --help` rewrote
+// `~/.gemini/antigravity/mcp_config.json`, `sverklo register --help`
+// registered the literal string "--help" as a repo at /private/tmp/--help.
+// Catching --help/-h here, BEFORE any subcommand's destructive setup
+// runs, makes the gesture safe.
+if (command && command !== "--help" && command !== "-h") {
+  const wantsHelp = args.slice(1).some((a) => a === "--help" || a === "-h");
+  if (wantsHelp) {
+    const HELP_BLURBS: Record<string, string> = {
+      init: "Set up sverklo in your project (.mcp.json + CLAUDE.md, auto-detects Claude Code/Cursor/Windsurf/Antigravity).",
+      doctor: "Diagnose MCP setup issues. Run after `init` to verify the agent can reach sverklo.",
+      audit: "Run codebase audit and emit a graded report. Flags: --format markdown|html|json|graph|arch|obsidian, --output PATH, --open, --badge, --publish.",
+      review: "Risk-scored diff review (CI-friendly). Flags: --ref REF, --ci, --format markdown|json, --max-files N, --fail-on low|medium|high.",
+      wiki: "Generate a markdown wiki from the indexed codebase. Flags: --output DIR (default ./sverklo-wiki), --format markdown|html.",
+      "concept-index": "Label clusters with an LLM (requires Ollama). Flags: --model NAME, --base-url URL, --force, --max N.",
+      "enrich-symbols": "Add LLM-generated purpose to top-PageRank symbols (requires Ollama). Flags: --top N, --model NAME, --base-url URL, --force.",
+      "enrich-patterns": "Tag top-PageRank symbols with design patterns (requires Ollama). Flags: --top N, --model NAME, --base-url URL, --min-conf X, --force.",
+      register: "Add a directory to the global registry. Usage: sverklo register [path] (defaults to cwd).",
+      unregister: "Remove a repo from the global registry. Usage: sverklo unregister <name>.",
+      list: "List all registered repositories.",
+      workspace: "Manage cross-repo workspaces. Subcommands: create, list, index, add, remove.",
+      ui: "Open the web dashboard. Usage: sverklo ui [project-path].",
+      dashboard: "Alias for `sverklo ui`.",
+      wakeup: "Print compressed project context (for system-prompt injection in non-MCP clients).",
+      digest: "5-line summary of what changed in this project. Flags: --since 7d, --format markdown|plain.",
+      "audit-prompt": "Print a ready-to-paste codebase-audit prompt (hybrid agent workflow).",
+      "review-prompt": "Print a ready-to-paste PR/MR-review prompt (hybrid agent workflow).",
+      bench: "Run reproducible benchmarks on gin/nestjs/react.",
+      benchmark: "Alias for `sverklo bench`.",
+      history: "Show audit grade history and trend over time.",
+      activity: "Show recent activity log (always-on audit trail).",
+      trace: "Show recent tool call traces (set SVERKLO_TRACE=1).",
+      telemetry: "Manage opt-in telemetry (off by default). Subcommands: status, enable, disable.",
+      setup: "Download the embedding model (~90MB). With --global: write global MCP config for Claude Code.",
+      install: "Alias for `sverklo setup`.",
+      prune: "", // prune already prints its own --help inside the block
+    };
+
+    // Pass-throughs: subcommands that handle --help themselves.
+    const SELF_HANDLES_HELP = new Set(["prune"]);
+    if (!SELF_HANDLES_HELP.has(command)) {
+      const blurb = HELP_BLURBS[command];
+      if (blurb) {
+        console.log(`\nsverklo ${command} — ${blurb}\n\nSee \`sverklo --help\` for the full command list.\n`);
+      } else {
+        console.log(`\nsverklo: unknown subcommand \`${command}\`.\n\nRun \`sverklo --help\` for the list of subcommands.\n`);
+      }
+      process.exit(0);
+    }
+  }
+}
+
 if (command === "--version" || command === "-v" || command === "-V") {
   const { readFileSync } = await import("node:fs");
   const { join, dirname } = await import("node:path");
@@ -43,6 +120,13 @@ if (command === "init") {
 }
 
 if (command === "register") {
+  // Reject flag-shaped positionals (e.g. someone typed `register --foo` and
+  // we'd otherwise create a repo named "--foo" pointing at /private/tmp/--foo).
+  if (args[1] && args[1].startsWith("-")) {
+    console.error(`✗ register expects a directory path, got flag-shaped arg: ${args[1]}`);
+    console.error("  Usage: sverklo register [path] [name]");
+    process.exit(2);
+  }
   const targetPath = resolve(args[1] || process.cwd());
   const { registerRepo, deriveRepoName, getRegistryPath } = await import("../src/registry/registry.js");
   const repoName = args[2] || deriveRepoName(targetPath);
@@ -581,7 +665,7 @@ if (command === "review") {
       ? `origin/${process.env.GITHUB_BASE_REF}..HEAD`
       : "main..HEAD");
 
-  const projectPath = resolve(process.cwd());
+  const projectPath = await resolveProjectPath(flags);
 
   // Ensure model is available
   const { existsSync: modelExists } = await import("node:fs");
@@ -716,7 +800,7 @@ if (command === "audit") {
   const shouldPublish = flags.includes("--publish");
   const deepSecurity = flags.includes("--deep-security");
 
-  const projectPath = resolve(process.cwd());
+  const projectPath = await resolveProjectPath(flags);
 
   const { existsSync: modelExists } = await import("node:fs");
   const { join: joinPath } = await import("node:path");
@@ -965,7 +1049,7 @@ if (command === "wiki") {
 
   const output = resolve(flagVal("--output", "./sverklo-wiki"));
   const format = flagVal("--format", "markdown") as "markdown" | "html";
-  const projectPath = resolve(process.cwd());
+  const projectPath = await resolveProjectPath(flags);
 
   // Ensure model is available
   const { existsSync: modelExists } = await import("node:fs");
@@ -991,31 +1075,459 @@ if (command === "wiki") {
   process.exit(0);
 }
 
+if (command === "enrich-patterns") {
+  // P2-17: closed-taxonomy design-pattern annotation pass.
+  //   sverklo enrich-patterns [--top 200] [--model qwen2.5-coder:7b]
+  //                           [--min-conf 0.6] [--force]
+  const flags = args.slice(1);
+  const flagVal = (name: string, fallback?: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    if (prefixed) return prefixed.slice(name.length + 1);
+    return fallback;
+  };
+  const topN = Number(flagVal("--top", "200"));
+  const model = flagVal("--model", "qwen2.5-coder:7b")!;
+  const baseUrl = flagVal("--base-url", "http://localhost:11434")!;
+  const minConfStr = flagVal("--min-conf", "0.6");
+  const minConfidence = Number(minConfStr);
+  const force = flags.includes("--force");
+  const projectPath = await resolveProjectPath(flags);
+
+  const reach = await fetch(`${baseUrl}/api/tags`).catch(() => null);
+  if (!reach || !reach.ok) {
+    console.error(`\n✗ Could not reach Ollama at ${baseUrl}.\n`);
+    process.exit(1);
+  }
+
+  const { existsSync: mEP } = await import("node:fs");
+  const { join: jpP } = await import("node:path");
+  const { homedir: hdP } = await import("node:os");
+  const mDP = jpP(hdP(), ".sverklo", "models");
+  if (!mEP(jpP(mDP, "model.onnx"))) {
+    console.log("Downloading embedding model (~90MB)...");
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { labelPatterns } = await import("../src/indexer/pattern-labeler.js");
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  console.log(
+    `Annotating top ${topN} symbols with pattern taxonomy via ${model} ` +
+      `(min conf ${minConfidence})${force ? " (forced)" : ""}...`
+  );
+  const r = await labelPatterns(indexer, {
+    topN, model, baseUrl, minConfidence, force,
+    onProgress: (done, total, sym) => {
+      if (done % 10 === 0 || done + 1 === total) {
+        process.stdout.write(
+          `  [${done + 1}/${total}] ${sym.slice(0, 40)}${done + 1 === total ? "\n" : "\r"}`
+        );
+      }
+    },
+  });
+  console.log(
+    `\nDone: scanned ${r.scanned}, labeled ${r.labeled}, ` +
+      `dropped ${r.skipped_by_taxonomy} taxonomy / ${r.skipped_low_conf} low-conf, failed ${r.failed}.`
+  );
+  if (r.failures.length > 0) {
+    console.log("\nFailures (first 5):");
+    for (const f of r.failures.slice(0, 5)) console.log(`  - ${f.symbol}: ${f.reason}`);
+  }
+  indexer.close();
+  // Exit non-zero when nothing succeeded — CI shouldn't green-light a
+  // total no-op (e.g. Ollama 404 on the requested model).
+  process.exit(r.failed > 0 && r.labeled === 0 ? 1 : 0);
+}
+
+if (command === "enrich-symbols") {
+  // P1-12: write a one-line purpose onto chunks.purpose for the top-N
+  // PageRank symbols. Uses Ollama; cached by content-hash.
+  //
+  //   sverklo enrich-symbols [--top 200] [--model qwen2.5-coder:7b] [--force]
+  const flags = args.slice(1);
+  const flagVal = (name: string, fallback?: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    if (prefixed) return prefixed.slice(name.length + 1);
+    return fallback;
+  };
+
+  const topN = Number(flagVal("--top", "200"));
+  const model = flagVal("--model", "qwen2.5-coder:7b")!;
+  const baseUrl = flagVal("--base-url", "http://localhost:11434")!;
+  const force = flags.includes("--force");
+  const projectPath = await resolveProjectPath(flags);
+
+  // Reach check up front.
+  const reach = await fetch(`${baseUrl}/api/tags`).catch(() => null);
+  if (!reach || !reach.ok) {
+    console.error(
+      `\n✗ Could not reach Ollama at ${baseUrl}. Install + run Ollama, then \`ollama pull ${model}\`.\n`
+    );
+    process.exit(1);
+  }
+
+  const { existsSync: mE2 } = await import("node:fs");
+  const { join: jp2 } = await import("node:path");
+  const { homedir: hd2 } = await import("node:os");
+  const mD2 = jp2(hd2(), ".sverklo", "models");
+  if (!mE2(jp2(mD2, "model.onnx"))) {
+    console.log("Downloading embedding model (~90MB)...");
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { enrichSymbolPurposes } = await import("../src/indexer/symbol-purpose.js");
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  console.log(`Enriching top ${topN} symbols via ${model}${force ? " (forced)" : ""}...`);
+  const r = await enrichSymbolPurposes(indexer, {
+    topN,
+    model,
+    baseUrl,
+    force,
+    onProgress: (done, total, sym) => {
+      if (done % 10 === 0 || done + 1 === total) {
+        process.stdout.write(
+          `  [${done + 1}/${total}] ${sym.slice(0, 40)}${done + 1 === total ? "\n" : "\r"}`
+        );
+      }
+    },
+  });
+
+  console.log(`\nDone: ${r.enriched} enriched, ${r.skipped} skipped, ${r.failed} failed.`);
+  if (r.failures.length > 0) {
+    console.log("\nFailures (first 5):");
+    for (const f of r.failures.slice(0, 5)) {
+      console.log(`  - ${f.symbol}: ${f.reason}`);
+    }
+  }
+  indexer.close();
+  process.exit(r.failed > 0 && r.enriched === 0 ? 1 : 0);
+}
+
+if (command === "concept-index") {
+  // Offline pass that labels every cluster with a short phrase + summary
+  // via a locally-hosted Ollama chat model. Runs once per repo; later
+  // runs skip clusters whose membership fingerprint hasn't changed.
+  //
+  //   sverklo concept-index
+  //     [--model qwen2.5-coder:7b]
+  //     [--base-url http://localhost:11434]
+  //     [--force]
+  //     [--max N]
+  const flags = args.slice(1);
+  const flagVal = (name: string, fallback?: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    if (prefixed) return prefixed.slice(name.length + 1);
+    return fallback;
+  };
+
+  const model = flagVal("--model", "qwen2.5-coder:7b")!;
+  const baseUrl = flagVal("--base-url", "http://localhost:11434")!;
+  const force = flags.includes("--force");
+  const maxStr = flagVal("--max");
+  const maxClusters = maxStr ? Number(maxStr) : undefined;
+
+  const projectPath = await resolveProjectPath(flags);
+
+  // Model check — needed for embedding the concept labels.
+  const { existsSync: mExists } = await import("node:fs");
+  const { join: jp } = await import("node:path");
+  const { homedir: hdC } = await import("node:os");
+  const mD = jp(hdC(), ".sverklo", "models");
+  if (!mExists(jp(mD, "model.onnx"))) {
+    console.log("Downloading embedding model (~90MB)...");
+    const { setupModels } = await import("../src/indexer/setup.js");
+    await setupModels().catch(() => {});
+  }
+
+  // Ollama reachability check up front — fail fast with a helpful message
+  // before we spend time indexing.
+  const reach = await fetch(`${baseUrl}/api/tags`).catch(() => null);
+  if (!reach || !reach.ok) {
+    console.error(
+      `\n✗ Could not reach Ollama at ${baseUrl}.` +
+        `\n\nTo fix:` +
+        `\n  1. Install Ollama: https://ollama.com` +
+        `\n  2. Pull a chat model:  ollama pull ${model}` +
+        `\n  3. Start the daemon:   ollama serve   (or just \`ollama run ${model}\`)` +
+        `\n\nThen re-run: sverklo concept-index\n`
+    );
+    process.exit(1);
+  }
+
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { detectClusters } = await import("../src/search/cluster.js");
+  const { labelClusters } = await import("../src/indexer/concept-labeler.js");
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  // Build clusters from the file graph.
+  const files = indexer.fileStore.getAll().map((f) => ({
+    id: f.id,
+    path: f.path,
+    pagerank: f.pagerank,
+    language: f.language || "unknown",
+  }));
+  const edges = indexer.graphStore.getAll().map((e) => ({
+    source: e.source_file_id,
+    target: e.target_file_id,
+    weight: e.reference_count,
+  }));
+  const clusters = detectClusters(files, edges);
+
+  console.log(
+    `Labeling ${maxClusters ? Math.min(maxClusters, clusters.length) : clusters.length} ` +
+      `cluster(s) via ${model} at ${baseUrl}${force ? " (forced)" : ""}...`
+  );
+
+  const r = await labelClusters(indexer, clusters, indexer.conceptStore, {
+    model,
+    baseUrl,
+    force,
+    maxClusters,
+    onProgress: (done, total, clusterId) => {
+      if (done % 5 === 0 || done + 1 === total) {
+        process.stdout.write(
+          `  [${done + 1}/${total}] cluster ${clusterId}${done + 1 === total ? "\n" : "\r"}`
+        );
+      }
+    },
+  });
+
+  console.log(`\nDone: ${r.labeled} labeled, ${r.skipped} skipped (unchanged), ${r.failed} failed.`);
+  if (r.failures.length > 0) {
+    console.log("\nFailures (first 5):");
+    for (const f of r.failures.slice(0, 5)) {
+      console.log(`  - cluster ${f.cluster_id}: ${f.reason}`);
+    }
+  }
+  indexer.close();
+  process.exit(r.failed > 0 && r.labeled === 0 ? 1 : 0);
+}
+
+if (command === "digest") {
+  // Habit-loop scaffold: 5-line summary of what changed in this project
+  // since the user last paid attention. Designed to be cheap to render
+  // and easy to wire into a shell `cd` hook or a Slack post.
+  //
+  //   sverklo digest [--since 7d] [--format markdown|plain]
+  const flags = args.slice(1);
+  const flagVal = (name: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    return prefixed ? prefixed.slice(name.length + 1) : undefined;
+  };
+
+  // Parse --since: accept "7d", "30d", or a bare number (interpreted as days).
+  const sinceRaw = flagVal("--since") ?? "7d";
+  const sinceMatch = /^(\d+)d?$/.exec(sinceRaw);
+  if (!sinceMatch) {
+    console.error(`✗ --since expects N or Nd (e.g. 7 or 7d), got "${sinceRaw}"`);
+    process.exit(2);
+  }
+  const sinceDays = parseInt(sinceMatch[1], 10);
+
+  const formatRaw = flagVal("--format") ?? "markdown";
+  if (formatRaw !== "markdown" && formatRaw !== "plain") {
+    console.error(`✗ --format must be markdown or plain, got "${formatRaw}"`);
+    process.exit(2);
+  }
+
+  // Strip value-taking flags so the bare "7" in `--since 7` isn't
+  // mistaken for a positional project path.
+  const consumedFlags = new Set(["--since", "--format"]);
+  const cleanFlags: string[] = [];
+  for (let i = 0; i < flags.length; i++) {
+    if (consumedFlags.has(flags[i])) {
+      i++; // skip the value too
+      continue;
+    }
+    if (Array.from(consumedFlags).some((f) => flags[i].startsWith(`${f}=`))) continue;
+    cleanFlags.push(flags[i]);
+  }
+  const projectPath = await resolveProjectPath(cleanFlags);
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { generateDigest } = await import("../src/digest.js");
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+  console.log(generateDigest(indexer, { sinceDays, format: formatRaw }));
+  indexer.close();
+  process.exit(0);
+}
+
+if (command === "prune") {
+  // Sprint 9-C: access-decay pruning + episodic consolidation. Pure
+  // bookkeeping pass over the memory store; never deletes (uses bi-
+  // temporal supersedes-by). LLM distillation is opt-in via --with-ollama.
+  //
+  //   sverklo prune
+  //     [--dry-run]
+  //     [--max-age-days N]            (default 30)
+  //     [--stale-threshold X]         (default 0.05)
+  //     [--similarity-threshold X]    (default 0.88)
+  //     [--min-cluster-size N]        (default 3)
+  //     [--with-ollama --model X --base-url URL]
+  const flags = args.slice(1);
+
+  if (flags.includes("--help") || flags.includes("-h")) {
+    console.log(
+      `\nsverklo prune — decay stale memories + consolidate similar episodic ones (offline)\n\n` +
+      `Usage:\n` +
+      `  sverklo prune [flags]\n\n` +
+      `Flags:\n` +
+      `  --dry-run                      report what would change without writing\n` +
+      `  --max-age-days N               consolidate episodic memories older than N (default 30)\n` +
+      `  --stale-threshold X            decay-score cutoff below which a memory is marked stale (default 0.05)\n` +
+      `  --similarity-threshold X       cosine threshold for clustering (0..1, default 0.88)\n` +
+      `  --min-cluster-size N           smallest cluster that triggers consolidation (default 3)\n` +
+      `  --with-ollama                  use Ollama to distil cluster summaries (falls back to deterministic note)\n` +
+      `  --model NAME                   Ollama model id (default qwen2.5-coder:7b)\n` +
+      `  --base-url URL                 Ollama base URL (default http://localhost:11434)\n` +
+      `  -h, --help                     show this help\n\n` +
+      `Notes:\n` +
+      `  Originals are never deleted — superseded memories keep their lineage via valid_until_sha\n` +
+      `  and superseded_by, so timeline views stay intact.\n`
+    );
+    process.exit(0);
+  }
+
+  const flagVal = (name: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    if (prefixed) return prefixed.slice(name.length + 1);
+    return undefined;
+  };
+  const num = (name: string, predicate: (n: number) => boolean): number | undefined => {
+    const v = flagVal(name);
+    if (v === undefined) return undefined;
+    const n = Number(v);
+    if (!Number.isFinite(n) || !predicate(n)) {
+      console.error(`\n✗ ${name} expects a valid number (got "${v}")\n`);
+      process.exit(2);
+    }
+    return n;
+  };
+
+  const projectPath = await resolveProjectPath(flags);
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { runPrune } = await import("../src/memory/prune.js");
+
+  // When --with-ollama is set, fail fast if the daemon isn't reachable
+  // — same contract as `concept-index`. Otherwise the user thinks
+  // distillation ran when it silently fell back to the deterministic
+  // summary (or did nothing because no clusters existed).
+  const withOllama = flags.includes("--with-ollama");
+  const ollamaBaseUrl = flagVal("--base-url") ?? "http://localhost:11434";
+  if (withOllama) {
+    const reach = await fetch(`${ollamaBaseUrl}/api/tags`).catch(() => null);
+    if (!reach || !reach.ok) {
+      console.error(
+        `\n✗ --with-ollama set but ${ollamaBaseUrl} is unreachable.` +
+          `\n  Start Ollama (\`ollama serve\`) or drop --with-ollama to use the deterministic summary.\n`
+      );
+      process.exit(1);
+    }
+  }
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  const report = await runPrune(indexer, {
+    dryRun: flags.includes("--dry-run"),
+    maxAgeDays: num("--max-age-days", (n) => n > 0),
+    staleScoreThreshold: num("--stale-threshold", (n) => n >= 0),
+    similarityThreshold: num("--similarity-threshold", (n) => n > 0 && n <= 1),
+    minClusterSize: num("--min-cluster-size", (n) => n >= 2),
+    withOllama,
+    ollamaModel: flagVal("--model"),
+    ollamaBaseUrl: flagVal("--base-url"),
+  });
+
+  console.log(
+    `\n${report.dryRun ? "[dry-run] " : ""}Memory prune complete:\n` +
+      `  scanned:               ${report.scanned}${report.truncated ? ` (of ${report.totalActive} active — capped)` : ""}\n` +
+      `  marked stale (decay):  ${report.decayed}\n` +
+      `  clusters consolidated: ${report.consolidatedClusters}\n` +
+      `  members superseded:    ${report.consolidatedMembers}\n` +
+      (report.newSemanticMemoryIds.length > 0
+        ? `  new semantic ids:      ${report.newSemanticMemoryIds.join(", ")}\n`
+        : "") +
+      (report.truncated
+        ? `\n⚠ Only the ${report.scanned} most-recent memories were scanned. Re-run from a smaller working set or wait for a future flag to lift this cap.\n`
+        : "")
+  );
+
+  indexer.close();
+  process.exit(0);
+}
+
 if (command === "--help" || command === "-h") {
   console.log(`
 sverklo — code intelligence for AI agents
 
 Usage:
-  sverklo init              Set up sverklo in your project (.mcp.json + CLAUDE.md)
-  sverklo doctor            Diagnose MCP setup issues
-  sverklo [project-path]    Start the MCP server (stdio transport, single project)
-  sverklo                   Start in global mode (serves all registered repos)
-  sverklo register [path]   Add a directory to the global registry
-  sverklo unregister <name> Remove a repo from the global registry
-  sverklo list              List all registered repositories
-  sverklo setup --global    Write global MCP config for Claude Code (multi-repo)
-  sverklo ui [project-path] Open the web dashboard
-  sverklo wakeup            Print compressed project context (for system-prompt injection)
-  sverklo wiki              Generate a markdown wiki from the indexed codebase
-  sverklo bench             Run reproducible benchmarks on gin/nestjs/react (checkout only)
-  sverklo history           Show audit grade history and trend over time
-  sverklo audit-prompt      Print a ready-to-paste codebase-audit prompt (hybrid workflow)
-  sverklo review-prompt     Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
-  sverklo setup             Download the embedding model (~90MB)
+  sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
+  sverklo doctor             Diagnose MCP setup issues
+  sverklo [project-path]     Start the MCP server (stdio transport, single project)
+  sverklo                    Start in global mode (serves all registered repos)
+  sverklo register [path]    Add a directory to the global registry
+  sverklo unregister <name>  Remove a repo from the global registry
+  sverklo list               List all registered repositories
+  sverklo workspace <subcmd> Manage cross-repo workspaces (see \`workspace --help\`)
+
+Audit / review:
+  sverklo audit [path]       Run codebase audit and emit a graded report
+  sverklo review             Run risk-scored diff review (CI-friendly; auto-detects PR ref)
+  sverklo audit-prompt       Print a ready-to-paste codebase-audit prompt (hybrid workflow)
+  sverklo review-prompt      Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
+  sverklo history            Show audit grade history and trend over time
+  sverklo bench              Run reproducible benchmarks on gin/nestjs/react (checkout only)
+
+Memory + offline maintenance:
+  sverklo wakeup             Print compressed project context (for system-prompt injection)
+  sverklo wiki               Generate a markdown wiki from the indexed codebase
+  sverklo digest             5-line summary of what changed in this project (--since 7d)
+  sverklo prune              Decay stale memories + consolidate similar episodic ones
+  sverklo concept-index      Label clusters with an LLM (requires Ollama)
+  sverklo enrich-symbols     Add LLM-generated purpose to top-PageRank symbols (requires Ollama)
+  sverklo enrich-patterns    Tag top-PageRank symbols with design patterns (requires Ollama)
+
+Setup / runtime:
+  sverklo setup              Download the embedding model (~90MB)
+  sverklo setup --global     Write global MCP config for Claude Code (multi-repo)
+  sverklo ui [project-path]  Open the web dashboard
   sverklo activity           Show recent activity log (always-on audit trail)
-  sverklo trace             Show recent tool call traces (set SVERKLO_TRACE=1)
-  sverklo telemetry         Manage opt-in telemetry (off by default)
-  sverklo --help            Show this help
+  sverklo trace              Show recent tool call traces (set SVERKLO_TRACE=1)
+  sverklo telemetry <subcmd> Manage opt-in telemetry (off by default)
+  sverklo --help             Show this help
 
 Quick start (single project):
   npm install -g sverklo

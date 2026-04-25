@@ -179,13 +179,22 @@ async function runPlanForRepo(repo, indexer) {
   for (const entry of allQueries) {
     try {
       console.log(`[playground] ${repo.label} · ${entry.label}`);
-      const output = await entry.handler(indexer);
+      const raw = await entry.handler(indexer);
+      let text = typeof raw === "string" ? raw : JSON.stringify(raw, null, 2);
+      // The overview tool emits plain indented text (no markdown). The
+      // playground renderer treats the output as markdown and collapses
+      // single newlines into paragraphs — wrap it in a fenced code block
+      // so whitespace and line breaks survive.
+      const looksLikeMarkdown = /^#|```|^\|/m.test(text);
+      if (!looksLikeMarkdown) {
+        text = "```text\n" + text.replace(/```/g, "``\u200b`") + "\n```";
+      }
       out.push({
         repo: repo.displayName,
         label: entry.label,
         query: entry.query,
         tool: entry.tool,
-        output: typeof output === "string" ? output : JSON.stringify(output, null, 2),
+        output: text,
         captured_at: captured,
         version,
       });

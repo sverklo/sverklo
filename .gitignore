@@ -11,3 +11,13 @@ benchmark/results/
 !benchmark/results/.gitkeep
 .mcpregistry_github_token
 .mcpregistry_registry_token
+
+# Local sverklo workspace cache (per-project SQLite, embeddings, etc.)
+.sverklo/
+
+# Audit / wiki / graph output that audit/wiki commands drop into the cwd
+sverklo-audit.html
+sverklo-arch.html
+sverklo-graph.html
+sverklo-obsidian.md
+sverklo-wiki/

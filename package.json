@@ -1,7 +1,7 @@
 {
   "name": "sverklo",
   "mcpName": "io.github.sverklo/sverklo",
-  "version": "0.12.5",
+  "version": "0.16.0",
   "description": "Sverklo — local-first code intelligence MCP server. Diff-aware MR review, risk scoring, hybrid semantic search, PageRank ranking, persistent memory. Zero config.",
   "type": "module",
   "bin": {
@@ -15,7 +15,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/bin/sverklo.js",
     "dev": "tsc --watch",
     "start": "node dist/bin/sverklo.js",
     "test": "vitest run",
@@ -26,7 +26,9 @@
     "bench": "node scripts/bench-reproducer.mjs",
     "bench:quick": "node --experimental-strip-types --no-warnings benchmark/src/index.ts",
     "bench:latency": "node scripts/mcp-latency-profile.mjs",
-    "bench:playground": "node scripts/generate-playground-data.mjs"
+    "bench:playground": "node scripts/generate-playground-data.mjs",
+    "bench:research": "node --experimental-strip-types --no-warnings benchmark/src/research/index.ts",
+    "bench:patterns": "node --experimental-strip-types --no-warnings benchmark/src/patterns/index.ts"
   },
   "keywords": [
     "sverklo",

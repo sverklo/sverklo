@@ -89,6 +89,43 @@ const PROFILES: Record<string, string[]> = {
     "sverklo_recall",
     "sverklo_review_diff",
   ],
+  // For agents doing open-ended code research / onboarding. Skips memory,
+  // diff/review, audit — keeps the multi-signal investigation surface plus
+  // ctx-handle ops for iterative refinement.
+  research: [
+    "sverklo_search",
+    "sverklo_search_iterative",
+    "sverklo_investigate",
+    "sverklo_ask",
+    "sverklo_lookup",
+    "sverklo_overview",
+    "sverklo_refs",
+    "sverklo_impact",
+    "sverklo_deps",
+    "sverklo_concepts",
+    "sverklo_patterns",
+    "sverklo_clusters",
+    "sverklo_verify",
+    "sverklo_critique",
+    "sverklo_ctx_slice",
+    "sverklo_ctx_grep",
+    "sverklo_ctx_stats",
+    "sverklo_status",
+  ],
+  // PR/MR review focus — diff tools front-and-center, plus the impact/refs
+  // graph to validate refactor safety.
+  review: [
+    "sverklo_review_diff",
+    "sverklo_diff_search",
+    "sverklo_test_map",
+    "sverklo_impact",
+    "sverklo_refs",
+    "sverklo_lookup",
+    "sverklo_search",
+    "sverklo_investigate",
+    "sverklo_verify",
+    "sverklo_status",
+  ],
 };
 
 function normalizeEnvSuffix(name: string): string {

@@ -89,10 +89,10 @@ describe("generateAuditHtml", () => {
     expect(html).toContain('<header class="top">');
     expect(html).toContain('class="brand"');
     expect(html).toContain('class="top-nav"');
-    expect(html).toContain("All reports");
+    expect(html).toContain(">reports<");
     expect(html).toContain("https://github.com/sverklo/sverklo");
-    expect(html).toContain("https://sverklo.com/vs/");
-    expect(html).toContain("https://sverklo.com/blog/");
+    expect(html).toContain("/vs/");
+    expect(html).toContain("/blog/");
   });
 
   it("populates dimension cards (P0-1 fix)", () => {

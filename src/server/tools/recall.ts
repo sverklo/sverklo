@@ -1,8 +1,8 @@
 import type { Indexer } from "../../indexer/indexer.js";
-import { cosineSimilarity } from "../../indexer/embedder.js";
 import { checkStaleness } from "../../memory/staleness.js";
 import { track } from "../../telemetry/index.js";
-import type { Memory, MemoryCategory, MemoryTier } from "../../types/index.js";
+import type { Memory, MemoryCategory, MemoryTier, MemoryKind } from "../../types/index.js";
+import { validateEnum } from "./_validation.js";
 
 const RRF_K = 60;
 
@@ -54,6 +54,13 @@ export const recallTool = {
         type: "boolean",
         description: "Include stale memories (default: false)",
       },
+      kind: {
+        type: "string",
+        enum: ["episodic", "semantic", "procedural", "any"],
+        description:
+          "Cognitive-axis filter (default: 'any'). episodic = moment-bound events, " +
+          "semantic = timeless facts/rules, procedural = how-tos. Orthogonal to category.",
+      },
     },
   },
 };
@@ -63,8 +70,29 @@ export async function handleRecall(
   args: Record<string, unknown>
 ): Promise<string> {
   const query = (args.query as string) || "";
-  const mode = (args.mode as "core" | "archival" | "all") || "all";
-  const category = (args.category as MemoryCategory | "any") || "any";
+
+  const modeRes = validateEnum(args.mode, ["core", "archival", "all"] as const, "mode", "all");
+  if (modeRes instanceof Error) return `Error: ${modeRes.message}`;
+  const mode = modeRes;
+
+  const categoryRes = validateEnum(
+    args.category,
+    ["decision", "preference", "pattern", "context", "todo", "procedural", "any"] as const,
+    "category",
+    "any"
+  );
+  if (categoryRes instanceof Error) return `Error: ${categoryRes.message}`;
+  const category: MemoryCategory | "any" = categoryRes;
+
+  const kindFilterRes = validateEnum(
+    args.kind,
+    ["episodic", "semantic", "procedural", "any"] as const,
+    "kind",
+    "any"
+  );
+  if (kindFilterRes instanceof Error) return `Error: ${kindFilterRes.message}`;
+  const kindFilter: MemoryKind | "any" = kindFilterRes;
+
   const limit = (args.limit as number) || 10;
   const includeStale = (args.include_stale as boolean) || false;
 
@@ -73,10 +101,13 @@ export async function handleRecall(
   // this (or read sverklo://context) at the top of every session.
   if (mode === "core") {
     const coreMemories = indexer.memoryStore.getCore(limit);
-    const filtered =
+    let filtered =
       category === "any"
         ? coreMemories
         : coreMemories.filter((m) => m.category === category);
+    if (kindFilter !== "any") {
+      filtered = filtered.filter((m) => m.kind === kindFilter);
+    }
 
     void track("memory.read");
 
@@ -123,16 +154,11 @@ export async function handleRecall(
   // Signal A: FTS text search
   const ftsResults = indexer.memoryStore.searchFts(query, 30);
 
-  // Signal B: Vector similarity
+  // Signal B: Vector similarity. Streams the embedding table through a
+  // top-30 heap instead of materialising a full Map<id, Float32Array> —
+  // constant in K rather than linear in the memory count.
   const [queryVector] = await indexer.embed([query]);
-  const allEmbeddings = indexer.memoryEmbeddingStore.getAll();
-  const vectorScores: { memoryId: number; score: number }[] = [];
-
-  for (const [memoryId, vec] of allEmbeddings) {
-    vectorScores.push({ memoryId, score: cosineSimilarity(queryVector, vec) });
-  }
-  vectorScores.sort((a, b) => b.score - a.score);
-  const topVector = vectorScores.slice(0, 30);
+  const topVector = indexer.memoryEmbeddingStore.findTopK(queryVector, 30);
 
   // RRF fusion
   const rrfScores = new Map<number, number>();
@@ -155,6 +181,7 @@ export async function handleRecall(
     const memory = indexer.memoryStore.getById(memoryId);
     if (!memory) continue;
     if (category !== "any" && memory.category !== category) continue;
+    if (kindFilter !== "any" && memory.kind !== kindFilter) continue;
     if (excludeTiers.includes(memory.tier)) continue;
 
     // Staleness check (lazy)

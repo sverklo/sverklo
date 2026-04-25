@@ -213,7 +213,11 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
     }
   });
 
-  server.listen(port, () => {
+  // Bind explicitly to loopback. Without a host arg `server.listen(port)`
+  // binds 0.0.0.0, which exposes /api/files (and anything else served
+  // here) to anyone on the same network. The dashboard is a local-tool;
+  // there is no use case for cross-host access.
+  server.listen(port, "127.0.0.1", () => {
     log(`Dashboard running at http://localhost:${port}`);
   });
 
