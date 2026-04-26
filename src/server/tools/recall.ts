@@ -219,28 +219,60 @@ export async function handleRecall(
     }
   }
 
-  if (results.length === 0) {
+  // Workspace blend: if this project belongs to a registered workspace,
+  // pull a few high-FTS-rank memories from the workspace store too. They
+  // get a [ws] badge in the formatted output so the agent can tell where
+  // an answer came from. Capped at 5 to avoid drowning project context.
+  const workspaceResults: { memory: Memory; score: number }[] = [];
+  try {
+    const { findWorkspaceForPath, openWorkspaceMemory, searchWorkspaceMemory } =
+      await import("../../workspace/memory.js");
+    const wsName = findWorkspaceForPath(indexer.rootPath);
+    if (wsName) {
+      const ws = openWorkspaceMemory(wsName);
+      try {
+        const wsRows = searchWorkspaceMemory(ws, query, 5);
+        for (const m of wsRows) {
+          // Negative score nudge so workspace results sort BELOW
+          // matching project results at equal raw rank — the project
+          // memory is almost always the more specific answer.
+          workspaceResults.push({ memory: m, score: 0.5 });
+        }
+      } finally {
+        ws.close();
+      }
+    }
+  } catch { /* workspace lookup failed — continue with project-only results */ }
+
+  if (results.length === 0 && workspaceResults.length === 0) {
     return "No memories found.";
   }
 
-  // Format
-  return results
-    .map(({ memory, score }) => {
-      const tags = memory.tags ? JSON.parse(memory.tags).join(", ") : "";
-      const staleFlag = memory.is_stale ? " [STALE]" : "";
-      const git = memory.git_sha
-        ? `${memory.git_branch || "?"}@${memory.git_sha.slice(0, 7)}`
-        : "";
-      const age = formatAge(memory.created_at);
+  const fmt = (memory: Memory, fromWorkspace: boolean): string => {
+    const tags = memory.tags ? JSON.parse(memory.tags).join(", ") : "";
+    const staleFlag = memory.is_stale ? " [STALE]" : "";
+    const wsFlag = fromWorkspace ? " [ws]" : "";
+    const git = memory.git_sha
+      ? `${memory.git_branch || "?"}@${memory.git_sha.slice(0, 7)}`
+      : "";
+    const age = formatAge(memory.created_at);
+    return [
+      `### Memory #${memory.id} (${memory.category})${wsFlag}${staleFlag}`,
+      memory.content,
+      `_${age} ago | confidence: ${memory.confidence} | accessed: ${memory.access_count}x${git ? ` | git: ${git}` : ""}${tags ? ` | tags: ${tags}` : ""}_`,
+      "",
+    ].join("\n");
+  };
 
-      return [
-        `### Memory #${memory.id} (${memory.category})${staleFlag}`,
-        memory.content,
-        `_${age} ago | confidence: ${memory.confidence} | accessed: ${memory.access_count}x${git ? ` | git: ${git}` : ""}${tags ? ` | tags: ${tags}` : ""}_`,
-        "",
-      ].join("\n");
-    })
-    .join("\n");
+  const projectChunks = results.map(({ memory }) => fmt(memory, false));
+  if (workspaceResults.length === 0) return projectChunks.join("\n");
+
+  const wsChunks = workspaceResults.map(({ memory }) => fmt(memory, true));
+  return (
+    projectChunks.join("\n") +
+    "\n---\n## Workspace memories (cross-repo)\n\n" +
+    wsChunks.join("\n")
+  );
 }
 
 function formatAge(timestamp: number): string {

@@ -19,11 +19,12 @@
 // "weekly digest of decisions across all repos" workflows today.
 
 import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { createDatabase } from "../storage/database.js";
 import { MemoryStore } from "../storage/memory-store.js";
 import { MemoryEmbeddingStore } from "../storage/memory-embedding-store.js";
+import { listWorkspaces, loadWorkspace } from "../workspace.js";
 import type { Memory, MemoryCategory, MemoryKind } from "../types/index.js";
 
 export interface WorkspaceMemoryHandle {
@@ -68,6 +69,30 @@ export function openWorkspaceMemory(name: string): WorkspaceMemoryHandle {
 
 export function workspaceMemoryExists(name: string): boolean {
   return existsSync(workspaceMemoryDb(name));
+}
+
+/**
+ * Discover the workspace (if any) that contains the given project path.
+ * Used by MCP tools so `sverklo_remember scope:workspace` knows where
+ * to write without the user having to pass a workspace name.
+ *
+ * Match rule: the project path is exactly one of the workspace's
+ * repos[].path, OR it lives under one of them. First match wins.
+ * Returns null when no registered workspace contains this project.
+ */
+export function findWorkspaceForPath(projectPath: string): string | null {
+  const target = resolve(projectPath);
+  for (const name of listWorkspaces()) {
+    const cfg = loadWorkspace(name);
+    if (!cfg) continue;
+    for (const r of cfg.repos) {
+      const repo = resolve(r.path);
+      if (repo === target) return name;
+      const repoWithSep = repo.endsWith(sep) ? repo : repo + sep;
+      if (target.startsWith(repoWithSep)) return name;
+    }
+  }
+  return null;
 }
 
 export interface AddOptions {

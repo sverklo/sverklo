@@ -39,6 +39,16 @@ export const rememberTool = {
           "semantic = a timeless fact/rule, procedural = a how-to. Defaults from " +
           "category (procedural→procedural, preference/pattern→semantic, else→episodic).",
       },
+      scope: {
+        type: "string",
+        enum: ["project", "workspace"],
+        description:
+          "project (default) saves to this repo's memory store. workspace saves " +
+          "to a shared store at ~/.sverklo/workspaces/<name>/memories.db, " +
+          "discoverable across every other repo in the same workspace. Use " +
+          "workspace for cross-repo decisions ('we use Postgres everywhere'); " +
+          "use project for repo-specific context.",
+      },
     },
     required: ["content"],
   },
@@ -89,6 +99,50 @@ export async function handleRemember(
     (category === "procedural" || category === "preference" ? "core" : "archive");
 
   const { sha, branch } = getGitState(indexer.rootPath);
+
+  // ─── Workspace scope shortcut ───────────────────────────────────────
+  // When the agent saves with scope:workspace, route to the shared
+  // workspace memory DB instead of the per-project one. We auto-detect
+  // the workspace from indexer.rootPath. Conflict detection + bi-
+  // temporal invalidation are intentionally skipped here — workspace
+  // memories model "what the team agreed on" and conflicts there
+  // should be resolved by humans, not by the embedding cosine.
+  const scopeArg = args.scope as "project" | "workspace" | undefined;
+  if (scopeArg === "workspace") {
+    const { findWorkspaceForPath, openWorkspaceMemory, addWorkspaceMemory } =
+      await import("../../workspace/memory.js");
+    const wsName = findWorkspaceForPath(indexer.rootPath);
+    if (!wsName) {
+      return (
+        `Error: scope:workspace requires this project to be part of a registered ` +
+        `workspace. Run \`sverklo workspace init <name> ${indexer.rootPath} ...\` first, ` +
+        `or drop scope:workspace to save at the project level instead.`
+      );
+    }
+    const ws = openWorkspaceMemory(wsName);
+    try {
+      const explicitKind = args.kind as MemoryKind | undefined;
+      const id = addWorkspaceMemory(ws, {
+        content,
+        category,
+        kind: explicitKind,
+        tags: tags ?? undefined,
+      });
+      // Embed into the workspace's memory_embeddings so a future workspace
+      // recall can vector-rank against it.
+      try {
+        const [vec] = await indexer.embed([content]);
+        ws.memoryEmbeddingStore.insert(id, vec);
+      } catch { /* embedding optional — FTS still works */ }
+      void track("memory.write");
+      return (
+        `Remembered in workspace "${wsName}" (id: ${id}, category: ${category}, kind: ${explicitKind ?? "auto"}). ` +
+        `Visible to every other repo in this workspace.`
+      );
+    } finally {
+      ws.close();
+    }
+  }
 
   // ─── Conflict detection ───
   // Find prior memories above the conflict threshold via the streaming

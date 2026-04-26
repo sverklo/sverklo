@@ -71,12 +71,12 @@ const QUERIES: Record<string, string> = {
   `,
 };
 
-interface RuntimeHandle {
-  Parser: new () => Parser;
+interface ParserCtor {
+  new (): ParserInstance;
   Language: { load(path: string): Promise<unknown> };
 }
 
-interface Parser {
+interface ParserInstance {
   setLanguage(lang: unknown): void;
   parse(source: string): { rootNode: Node };
 }
@@ -90,17 +90,22 @@ interface Node {
   childForFieldName(name: string): Node | null;
 }
 
-let runtime: RuntimeHandle | null = null;
+let parserCtor: ParserCtor | null = null;
 let runtimeInitFailed = false;
 const langCache = new Map<string, unknown>();
 
-async function loadRuntime(): Promise<RuntimeHandle | null> {
-  if (runtime) return runtime;
+async function loadRuntime(): Promise<ParserCtor | null> {
+  if (parserCtor) return parserCtor;
   if (runtimeInitFailed) return null;
   try {
     // Optional dep — npm install may not have pulled it. Use a string
     // identifier dynamic import via the resolver, then cast — keeps tsc
     // happy without @types/web-tree-sitter.
+    //
+    // Module shape (web-tree-sitter 0.24+): the default export IS the
+    // Parser class. Parser.init() is a static initializer that must run
+    // before Parser.Language is populated. The 0.20-era shape exposed
+    // Parser + Language as separate named exports — we cover both.
     const modName = "web-tree-sitter";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mod: any = await import(modName).catch(() => null);
@@ -108,15 +113,28 @@ async function loadRuntime(): Promise<RuntimeHandle | null> {
       runtimeInitFailed = true;
       return null;
     }
-    const TreeSitter = (mod.default ?? mod) as RuntimeHandle;
-    // web-tree-sitter requires explicit init() before first use. Newer
-    // versions auto-init; we cover both shapes.
-    const initFn = (TreeSitter as unknown as { init?: () => Promise<void> }).init;
-    if (typeof initFn === "function") {
-      await initFn.call(TreeSitter);
+    const candidate = mod.default ?? mod;
+    let Parser: ParserCtor | undefined;
+    if (typeof candidate === "function") {
+      const initFn = (candidate as { init?: () => Promise<void> }).init;
+      if (typeof initFn === "function") {
+        await initFn.call(candidate);
+      }
+      if ((candidate as ParserCtor).Language) {
+        Parser = candidate as ParserCtor;
+      }
     }
-    runtime = TreeSitter;
-    return runtime;
+    if (!Parser && mod.Parser && mod.Language) {
+      const NamedParser = mod.Parser as ParserCtor;
+      (NamedParser as unknown as { Language: unknown }).Language = mod.Language;
+      Parser = NamedParser;
+    }
+    if (!Parser) {
+      runtimeInitFailed = true;
+      return null;
+    }
+    parserCtor = Parser;
+    return parserCtor;
   } catch {
     runtimeInitFailed = true;
     return null;
@@ -132,10 +150,10 @@ async function loadLanguage(language: string): Promise<unknown | null> {
   if (!existsSync(grammarPath)) {
     return null;
   }
-  const rt = await loadRuntime();
-  if (!rt) return null;
+  const Parser = await loadRuntime();
+  if (!Parser) return null;
   try {
-    const lang = await rt.Language.load(grammarPath);
+    const lang = await Parser.Language.load(grammarPath);
     langCache.set(language, lang);
     return lang;
   } catch {
@@ -153,8 +171,8 @@ export async function tryParseTreeSitter(
   content: string,
   language: string
 ): Promise<ParseResult | null> {
-  const rt = await loadRuntime();
-  if (!rt) return null;
+  const Parser = await loadRuntime();
+  if (!Parser) return null;
 
   const lang = await loadLanguage(language);
   if (!lang) return null;
@@ -164,7 +182,7 @@ export async function tryParseTreeSitter(
   if (!querySrc) return null;
 
   try {
-    const parser = new rt.Parser();
+    const parser = new Parser();
     parser.setLanguage(lang);
     const tree = parser.parse(content);
     const chunks = walkSymbols(tree.rootNode, content);
