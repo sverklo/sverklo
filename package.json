@@ -28,7 +28,8 @@
     "bench:latency": "node scripts/mcp-latency-profile.mjs",
     "bench:playground": "node scripts/generate-playground-data.mjs",
     "bench:research": "node --experimental-strip-types --no-warnings benchmark/src/research/index.ts",
-    "bench:patterns": "node --experimental-strip-types --no-warnings benchmark/src/patterns/index.ts"
+    "bench:patterns": "node --experimental-strip-types --no-warnings benchmark/src/patterns/index.ts",
+    "bench:swe": "node --experimental-strip-types --no-warnings benchmark/src/swe/index.ts"
   },
   "keywords": [
     "sverklo",
@@ -91,6 +92,9 @@
     "onnxruntime-node": "^1.21.0",
     "picomatch": "^4.0.4",
     "yaml": "^2.8.3"
+  },
+  "optionalDependencies": {
+    "web-tree-sitter": "^0.24.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

@@ -55,6 +55,8 @@ if (command && command !== "--help" && command !== "-h") {
       dashboard: "Alias for `sverklo ui`.",
       wakeup: "Print compressed project context (for system-prompt injection in non-MCP clients).",
       digest: "5-line summary of what changed in this project. Flags: --since 7d, --format markdown|plain.",
+      memory: "Manage the memory store. Subcommands: export.",
+      grammars: "Manage tree-sitter grammars for the SVERKLO_PARSER=tree-sitter opt-in path. Subcommands: install.",
       "audit-prompt": "Print a ready-to-paste codebase-audit prompt (hybrid agent workflow).",
       "review-prompt": "Print a ready-to-paste PR/MR-review prompt (hybrid agent workflow).",
       bench: "Run reproducible benchmarks on gin/nestjs/react.",
@@ -1362,6 +1364,142 @@ if (command === "concept-index") {
   process.exit(r.failed > 0 && r.labeled === 0 ? 1 : 0);
 }
 
+if (command === "grammars") {
+  // `sverklo grammars install [--lang typescript,python,go]` — fetches
+  // the WASM tree-sitter grammars used by SVERKLO_PARSER=tree-sitter
+  // into ~/.sverklo/grammars/. v0.17 opt-in path; the regex parser
+  // works without grammars, so this is purely additive.
+  const sub = args[1];
+  if (sub !== "install") {
+    console.log(
+      `\nsverklo grammars — manage tree-sitter grammars for the v0.17 opt-in parser\n\n` +
+      `Usage:\n  sverklo grammars install [--lang typescript,python,go]\n\n` +
+      `Languages supported (today): typescript, tsx, javascript, python, go, rust\n` +
+      `Default: install all six. Grammars land in ~/.sverklo/grammars/.\n`
+    );
+    process.exit(0);
+  }
+  const flags = args.slice(2);
+  const langArg = flags.find((f, i) => flags[i - 1] === "--lang") ?? "";
+  const langs = langArg
+    ? langArg.split(",").map((s) => s.trim())
+    : ["typescript", "tsx", "javascript", "python", "go", "rust"];
+
+  console.log(
+    `\nGrammar install scaffold — v0.17 alpha.\n` +
+    `Tree-sitter grammars are not yet bundled. To use the opt-in parser today:\n\n` +
+    `  1. mkdir -p ~/.sverklo/grammars/\n` +
+    `  2. Download .wasm grammars from https://github.com/tree-sitter/tree-sitter-<lang>\n` +
+    `     and place them at ~/.sverklo/grammars/tree-sitter-<lang>.wasm\n` +
+    `  3. SVERKLO_PARSER=tree-sitter sverklo audit .\n\n` +
+    `Languages requested: ${langs.join(", ")}\n` +
+    `Auto-fetch is on the v0.18 roadmap (see ROADMAP_V1.md).\n`
+  );
+  process.exit(0);
+}
+
+if (command === "memory") {
+  // `sverklo memory export` — push the memory store out to markdown,
+  // Notion, or raw JSON. Closes the "memory is a private journal"
+  // gap from the v0.16 product teardown.
+  const sub = args[1];
+  if (sub !== "export") {
+    console.log(
+      `\nsverklo memory — export the memory store to other tools\n\n` +
+      `Usage:\n  sverklo memory export --format markdown|notion|json --to PATH [flags]\n\n` +
+      `Flags:\n` +
+      `  --format markdown|notion|json    output format (required)\n` +
+      `  --to PATH                        directory (markdown) or file (json/notion)\n` +
+      `  --kind episodic|semantic|procedural   filter by cognitive axis (default: all)\n` +
+      `  --include-invalidated            include superseded rows for the bi-temporal timeline\n` +
+      `  --notion-database ID             target database id (required for --format notion)\n` +
+      `  -h, --help                       show this help\n`
+    );
+    process.exit(0);
+  }
+
+  const flags = args.slice(2);
+  if (flags.includes("--help") || flags.includes("-h")) {
+    console.log(
+      `\nsverklo memory export — push memory rows to markdown / Notion / JSON\n\n` +
+      `Required: --format markdown|notion|json --to PATH\n` +
+      `See \`sverklo memory\` for the full flag list.\n`
+    );
+    process.exit(0);
+  }
+  const flagVal = (name: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    return prefixed ? prefixed.slice(name.length + 1) : undefined;
+  };
+
+  const format = flagVal("--format") as "markdown" | "notion" | "json" | undefined;
+  if (!format || !["markdown", "notion", "json"].includes(format)) {
+    console.error("✗ --format markdown|notion|json is required");
+    process.exit(2);
+  }
+  const to = flagVal("--to");
+  if (!to) {
+    console.error("✗ --to PATH is required");
+    process.exit(2);
+  }
+  const kindRaw = flagVal("--kind");
+  if (kindRaw && !["episodic", "semantic", "procedural"].includes(kindRaw)) {
+    console.error(`✗ --kind must be episodic|semantic|procedural, got "${kindRaw}"`);
+    process.exit(2);
+  }
+  const includeInvalidated = flags.includes("--include-invalidated");
+  const notionDatabase = flagVal("--notion-database");
+  if (format === "notion" && !notionDatabase) {
+    console.error("✗ --notion-database ID is required for --format notion");
+    process.exit(2);
+  }
+
+  // Strip value-taking flags before resolving the project path
+  const valueFlags = new Set(["--format", "--to", "--kind", "--notion-database"]);
+  const cleanFlags: string[] = [];
+  for (let i = 0; i < flags.length; i++) {
+    if (valueFlags.has(flags[i])) { i++; continue; }
+    if (Array.from(valueFlags).some((f) => flags[i].startsWith(`${f}=`))) continue;
+    cleanFlags.push(flags[i]);
+  }
+  const projectPath = await resolveProjectPath(cleanFlags);
+
+  const { resolve: resolvePath } = await import("node:path");
+  const outPath = resolvePath(to);
+
+  const { getProjectConfig } = await import("../src/utils/config.js");
+  const { Indexer } = await import("../src/indexer/indexer.js");
+  const { runMemoryExport } = await import("../src/memory/export.js");
+
+  const config = getProjectConfig(projectPath);
+  const indexer = new Indexer(config);
+  await indexer.index();
+
+  try {
+    const report = runMemoryExport(indexer, {
+      format,
+      to: outPath,
+      kind: kindRaw as "episodic" | "semantic" | "procedural" | undefined,
+      includeInvalidated,
+      notionDatabase,
+    });
+    console.log(
+      `\nExported ${report.rowsExported} memories (${format}):\n` +
+      report.written.map((p) => `  ${p}`).join("\n") +
+      `\n\nBy category: ${Object.entries(report.byCategory).map(([k, v]) => `${k}=${v}`).join(", ") || "(none)"}\n`
+    );
+  } catch (err) {
+    const e = err as { message?: string };
+    console.error(`✗ export failed: ${e.message ?? String(err)}`);
+    process.exit(1);
+  }
+
+  indexer.close();
+  process.exit(0);
+}
+
 if (command === "digest") {
   // Habit-loop scaffold: 5-line summary of what changed in this project
   // since the user last paid attention. Designed to be cheap to render
@@ -1551,6 +1689,8 @@ Memory + offline maintenance:
   sverklo wakeup             Print compressed project context (for system-prompt injection)
   sverklo wiki               Generate a markdown wiki from the indexed codebase
   sverklo digest             5-line summary of what changed in this project (--since 7d)
+  sverklo memory export      Export memories to markdown / Notion / JSON
+  sverklo grammars install   Install tree-sitter grammars for the v0.17 opt-in parser
   sverklo prune              Decay stale memories + consolidate similar episodic ones
   sverklo concept-index      Label clusters with an LLM (requires Ollama)
   sverklo enrich-symbols     Add LLM-generated purpose to top-PageRank symbols (requires Ollama)

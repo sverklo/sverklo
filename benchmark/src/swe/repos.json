@@ -1,0 +1,32 @@
+[
+  {
+    "name": "express",
+    "url": "https://github.com/expressjs/express.git",
+    "ref": "5.0.1",
+    "dataset": "express.jsonl"
+  },
+  {
+    "name": "nestjs",
+    "url": "https://github.com/nestjs/nest.git",
+    "ref": "v10.4.7",
+    "dataset": "nestjs.jsonl"
+  },
+  {
+    "name": "vite",
+    "url": "https://github.com/vitejs/vite.git",
+    "ref": "v6.0.7",
+    "dataset": "vite.jsonl"
+  },
+  {
+    "name": "prisma",
+    "url": "https://github.com/prisma/prisma.git",
+    "ref": "6.1.0",
+    "dataset": "prisma.jsonl"
+  },
+  {
+    "name": "fastapi",
+    "url": "https://github.com/fastapi/fastapi.git",
+    "ref": "0.115.6",
+    "dataset": "fastapi.jsonl"
+  }
+]

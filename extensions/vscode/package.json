@@ -1,0 +1,83 @@
+{
+  "name": "sverklo-vscode",
+  "displayName": "Sverklo — local-first code intelligence",
+  "description": "Inline blast-radius decorations from sverklo's symbol graph. See callers, untested callers, and risk before you change a function.",
+  "version": "0.1.0",
+  "publisher": "sverklo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sverklo/sverklo.git",
+    "directory": "extensions/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "keywords": [
+    "sverklo",
+    "code intelligence",
+    "blast radius",
+    "MCP",
+    "claude code",
+    "AI"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:python",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "onLanguage:java"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sverklo.refreshDecorations",
+        "title": "Sverklo: Refresh Decorations",
+        "category": "Sverklo"
+      },
+      {
+        "command": "sverklo.toggleDecorations",
+        "title": "Sverklo: Toggle Inline Decorations",
+        "category": "Sverklo"
+      }
+    ],
+    "configuration": {
+      "title": "Sverklo",
+      "properties": {
+        "sverklo.binary": {
+          "type": "string",
+          "default": "sverklo",
+          "description": "Path to the sverklo binary. Default uses whatever is on PATH."
+        },
+        "sverklo.decorations.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline blast-radius decorations on functions and classes."
+        },
+        "sverklo.decorations.minCallers": {
+          "type": "number",
+          "default": 2,
+          "description": "Only decorate symbols with at least this many callers."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.4.0"
+  }
+}

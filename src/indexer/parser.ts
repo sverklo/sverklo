@@ -4,6 +4,15 @@ import { parseIpynb } from "./parser-ipynb.js";
 
 // Regex-based parser for MVP. Fast, no native dependencies.
 // Handles the top languages well enough. Tree-sitter upgrade path for v2.
+//
+// Tree-sitter opt-in (v0.17): set SVERKLO_PARSER=tree-sitter and the
+// parser will try to use a WASM grammar from ~/.sverklo/grammars/ for
+// the file's language. If the grammar isn't installed (or the runtime
+// isn't available), the regex path runs unchanged. The async dispatch
+// in parseFileAsync() exists for callers who want to wait for the
+// tree-sitter result; the sync parseFile() always returns the regex
+// result (used by hot paths that can't be async). Indexer.ts uses
+// the async path during the file walk.
 
 export function parseFile(
   content: string,
@@ -1292,4 +1301,26 @@ function fallbackChunk(content: string, lines: string[]): ParsedChunk[] {
     });
   }
   return chunks;
+}
+
+/**
+ * Async parse path. When SVERKLO_PARSER=tree-sitter is set AND the
+ * web-tree-sitter dep is installed AND a grammar for the language is
+ * present at ~/.sverklo/grammars/, returns the tree-sitter result.
+ * Otherwise falls back to the regex parser. The fallback is silent —
+ * we never want a missing grammar to break indexing.
+ */
+export async function parseFileAsync(
+  content: string,
+  language: string
+): Promise<ParseResult> {
+  if (process.env.SVERKLO_PARSER !== "tree-sitter") {
+    return parseFile(content, language);
+  }
+  try {
+    const { tryParseTreeSitter } = await import("./parser-tree-sitter.js");
+    const ts = await tryParseTreeSitter(content, language);
+    if (ts) return ts;
+  } catch { /* keep going — regex result below */ }
+  return parseFile(content, language);
 }

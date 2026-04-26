@@ -6,15 +6,14 @@
     "sverklo" wordmark (which doesn't survive 32px) in favour of the
     caret + lowercase 's' — same brand at thumbnail size.
 
-    No bevel, no gradient, no sparkle. Flat fills, sharp corners on the
-    caret, matched stroke weights.
+    The 's' glyph is a vector path traced from JetBrains Mono Bold, so
+    this file renders pixel-identical even when the font isn't installed
+    (rsvg-convert, Inkscape, ImageMagick without freetype, etc.). For
+    the wordmark logo the <text> elements stay in logo.svg / logo-light.svg
+    because those only render in browsers that already pick up local()
+    JetBrains Mono via @font-face.
   -->
   <rect x="0" y="0" width="512" height="512" rx="96" ry="96" fill="#0E0D0B"/>
   <rect x="148" y="156" width="44" height="200" fill="#E85A2A"/>
-  <text x="216" y="356"
-        font-family="'JetBrains Mono', 'JetBrainsMono-Bold', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace"
-        font-weight="700"
-        font-size="280"
-        letter-spacing="-12"
-        fill="#EDE7D9">s</text>
+  <path fill="#EDE7D9" d="M305.88 358.52L293.56 358.52Q266.12 358.52 250.16 346.06Q234.20 333.60 234.20 312.32L234.20 312.32L268.64 312.32Q268.64 321.28 275.22 326.04Q281.80 330.80 293.56 330.80L293.56 330.80L305.88 330.80Q318.48 330.80 325.34 326.04Q332.20 321.28 332.20 312.32L332.20 312.32Q332.20 303.92 327.44 299.86Q322.68 295.80 312.88 294.40L312.88 294.40L274.52 289.36Q256.04 286.84 246.10 275.08Q236.16 263.32 236.16 244.56L236.16 244.56Q236.16 222.72 250.72 211.10Q265.28 199.48 292.72 199.48L292.72 199.48L305.60 199.48Q331.36 199.48 347.04 211.24Q362.72 223 363.28 242.60L363.28 242.60L328.56 242.60Q328.28 235.32 322.12 230.98Q315.96 226.64 305.60 226.64L305.60 226.64L292.72 226.64Q281.52 226.64 275.64 231.26Q269.76 235.88 269.76 243.72L269.76 243.72Q269.76 250.72 274.10 254.08Q278.44 257.44 286.84 258.28L286.84 258.28L322.96 263.32Q344.24 265.84 355.02 278.30Q365.80 290.76 365.80 311.76L365.80 311.76Q365.80 334.16 350.54 346.34Q335.28 358.52 305.88 358.52L305.88 358.52Z"/>
 </svg>

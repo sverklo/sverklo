@@ -1,0 +1,4 @@
+{"id":"fastapi-dependency-injection","dataset":"fastapi","question":"How does FastAPI resolve a dependency tree at request time — when are sub-dependencies cached vs re-evaluated?","required_evidence":[{"file":"fastapi/dependencies/utils.py"}]}
+{"id":"fastapi-pydantic-validation","dataset":"fastapi","question":"Where does the request body get validated against a Pydantic model and how are validation errors turned into 422 responses?","required_evidence":[{"file":"fastapi/routing.py"}]}
+{"id":"fastapi-openapi-generation","dataset":"fastapi","question":"How is the OpenAPI schema generated from the route signatures + Pydantic models?","required_evidence":[{"file":"fastapi/openapi/utils.py"}]}
+{"id":"fastapi-background-tasks","dataset":"fastapi","question":"How does FastAPI run BackgroundTasks — same event loop, separate thread pool, or external worker?","required_evidence":[{"file":"fastapi/background.py"},{"file":"fastapi/routing.py"}]}
