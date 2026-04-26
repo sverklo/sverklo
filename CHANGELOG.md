@@ -6,7 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
-## [0.17.0] — 2026-04-26
+## [0.17.1] — 2026-04-26
+
+Republish of v0.17.0 — same payload, lockfile re-synced for the
+`web-tree-sitter` optionalDependency I forgot to install before
+tagging. CI's `npm ci` step rejects out-of-sync lockfiles, so v0.17.0
+never reached the npm registry.
+
+---
+
+## [0.17.0] — 2026-04-26 (skipped)
+
+Tagged but never published — CI rejected the lockfile drift. Replaced by 0.17.1.
 
 The "v0.17 prep" release. Thirteen scaffolds, prototypes, and
 infrastructure pieces from `ROADMAP_V1.md` land as working code, all
