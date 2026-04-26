@@ -39,6 +39,18 @@ That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Co
 
 ---
 
+## What's new in 0.17
+
+- **`npm run bench:swe`** — third-party-reproducible cross-repo eval. Clones 5 OSS repos (express, nestjs, vite, prisma, fastapi), runs 65 grounded questions, prints aggregated recall. PRs that add questions are welcome.
+- **Tree-sitter parser opt-in.** `sverklo grammars install` (~3.5 MB across 6 languages) + `SVERKLO_PARSER=tree-sitter` and the indexer routes through real ASTs for TypeScript/TSX/JavaScript/Python/Go/Rust. Silent regex fallback when grammars aren't installed. v0.18 plan to flip the default lives in [docs/parser-parity.md](./docs/parser-parity.md).
+- **Workspace shared memory.** `sverklo workspace memory <name> add/list/search` plus `sverklo_remember scope:"workspace"` from the agent — write a decision once, query it from every other repo in the workspace. `sverklo_recall` blends workspace results under project ones with a `[ws]` badge.
+- **`sverklo memory export`** — markdown / Notion / JSON. Migrate your team's decision log to wherever it actually lives.
+- **PR-bot inline review.** `sverklo review --format github-review-json` + the action's new `inline-comments: true` default posts per-line review comments via `pulls.createReview`, alongside the existing sticky summary.
+- **VS Code extension scaffold** at [`extensions/vscode/`](./extensions/vscode/) with a pre-built `sverklo-vscode-0.1.0.vsix`. Inline caller-count decorations on every function header (`⟵ 47 callers`). Marketplace publish workflow ships dormant; install with `code --install-extension extensions/vscode/sverklo-vscode-0.1.0.vsix` today.
+- **`sverklo digest [--since 7d]`** — 5-line summary of audit-grade trend, new vs stale memories, and high-PageRank files touched. Wire into a shell-hook on `cd` for a daily sverklo check-in.
+
+---
+
 ## Grep vs Sverklo — the same question, side by side
 
 Every one of these is a query a real engineer asked a real AI assistant last week. Grep gives you lines. Sverklo gives you a ranked answer.
