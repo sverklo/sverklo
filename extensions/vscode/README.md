@@ -44,3 +44,13 @@ npm run package          # produces sverklo-vscode-0.1.0.vsix
 ## License
 
 MIT — same as sverklo.
+
+## Install the packaged build
+
+A pre-packaged `sverklo-vscode-0.1.0.vsix` ships in this directory. Install it without going through Marketplace:
+
+```bash
+code --install-extension extensions/vscode/sverklo-vscode-0.1.0.vsix
+```
+
+Re-build it with `npm install && npm run compile && npx vsce package` if you change `src/extension.ts`.

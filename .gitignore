@@ -1,5 +1,7 @@
 node_modules/
 dist/
+extensions/vscode/out/
+extensions/vscode/node_modules/
 *.db
 *.db-journal
 .env

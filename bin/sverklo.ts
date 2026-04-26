@@ -338,6 +338,96 @@ if (command === "workspace") {
     process.exit(0);
   }
 
+  if (sub === "memory") {
+    // sverklo workspace memory <name> <list|add|search|forget> [...]
+    //
+    // Per-workspace shared memory store at
+    // ~/.sverklo/workspaces/<name>/memories.db. CLI ships in v0.17;
+    // sverklo_remember scope:workspace is the v0.18 follow-up.
+    const name = args[2];
+    const op = args[3];
+    if (!name || !op) {
+      console.error("Usage: sverklo workspace memory <name> <list|add|search|forget> [args]");
+      process.exit(1);
+    }
+    const {
+      openWorkspaceMemory,
+      addWorkspaceMemory,
+      searchWorkspaceMemory,
+      workspaceMemoryExists,
+    } = await import("../src/workspace/memory.js");
+
+    if (op === "add") {
+      const content = args.slice(4).join(" ");
+      if (!content) {
+        console.error('Usage: sverklo workspace memory <name> add "memory text"');
+        process.exit(1);
+      }
+      const ws = openWorkspaceMemory(name);
+      const id = addWorkspaceMemory(ws, { content });
+      console.log(`Saved workspace memory #${id} → ${ws.dbPath}`);
+      ws.close();
+      process.exit(0);
+    }
+    if (op === "list") {
+      if (!workspaceMemoryExists(name)) {
+        console.log(`No memories yet for workspace "${name}". Add one with:`);
+        console.log(`  sverklo workspace memory ${name} add "your decision here"`);
+        process.exit(0);
+      }
+      const ws = openWorkspaceMemory(name);
+      const rows = ws.memoryStore.getAll(50);
+      console.log(`\nWorkspace "${name}" memories (${rows.length}):\n`);
+      for (const m of rows) {
+        const age = new Date(m.created_at).toISOString().slice(0, 10);
+        console.log(`  #${m.id} [${m.category}/${m.kind}] ${age}`);
+        console.log(`    ${m.content.replace(/\n/g, " ").slice(0, 100)}${m.content.length > 100 ? "…" : ""}`);
+      }
+      ws.close();
+      process.exit(0);
+    }
+    if (op === "search") {
+      const query = args.slice(4).join(" ");
+      if (!query) {
+        console.error('Usage: sverklo workspace memory <name> search "query"');
+        process.exit(1);
+      }
+      if (!workspaceMemoryExists(name)) {
+        console.log(`No memories for workspace "${name}".`);
+        process.exit(0);
+      }
+      const ws = openWorkspaceMemory(name);
+      const rows = searchWorkspaceMemory(ws, query, 20);
+      console.log(`\n${rows.length} match${rows.length === 1 ? "" : "es"}:\n`);
+      for (const m of rows) {
+        console.log(`  #${m.id} [${m.category}/${m.kind}]`);
+        console.log(`    ${m.content.replace(/\n/g, " ").slice(0, 200)}${m.content.length > 200 ? "…" : ""}`);
+      }
+      ws.close();
+      process.exit(0);
+    }
+    if (op === "forget") {
+      const idStr = args[4];
+      if (!idStr) {
+        console.error("Usage: sverklo workspace memory <name> forget <id>");
+        process.exit(1);
+      }
+      const id = parseInt(idStr, 10);
+      if (!Number.isFinite(id)) {
+        console.error(`✗ "${idStr}" is not a valid id`);
+        process.exit(2);
+      }
+      const ws = openWorkspaceMemory(name);
+      const ok = ws.memoryStore.delete(id);
+      ws.close();
+      console.log(ok ? `Forgot memory #${id}.` : `Memory #${id} not found.`);
+      process.exit(ok ? 0 : 1);
+    }
+
+    console.error(`Unknown workspace memory op: ${op}`);
+    process.exit(1);
+  }
+
   console.log(`
 sverklo workspace — manage multi-repo workspaces
 
@@ -1365,17 +1455,18 @@ if (command === "concept-index") {
 }
 
 if (command === "grammars") {
-  // `sverklo grammars install [--lang typescript,python,go]` — fetches
-  // the WASM tree-sitter grammars used by SVERKLO_PARSER=tree-sitter
+  // Installs / refreshes the WASM grammars used by SVERKLO_PARSER=tree-sitter
   // into ~/.sverklo/grammars/. v0.17 opt-in path; the regex parser
   // works without grammars, so this is purely additive.
   const sub = args[1];
-  if (sub !== "install") {
+  if (sub !== "install" && sub !== "list") {
     console.log(
-      `\nsverklo grammars — manage tree-sitter grammars for the v0.17 opt-in parser\n\n` +
-      `Usage:\n  sverklo grammars install [--lang typescript,python,go]\n\n` +
-      `Languages supported (today): typescript, tsx, javascript, python, go, rust\n` +
-      `Default: install all six. Grammars land in ~/.sverklo/grammars/.\n`
+      `\nsverklo grammars — manage tree-sitter grammars for the SVERKLO_PARSER=tree-sitter opt-in parser\n\n` +
+      `Usage:\n` +
+      `  sverklo grammars install [--lang typescript,python,go] [--force]\n` +
+      `  sverklo grammars list\n\n` +
+      `Languages supported: typescript, tsx, javascript, python, go, rust\n` +
+      `Grammars land in ~/.sverklo/grammars/. Total ~6 MB across all six.\n`
     );
     process.exit(0);
   }
@@ -1383,19 +1474,52 @@ if (command === "grammars") {
   const langArg = flags.find((f, i) => flags[i - 1] === "--lang") ?? "";
   const langs = langArg
     ? langArg.split(",").map((s) => s.trim())
-    : ["typescript", "tsx", "javascript", "python", "go", "rust"];
+    : undefined;
+  const force = flags.includes("--force");
+
+  const { installGrammars, grammarsDir, GRAMMARS } = await import(
+    "../src/indexer/grammars-install.js"
+  );
+
+  if (sub === "list") {
+    console.log(`\nGrammars dir: ${grammarsDir()}\n`);
+    const { existsSync, statSync } = await import("node:fs");
+    const { join: jp } = await import("node:path");
+    for (const g of GRAMMARS) {
+      const p = jp(grammarsDir(), g.wasm);
+      if (existsSync(p)) {
+        console.log(`  ✓ ${g.lang.padEnd(12)}${(statSync(p).size / 1024).toFixed(0)} KB`);
+      } else {
+        console.log(`  ✗ ${g.lang.padEnd(12)}not installed`);
+      }
+    }
+    console.log(`\nRun \`sverklo grammars install\` to fetch missing grammars.\n`);
+    process.exit(0);
+  }
+
+  console.log(`\nInstalling tree-sitter grammars into ${grammarsDir()}\n`);
+  const results = await installGrammars({
+    langs,
+    force,
+    onProgress: (m: string) => console.log(m),
+  });
+
+  const fresh = results.filter((r) => r.status === "fresh").length;
+  const cached = results.filter((r) => r.status === "cached").length;
+  const errors = results.filter((r) => r.status === "error");
 
   console.log(
-    `\nGrammar install scaffold — v0.17 alpha.\n` +
-    `Tree-sitter grammars are not yet bundled. To use the opt-in parser today:\n\n` +
-    `  1. mkdir -p ~/.sverklo/grammars/\n` +
-    `  2. Download .wasm grammars from https://github.com/tree-sitter/tree-sitter-<lang>\n` +
-    `     and place them at ~/.sverklo/grammars/tree-sitter-<lang>.wasm\n` +
-    `  3. SVERKLO_PARSER=tree-sitter sverklo audit .\n\n` +
-    `Languages requested: ${langs.join(", ")}\n` +
-    `Auto-fetch is on the v0.18 roadmap (see ROADMAP_V1.md).\n`
+    `\nDone: ${fresh} downloaded, ${cached} cached, ${errors.length} failed.`
   );
-  process.exit(0);
+  if (errors.length > 0) {
+    for (const e of errors) console.log(`  ✗ ${e.lang}: ${e.error}`);
+    console.log(
+      `\nRetry with \`sverklo grammars install --force\` after checking your network.\n`
+    );
+  } else {
+    console.log(`\nNext: SVERKLO_PARSER=tree-sitter sverklo audit . to use them.\n`);
+  }
+  process.exit(errors.length > 0 ? 1 : 0);
 }
 
 if (command === "memory") {
