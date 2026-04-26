@@ -20,6 +20,10 @@ inputs:
     description: 'Maximum files to review'
     required: false
     default: '25'
+  inline-comments:
+    description: 'Post inline review comments at heuristic-flagged lines (alongside the sticky summary). true|false'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -40,6 +44,7 @@ runs:
         SVERKLO_REF: ${{ inputs.ref }}
         SVERKLO_MAX_FILES: ${{ inputs.max-files }}
         SVERKLO_FAIL_ON: ${{ inputs.fail-on }}
+        SVERKLO_INLINE: ${{ inputs.inline-comments }}
       run: |
         cd "$GITHUB_WORKSPACE"
 
@@ -48,26 +53,95 @@ runs:
           REF_FLAG="--ref $SVERKLO_REF"
         fi
 
-        sverklo review --ci --format markdown \
-          $REF_FLAG \
-          --max-files "$SVERKLO_MAX_FILES" \
-          --fail-on none \
-          > /tmp/sverklo-review.md 2>/tmp/sverklo-review.log || true
+        # Pick output format: when inline-comments is on, ask for the
+        # github-review-json payload that the post-step can hand to
+        # pulls.createReview. Otherwise, the original sticky-comment
+        # markdown path.
+        if [ "$SVERKLO_INLINE" = "true" ]; then
+          sverklo review --ci --format github-review-json \
+            $REF_FLAG \
+            --max-files "$SVERKLO_MAX_FILES" \
+            --fail-on none \
+            > /tmp/sverklo-review.json 2>/tmp/sverklo-review.log || true
+        else
+          sverklo review --ci --format markdown \
+            $REF_FLAG \
+            --max-files "$SVERKLO_MAX_FILES" \
+            --fail-on none \
+            > /tmp/sverklo-review.md 2>/tmp/sverklo-review.log || true
+        fi
 
-        # Store output for comment step
-        {
-          echo 'REVIEW_BODY<<SVERKLO_DELIM'
-          cat /tmp/sverklo-review.md
-          echo 'SVERKLO_DELIM'
-        } >> "$GITHUB_ENV"
-
-    - name: Post PR comment
-      if: github.event_name == 'pull_request'
+    - name: Post PR review (inline + summary)
+      if: github.event_name == 'pull_request' && inputs.inline-comments == 'true'
       uses: actions/github-script@v7
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const review = process.env.REVIEW_BODY || '_No review output._';
+          const fs = require('fs');
+          let payload = null;
+          try {
+            payload = JSON.parse(fs.readFileSync('/tmp/sverklo-review.json', 'utf-8'));
+          } catch (e) {
+            core.warning(`Could not parse sverklo review JSON: ${e.message}`);
+            return;
+          }
+
+          const summary = payload.summary || '_No review output._';
+          const body = `## Sverklo Code Review\n\n${summary}\n\n---\n_Risk scored by [Sverklo](https://sverklo.com) — local-first code intelligence_`;
+
+          // GitHub caps a single review at 30 comments to keep PRs scannable.
+          const MAX_INLINE = 30;
+          const comments = (payload.inline || [])
+            .slice(0, MAX_INLINE)
+            .map(c => ({
+              path: c.path,
+              line: c.line,
+              side: c.side || 'RIGHT',
+              body: c.body,
+            }));
+
+          if (comments.length === 0) {
+            // No heuristic findings — fall through to a plain summary
+            // comment. Don't waste an empty review.
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            return;
+          }
+
+          try {
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'COMMENT',
+              body,
+              comments,
+            });
+          } catch (e) {
+            // Common cause: a comment line is outside the diff range.
+            // Fall back to the sticky summary so the user still sees
+            // something.
+            core.warning(`Inline review failed (${e.message}); posting sticky comment instead.`);
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
+
+    - name: Post PR comment (summary only)
+      if: github.event_name == 'pull_request' && inputs.inline-comments != 'true'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const review = fs.readFileSync('/tmp/sverklo-review.md', 'utf-8') || '_No review output._';
           const body = `## Sverklo Code Review\n\n${review}\n\n---\n_Risk scored by [Sverklo](https://sverklo.com) — local-first code intelligence_`;
 
           const { data: comments } = await github.rest.issues.listComments({

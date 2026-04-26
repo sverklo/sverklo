@@ -648,7 +648,10 @@ if (command === "review") {
 
   const ref = flagVal("--ref", "");
   const ci = flags.includes("--ci");
-  const format = flagVal("--format", "markdown") as "markdown" | "json";
+  const format = flagVal("--format", "markdown") as
+    | "markdown"
+    | "json"
+    | "github-review-json";
   const maxFiles = parseInt(flagVal("--max-files", "25"), 10) || 25;
   const failOn = flagVal("--fail-on", "none") as
     | "critical"
@@ -665,7 +668,19 @@ if (command === "review") {
       ? `origin/${process.env.GITHUB_BASE_REF}..HEAD`
       : "main..HEAD");
 
-  const projectPath = await resolveProjectPath(flags);
+  // Strip value-taking flags so `--format github-review-json` doesn't
+  // leave "github-review-json" looking like a positional path.
+  const valueFlags = new Set(["--ref", "--format", "--max-files", "--fail-on"]);
+  const cleanFlags: string[] = [];
+  for (let i = 0; i < flags.length; i++) {
+    if (valueFlags.has(flags[i])) {
+      i++;
+      continue;
+    }
+    if (Array.from(valueFlags).some((f) => flags[i].startsWith(`${f}=`))) continue;
+    cleanFlags.push(flags[i]);
+  }
+  const projectPath = await resolveProjectPath(cleanFlags);
 
   // Ensure model is available
   const { existsSync: modelExists } = await import("node:fs");
@@ -683,21 +698,40 @@ if (command === "review") {
   const { handleReviewDiff } = await import(
     "../src/server/tools/review-diff.js"
   );
+  const { buildReviewJson } = await import(
+    "../src/server/tools/review-format.js"
+  );
 
   const config = getProjectConfig(projectPath);
   const indexer = new Indexer(config);
   await indexer.index();
 
-  const markdown = handleReviewDiff(indexer, {
+  const reviewArgs = {
     ref: effectiveRef,
     max_files: maxFiles,
     token_budget: 8000,
-  });
+  };
+
+  // Run early so we can both decide the threshold AND emit the format.
+  // For github-review-json we want the structured payload; for the
+  // other two formats we just need the markdown.
+  let markdown = "";
+  let structured: ReturnType<typeof buildReviewJson> | null = null;
+  if (format === "github-review-json") {
+    structured = buildReviewJson(indexer, reviewArgs);
+    if ("error" in structured) {
+      process.stderr.write(`✗ ${structured.error}\n`);
+      indexer.close();
+      process.exit(2);
+    }
+    markdown = structured.summary;
+  } else {
+    markdown = handleReviewDiff(indexer, reviewArgs);
+  }
 
   indexer.close();
 
   if (format === "json") {
-    // Wrap the markdown in a JSON envelope with parsed risk level
     const riskLevels = ["low", "medium", "high", "critical"] as const;
     type RiskLevel = (typeof riskLevels)[number];
     let maxRisk: RiskLevel = "low";
@@ -710,6 +744,8 @@ if (command === "review") {
       review: markdown,
     };
     process.stdout.write(JSON.stringify(output, null, 2) + "\n");
+  } else if (format === "github-review-json") {
+    process.stdout.write(JSON.stringify(structured, null, 2) + "\n");
   } else {
     process.stdout.write(markdown + "\n");
   }
