@@ -6,6 +6,114 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.17.0] — 2026-04-26
+
+The "v0.17 prep" release. Thirteen scaffolds, prototypes, and
+infrastructure pieces from `ROADMAP_V1.md` land as working code, all
+opt-in / additive on top of v0.16.0. None of these are user-visible by
+default — they are the foundation for v0.18's "credibility weapon"
+(cross-repo eval) and "tree-sitter default flip" work.
+
+### Added
+
+- **`bench:swe` cross-repo evaluation** — `npm run bench:swe` clones 5
+  pinned OSS repos (express, nestjs, vite, prisma, fastapi) into
+  `benchmark/.cache/swe/` and runs a per-repo recall eval. 65 seed
+  questions; aggregated results report. Reproducible by anyone with
+  `git clone` access; PRs that add questions are explicitly welcome.
+  This is the third-party-reproducible eval the v0.16 competitor
+  teardown named as the only thing that actually takes weeks to clone.
+- **Tree-sitter parser opt-in** — set `SVERKLO_PARSER=tree-sitter` and
+  the indexer routes through `parseFileAsync()` → tree-sitter for any
+  file whose grammar is installed at `~/.sverklo/grammars/`. Silent
+  fallback to the regex parser when grammars are missing or
+  `web-tree-sitter` (now an `optionalDependency`) isn't available. Six
+  languages wired: TypeScript, TSX, JavaScript, Python, Go, Rust.
+  Parity script at `scripts/parity-check.mjs` produces a reproducible
+  before-flip baseline (71% Jaccard on sverklo's own TS files,
+  tree-sitter +103 net named symbols).
+- **`sverklo grammars install`** — fetches WASM grammars from
+  jsdelivr (~3.5 MB total across 6 languages), validates the WASM
+  magic header, caches at `~/.sverklo/grammars/`. `--force`
+  re-downloads. `sverklo grammars list` shows what's installed.
+- **`sverklo memory export`** — exports the memory store to
+  markdown (one .md per category), Notion (ND-JSON of API page-create
+  payloads ready to pipe into your own integration), or raw JSON.
+  `--kind episodic|semantic|procedural` filter,
+  `--include-invalidated` for the bi-temporal timeline. Closes the
+  "memory is a private journal" gap from the v0.16 product teardown.
+- **`sverklo workspace memory <name> {add|list|search|forget}`** —
+  per-workspace shared memory at
+  `~/.sverklo/workspaces/<name>/memories.db` (same schema as project
+  memory, reusing `MemoryStore` + `MemoryEmbeddingStore`).
+- **`sverklo_remember scope:"workspace"`** — saves to the workspace
+  memory store the project belongs to (auto-detected from
+  `findWorkspaceForPath()`). Embeds for future vector recall. Errors
+  cleanly when the project isn't part of any registered workspace.
+- **`sverklo_recall` cross-store blend** — when the project belongs
+  to a workspace, recall pulls up to 5 high-FTS-rank workspace
+  memories alongside project results, marked with a `[ws]` badge so
+  the agent knows where each answer came from.
+- **`sverklo_review --format github-review-json`** — emits a
+  structured payload that the GitHub Action hands to
+  `pulls.createReview` to post inline review comments anchored to the
+  specific lines our heuristics flagged (alongside the existing sticky
+  summary comment). The action's new `inline-comments: true|false`
+  input toggles between the v0.15 sticky-only behaviour and the new
+  inline-plus-sticky default. Closes the human-visible-surface gap
+  vs Greptile that the v0.16 competitor teardown named as sverklo's
+  biggest product hole.
+- **VS Code extension scaffold** — `extensions/vscode/` package with
+  a working extension that decorates function/class headers in the
+  active editor with caller counts via `sverklo refs`. Pre-built
+  `sverklo-vscode-0.1.0.vsix` (6.97 KB) ships in-tree:
+  `code --install-extension extensions/vscode/sverklo-vscode-0.1.0.vsix`.
+  Settings: `sverklo.binary`, `decorations.enabled`,
+  `decorations.minCallers`. Marketplace publish workflow
+  (`.github/workflows/publish-vsix.yml`) is dormant until the user
+  creates a publisher account + adds the `VSCE_PAT` secret.
+- **`sverklo digest [--since 7d]`** — 5-line summary of what changed
+  in the project since the window started (audit-grade trend, new
+  vs stale memories, high-PageRank files touched, scope counts).
+  Designed for shell-hook on `cd` into the repo or wired into a
+  Slack/email post. The morning-ritual habit loop from
+  `ROADMAP_V1.md`.
+- **`docs/parser-parity.md`** — captures the v0.17 baseline + the
+  v0.18 default-flip plan: keep `extractFileHeader` running on top
+  of tree-sitter, validate `bench:research` and `bench:swe` stay at
+  parity, then flip.
+
+### Changed
+
+- **Logo SVG glyph→paths** — `docs/logomark.svg` replaces
+  `<text>s</text>` with a vector `<path>` traced from JetBrains Mono
+  Bold via opentype.js. ImageMagick / rsvg-convert / Inkscape now
+  render pixel-identical without the font installed. `logo.svg`
+  / `logo-light.svg` keep `<text>` because they only render in
+  browsers with `@font-face local()` already in place.
+
+### Internal
+
+- `scripts/parity-check.mjs` — reproducible parser parity reporter.
+- `extensions/vscode/.vscodeignore` + `LICENSE.md` ensure the .vsix
+  packs cleanly.
+- `web-tree-sitter` is an `optionalDependency` so npm install never
+  fails if a user can't compile the WASM toolchain.
+
+### Notes
+
+309/309 tests pass. `bench:research` stays at **99.0%** recall (31/32)
+across all changes — deterministic across runs. The single missed
+task is the same `sverklo-evidence-verify` 2-of-3 boundary case
+tracked since v0.16. Schema version unchanged (still 8) — every
+v0.17 addition is layered on top of the existing storage.
+
+The marketplace publish workflow + the bench:swe corpus expansion to
+500 questions are the main v0.18 follow-ups that need external
+action (Microsoft publisher account, sustained dataset curation).
+
+---
+
 ## [0.16.0] — 2026-04-25
 
 The "v0.16 perfect-product" release. Sprint 9 features land in user-visible form, an 8-agent due-diligence + competitor-teardown review closes every flagged P0 / P1, the brand identity is unified, and a v1.0 roadmap is on the record.
