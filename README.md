@@ -9,6 +9,7 @@
 [![npm downloads](https://img.shields.io/npm/dw/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-E85A2A.svg)](LICENSE)
 [![Audited repos](https://img.shields.io/badge/audited_repos-47-E85A2A)](https://sverklo.com/report)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19802052.svg)](https://doi.org/10.5281/zenodo.19802052)
 
 ![Sverklo demo — audit and badge](./docs/demo.gif)
 
@@ -361,6 +362,26 @@ The open-core line: **Pro adds new things, never gates current things.** Anythin
 - [Issues](https://github.com/sverklo/sverklo/issues)
 - [First Run Guide](FIRST_RUN.md)
 - [Benchmarks](BENCHMARKS.md)
+- [Paper (Zenodo, CC BY 4.0)](https://doi.org/10.5281/zenodo.19802052)
+
+## Citing Sverklo
+
+If you use Sverklo or its benchmarks (`bench:primitives`, `bench:swe`) in research, please cite:
+
+> Groshin, N. (2026). *Sverklo: A Local-First Code Intelligence MCP Server and a Cross-Repository Software Engineering Benchmark*. Zenodo. https://doi.org/10.5281/zenodo.19802052
+
+BibTeX:
+
+```bibtex
+@misc{groshin2026sverklo,
+  author    = {Groshin, Nikita},
+  title     = {{Sverklo}: A Local-First Code Intelligence {MCP} Server and a Cross-Repository Software Engineering Benchmark},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.19802052},
+  url       = {https://doi.org/10.5281/zenodo.19802052}
+}
+```
 
 ## License
 
