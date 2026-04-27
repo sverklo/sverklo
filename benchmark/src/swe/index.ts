@@ -59,6 +59,8 @@ const onlyRepos = onlyRaw ? new Set(onlyRaw.split(",").map((s) => s.trim())) : n
 const skipClone = args.includes("--skip-clone");
 const maxStr = flagVal("--max");
 const maxTasks = maxStr ? Number(maxStr) : undefined;
+const expandGraph = args.includes("--expand-graph");
+const expandUpstream = args.includes("--expand-upstream");
 
 const repos = JSON.parse(readFileSync(REPOS_FILE, "utf-8")) as RepoEntry[];
 const targets = onlyRepos ? repos.filter((r) => onlyRepos.has(r.name)) : repos;
@@ -72,7 +74,8 @@ mkdirSync(CACHE_DIR, { recursive: true });
 
 console.log(
   `[bench:swe] running ${targets.length} repo${targets.length === 1 ? "" : "s"} ` +
-  `(${targets.map((r) => r.name).join(", ")})${maxTasks ? ` max=${maxTasks}` : ""}`
+  `(${targets.map((r) => r.name).join(", ")})${maxTasks ? ` max=${maxTasks}` : ""}` +
+  `${expandGraph ? " (expand_graph=on)" : ""}${expandUpstream ? " (expand_upstream=on)" : ""}`
 );
 
 const results: CrossRepoResult[] = [];
@@ -108,6 +111,8 @@ for (const repo of targets) {
       repoRoot: checkoutDir,
       datasetPath,
       maxTasks,
+      expandGraph,
+      expandUpstream,
     });
     results.push({ repo: repo.name, ref: repo.ref, summary });
     console.log(formatReport(summary));

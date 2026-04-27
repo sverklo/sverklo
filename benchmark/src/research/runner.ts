@@ -30,6 +30,8 @@ export interface RunResearchOpts {
   writeReport?: boolean;
   /** Pass-through to runInvestigate's expandGraph option (P1-9). */
   expandGraph?: boolean;
+  /** Pass-through to runInvestigate's expandUpstream option (v0.18 god-file channel). */
+  expandUpstream?: boolean;
 }
 
 export async function runResearchBench(opts: RunResearchOpts): Promise<ResearchRunSummary> {
@@ -48,6 +50,7 @@ export async function runResearchBench(opts: RunResearchOpts): Promise<ResearchR
       query: task.question,
       budget: 50,
       expandGraph: opts.expandGraph,
+      expandUpstream: opts.expandUpstream,
     });
     const duration = Date.now() - start;
 

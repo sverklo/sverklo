@@ -19,9 +19,10 @@ const dataset = flagVal("--dataset");
 const maxStr = flagVal("--max");
 const maxTasks = maxStr ? Number(maxStr) : undefined;
 const expandGraph = args.includes("--expand-graph");
+const expandUpstream = args.includes("--expand-upstream");
 
 console.log(
-  `[bench:research] repo=${repoRoot}${dataset ? ` dataset=${dataset}` : ""}${maxTasks ? ` max=${maxTasks}` : ""}${expandGraph ? " (expand_graph=on)" : ""}`
+  `[bench:research] repo=${repoRoot}${dataset ? ` dataset=${dataset}` : ""}${maxTasks ? ` max=${maxTasks}` : ""}${expandGraph ? " (expand_graph=on)" : ""}${expandUpstream ? " (expand_upstream=on)" : ""}`
 );
 
 const summary = await runResearchBench({
@@ -29,6 +30,7 @@ const summary = await runResearchBench({
   datasetPath: dataset ? resolve(dataset) : undefined,
   maxTasks,
   expandGraph,
+  expandUpstream,
 });
 
 console.log("\n" + formatReport(summary));

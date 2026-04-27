@@ -58,7 +58,7 @@ describe("formatInvestigate", () => {
           found_by: ["fts", "symbol"],
         },
       ],
-      budget_used: { fts: 50, vector: 50, symbol: 8, refs: 0, "graph-expand": 0, module: 0, path: 0 },
+      budget_used: { fts: 50, vector: 50, symbol: 8, refs: 0, "graph-expand": 0, module: 0, path: 0, upstream: 0 },
     };
   }
 
@@ -74,7 +74,7 @@ describe("formatInvestigate", () => {
     const empty: InvestigateResult = {
       query: "nothing matches",
       hits: [],
-      budget_used: { fts: 0, vector: 0, symbol: 0, refs: 0, "graph-expand": 0, module: 0, path: 0 },
+      budget_used: { fts: 0, vector: 0, symbol: 0, refs: 0, "graph-expand": 0, module: 0, path: 0, upstream: 0 },
     };
     const out = formatInvestigate(empty);
     expect(out).toContain("No candidates");

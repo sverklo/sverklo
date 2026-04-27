@@ -15,7 +15,14 @@ const RRF_K = 60;
 // matched file's later defs (e.g. groupByDirectory in compact.ts) get
 // independent rank-share rather than competing with hits from every
 // other matched file.
-export type RetrievalMethod = "fts" | "vector" | "symbol" | "refs" | "graph-expand" | "module" | "path";
+// "upstream" follows imports backward from the top base hits to surface
+// heavily-imported "god-files" — central modules (routers, DI injectors,
+// runtime engines) that every feature file depends on but no individual
+// query lexically matches. bench:swe v0.17 surfaced this as the dominant
+// failure mode across Express/NestJS/Prisma; v0.18 ships the channel
+// behind expandUpstream and the eval harness measures whether it's a
+// strict improvement before the default flips.
+export type RetrievalMethod = "fts" | "vector" | "symbol" | "refs" | "graph-expand" | "module" | "path" | "upstream";
 
 export const EDGE_WEIGHTS: Record<string, number> = {
   calls: 1.0,
@@ -50,6 +57,18 @@ export interface InvestigateOptions {
    * eval harness shows it's a strict improvement).
    */
   expandGraph?: boolean;
+  /**
+   * When true, walk the file-import graph BACKWARD from the top base
+   * hits up to depth 2 and add chunks from the heavily-imported parent
+   * files (top-decile PageRank) to the candidate pool. Closes the
+   * "god-file" recall failure that bench:swe v0.17 surfaced across
+   * Express/NestJS/Prisma — central files (lib/router/index.js,
+   * packages/core/injector/injector.ts, LibraryEngine.ts) that every
+   * feature file imports but no individual query lexically matches.
+   * Default: false (v0.18 ships behind the flag, eval harness measures
+   * whether it's a strict improvement before the default flips).
+   */
+  expandUpstream?: boolean;
 }
 
 /**
@@ -115,6 +134,15 @@ export async function runInvestigate(
     accumulate(scores, expandedIds, "graph-expand");
   }
 
+  // 6th ranker: upstream traversal — walk imports backward from the top
+  // base hits and surface heavily-imported parent files (god-files).
+  let upstreamIds: number[] = [];
+  if (opts.expandUpstream) {
+    const seedIds = topNFromScores(scores, 20);
+    upstreamIds = expandViaUpstreamImports(indexer, seedIds, fileCache);
+    accumulate(scores, upstreamIds, "upstream");
+  }
+
   const hits: InvestigateHit[] = [];
   for (const [chunkId, s] of scores) {
     const chunk = indexer.chunkStore.getById(chunkId);
@@ -144,6 +172,7 @@ export async function runInvestigate(
       "graph-expand": expandedIds.length,
       module: 0,
       path: pathDefs.length,
+      upstream: upstreamIds.length,
     },
   };
 }
@@ -208,6 +237,137 @@ function expandViaTypedEdges(indexer: Indexer, seedIds: number[]): number[] {
   // Stable rank by weight DESC. Equal-weight ties keep insertion order.
   out.sort((a, b) => b.weight - a.weight);
   return out.map((x) => x.id);
+}
+
+/**
+ * Top-decile PageRank threshold for the indexed file set. Cached per call;
+ * the caller passes the file cache built once at the top of runInvestigate.
+ *
+ * Files with `pagerank === 0` are excluded from the percentile computation
+ * (they're either un-imported orphans or pre-PageRank-pass entries) so the
+ * threshold reflects the actual structural importance distribution rather
+ * than being dragged toward zero by the long tail.
+ */
+function topDecileThreshold(fileCache: Map<number, FileRecord>): number {
+  const ranks: number[] = [];
+  for (const f of fileCache.values()) {
+    if (f.pagerank > 0) ranks.push(f.pagerank);
+  }
+  if (ranks.length === 0) return 0;
+  ranks.sort((a, b) => b - a);
+  const idx = Math.max(0, Math.floor(ranks.length * 0.1) - 1);
+  return ranks[idx] ?? 0;
+}
+
+/**
+ * Walk the file-import graph BACKWARD from each seed chunk's file up to
+ * MAX_DEPTH hops, surfacing parent files whose PageRank is in the top
+ * decile. For each qualifying parent, emit its module-level chunk first
+ * (file-intent prose) followed by up to 3 named definitions ordered by
+ * line position. This is the inverse of the existing
+ * `runDefinitionsInFtsFiles` pattern: that one walks from chunk → file →
+ * defs in the SAME file; this one walks from chunk → file → upstream
+ * importers → their defs.
+ *
+ * The motivation lives in bench:swe v0.17: questions like "how does
+ * Express dispatch a request to the right route handler" surface
+ * `lib/router/route.js` (a feature file with a clear name) but miss
+ * `lib/router/index.js` (the central dispatch file that imports
+ * `route.js` and binds it to the application). The central file has
+ * top-decile PageRank because nearly every other file in the repository
+ * imports it, but no individual feature query lexically matches it.
+ *
+ * Two parameters are conservative on purpose. Depth 2 catches grandparent
+ * routers without runaway BFS on dense monorepos. The top-3 chunks-per-
+ * parent cap prevents a single high-PageRank god-file from saturating the
+ * candidate pool — RRF can still upweight it, but it doesn't crowd out
+ * the more specific feature hits that surfaced it.
+ */
+function expandViaUpstreamImports(
+  indexer: Indexer,
+  seedIds: number[],
+  fileCache: Map<number, FileRecord>
+): number[] {
+  const MAX_DEPTH = 2;
+  const MAX_PARENTS = 10;
+  const CHUNKS_PER_PARENT = 3;
+
+  const threshold = topDecileThreshold(fileCache);
+  if (threshold <= 0) return [];
+
+  // Collect unique seed file IDs from the seed chunks.
+  const seedFileIds = new Set<number>();
+  for (const id of seedIds) {
+    const chunk = indexer.chunkStore.getById(id);
+    if (chunk) seedFileIds.add(chunk.file_id);
+  }
+
+  // BFS upward through importers, depth-bounded. A file is "visited" once
+  // we've seen it at any depth — closer hops win on rank ties via insertion
+  // order, which lines up with how an engineer would investigate.
+  const visited = new Set<number>(seedFileIds);
+  const qualified: Array<{ fileId: number; depth: number; pagerank: number }> = [];
+  let frontier = Array.from(seedFileIds);
+  for (let depth = 1; depth <= MAX_DEPTH && frontier.length > 0; depth++) {
+    const next: number[] = [];
+    for (const fileId of frontier) {
+      const importers = indexer.graphStore.getImporters(fileId);
+      for (const dep of importers) {
+        const importerId = dep.source_file_id;
+        if (visited.has(importerId)) continue;
+        visited.add(importerId);
+        const file = fileCache.get(importerId);
+        if (!file) continue;
+        if (file.pagerank >= threshold) {
+          qualified.push({ fileId: importerId, depth, pagerank: file.pagerank });
+        }
+        next.push(importerId);
+      }
+    }
+    frontier = next;
+  }
+
+  // Rank parents by PageRank DESC (higher PageRank = more central), then
+  // by depth ASC (closer hops first as a tiebreaker). Cap at MAX_PARENTS.
+  qualified.sort((a, b) => {
+    if (b.pagerank !== a.pagerank) return b.pagerank - a.pagerank;
+    return a.depth - b.depth;
+  });
+  const parents = qualified.slice(0, MAX_PARENTS);
+
+  // For each qualifying parent, emit module-level chunk(s) first, then
+  // up to CHUNKS_PER_PARENT named definitions in line order.
+  const out: number[] = [];
+  const emitted = new Set<number>(seedIds);
+  for (const { fileId } of parents) {
+    const fileChunks = indexer.chunkStore
+      .getByFile(fileId)
+      .filter((c) =>
+        c.name &&
+        (c.type === "module" ||
+          c.type === "function" ||
+          c.type === "class" ||
+          c.type === "method" ||
+          c.type === "type" ||
+          c.type === "interface")
+      );
+    const moduleChunks = fileChunks.filter((c) => c.type === "module");
+    const defChunks = fileChunks
+      .filter((c) => c.type !== "module")
+      .sort((a, b) => a.start_line - b.start_line)
+      .slice(0, CHUNKS_PER_PARENT);
+    for (const c of moduleChunks) {
+      if (emitted.has(c.id)) continue;
+      emitted.add(c.id);
+      out.push(c.id);
+    }
+    for (const c of defChunks) {
+      if (emitted.has(c.id)) continue;
+      emitted.add(c.id);
+      out.push(c.id);
+    }
+  }
+  return out;
 }
 
 function runFts(
