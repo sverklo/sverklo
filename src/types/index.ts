@@ -102,7 +102,7 @@ export interface DependencyEdge {
   reference_count: number;
 }
 
-export type MemoryCategory = "decision" | "preference" | "pattern" | "context" | "todo" | "procedural";
+export type MemoryCategory = "decision" | "preference" | "pattern" | "context" | "todo" | "procedural" | "correction";
 export type MemoryTier = "core" | "archive";
 // Cognitive-science framing borrowed from Sprint 9 research (Akshay thread).
 // Orthogonal to `tier` (which is a salience axis):

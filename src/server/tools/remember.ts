@@ -16,8 +16,13 @@ export const rememberTool = {
       content: { type: "string", description: "The memory to save" },
       category: {
         type: "string",
-        enum: ["decision", "preference", "pattern", "context", "todo", "procedural"],
-        description: "Default: context. Use procedural for 'always do X' rules.",
+        enum: ["decision", "preference", "pattern", "context", "todo", "procedural", "correction"],
+        description:
+          "Default: context. Use procedural for 'always do X' rules. " +
+          "Use correction when the user is fixing a prior model mistake " +
+          "(\"stop using em-dashes\", \"never call this method again\") " +
+          "— mirrors the AI Edge memory taxonomy and the bench:research " +
+          "Corrections category in markdown export.",
       },
       tags: { type: "array", items: { type: "string" }, description: "Optional tags" },
       related_files: {
@@ -68,7 +73,7 @@ export async function handleRemember(
 
   const categoryRes = validateEnum(
     args.category,
-    ["decision", "preference", "pattern", "context", "todo", "procedural"] as const,
+    ["decision", "preference", "pattern", "context", "todo", "procedural", "correction"] as const,
     "category",
     "context"
   );

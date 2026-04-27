@@ -55,7 +55,7 @@ if (command && command !== "--help" && command !== "-h") {
       dashboard: "Alias for `sverklo ui`.",
       wakeup: "Print compressed project context (for system-prompt injection in non-MCP clients).",
       digest: "5-line summary of what changed in this project. Flags: --since 7d, --format markdown|plain.",
-      memory: "Manage the memory store. Subcommands: export.",
+      memory: "Manage the memory store. Subcommands: show, edit, export.",
       grammars: "Manage tree-sitter grammars for the SVERKLO_PARSER=tree-sitter opt-in path. Subcommands: install.",
       "audit-prompt": "Print a ready-to-paste codebase-audit prompt (hybrid agent workflow).",
       "review-prompt": "Print a ready-to-paste PR/MR-review prompt (hybrid agent workflow).",
@@ -71,7 +71,7 @@ if (command && command !== "--help" && command !== "-h") {
     };
 
     // Pass-throughs: subcommands that handle --help themselves.
-    const SELF_HANDLES_HELP = new Set(["prune"]);
+    const SELF_HANDLES_HELP = new Set(["prune", "memory"]);
     if (!SELF_HANDLES_HELP.has(command)) {
       const blurb = HELP_BLURBS[command];
       if (blurb) {
@@ -1523,22 +1523,198 @@ if (command === "grammars") {
 }
 
 if (command === "memory") {
-  // `sverklo memory export` — push the memory store out to markdown,
-  // Notion, or raw JSON. Closes the "memory is a private journal"
-  // gap from the v0.16 product teardown.
+  // `sverklo memory` subcommands:
+  //   export  — push memory rows to markdown/Notion/JSON files
+  //   show    — print memory rows as markdown to stdout
+  //   edit    — open memory rows in $EDITOR; round-trip content edits back
+  //             to SQLite. Never deletes by omission.
   const sub = args[1];
-  if (sub !== "export") {
+  if (sub !== "export" && sub !== "show" && sub !== "edit") {
     console.log(
-      `\nsverklo memory — export the memory store to other tools\n\n` +
-      `Usage:\n  sverklo memory export --format markdown|notion|json --to PATH [flags]\n\n` +
-      `Flags:\n` +
-      `  --format markdown|notion|json    output format (required)\n` +
-      `  --to PATH                        directory (markdown) or file (json/notion)\n` +
-      `  --kind episodic|semantic|procedural   filter by cognitive axis (default: all)\n` +
-      `  --include-invalidated            include superseded rows for the bi-temporal timeline\n` +
-      `  --notion-database ID             target database id (required for --format notion)\n` +
-      `  -h, --help                       show this help\n`
+      `\nsverklo memory — read, edit, and export the memory store\n\n` +
+      `Subcommands:\n` +
+      `  show     print all memories as markdown to stdout\n` +
+      `  edit     open memories in $EDITOR; round-trip text edits back\n` +
+      `  export   write per-category .md files / JSON / push to Notion\n\n` +
+      `Usage:\n` +
+      `  sverklo memory show [--include-invalidated]\n` +
+      `  sverklo memory edit [--editor PATH]\n` +
+      `  sverklo memory export --format markdown|notion|json --to PATH [flags]\n\n` +
+      `Run \`sverklo memory <subcommand> --help\` for the full flag list.\n`
     );
+    process.exit(0);
+  }
+
+  if (sub === "show") {
+    // Render every active memory as markdown to stdout. AI Edge's
+    // "open Memory.md and read it" workflow, but driven by SQLite —
+    // bi-temporal history, git provenance, no manual upkeep.
+    const flags = args.slice(2);
+    if (flags.includes("--help") || flags.includes("-h")) {
+      console.log(
+        `\nsverklo memory show — print memories as markdown to stdout\n\n` +
+        `Flags:\n` +
+        `  --include-invalidated  include superseded rows (full bi-temporal timeline)\n` +
+        `  --kind episodic|semantic|procedural   filter by cognitive axis\n`
+      );
+      process.exit(0);
+    }
+    const includeInvalidated = flags.includes("--include-invalidated");
+    const kindFlag = (() => {
+      const idx = flags.indexOf("--kind");
+      if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+      const prefixed = flags.find((f) => f.startsWith("--kind="));
+      return prefixed ? prefixed.slice("--kind=".length) : undefined;
+    })();
+    if (kindFlag && !["episodic", "semantic", "procedural"].includes(kindFlag)) {
+      console.error(`✗ --kind must be episodic|semantic|procedural, got "${kindFlag}"`);
+      process.exit(2);
+    }
+
+    const valueFlags = new Set(["--kind"]);
+    const cleanFlags: string[] = [];
+    for (let i = 0; i < flags.length; i++) {
+      if (valueFlags.has(flags[i])) { i++; continue; }
+      if (Array.from(valueFlags).some((f) => flags[i].startsWith(`${f}=`))) continue;
+      cleanFlags.push(flags[i]);
+    }
+    const projectPath = await resolveProjectPath(cleanFlags);
+
+    const { getProjectConfig } = await import("../src/utils/config.js");
+    const { Indexer } = await import("../src/indexer/indexer.js");
+    const { renderMarkdownCombined } = await import("../src/memory/export.js");
+
+    const config = getProjectConfig(projectPath);
+    const indexer = new Indexer(config);
+    await indexer.index();
+
+    const rows = includeInvalidated
+      ? indexer.memoryStore.getTimeline(10_000)
+      : indexer.memoryStore.getAll(10_000);
+    const filtered = kindFlag ? rows.filter((m) => m.kind === kindFlag) : rows;
+    process.stdout.write(renderMarkdownCombined(filtered));
+    indexer.close();
+    process.exit(0);
+  }
+
+  if (sub === "edit") {
+    // Render memories to a temp markdown file, open in $EDITOR, parse
+    // changed content back into SQLite. Strict safety policy: omission
+    // never deletes (use `sverklo memory demote` for that); a parse
+    // error aborts without writing.
+    const flags = args.slice(2);
+    if (flags.includes("--help") || flags.includes("-h")) {
+      console.log(
+        `\nsverklo memory edit — open memories in $EDITOR; round-trip text edits\n\n` +
+        `Flags:\n` +
+        `  --editor PATH    editor to invoke (default: $EDITOR or vi)\n\n` +
+        `Safety:\n` +
+        `  - Removing a memory's heading from the file does NOT delete it.\n` +
+        `    Use \`sverklo memory demote <id>\` (planned) or \`sverklo_demote\`\n` +
+        `    from MCP for explicit deletion.\n` +
+        `  - Adding a new memory by hand is not supported here. Use\n` +
+        `    \`sverklo_remember\` from MCP or call the API directly.\n` +
+        `  - If the parser can't make sense of your edits, the change\n` +
+        `    is rejected and your SQLite store is left untouched.\n`
+      );
+      process.exit(0);
+    }
+    const editorOverride = (() => {
+      const idx = flags.indexOf("--editor");
+      if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+      const prefixed = flags.find((f) => f.startsWith("--editor="));
+      return prefixed ? prefixed.slice("--editor=".length) : undefined;
+    })();
+    const editor = editorOverride ?? process.env.EDITOR ?? "vi";
+
+    const valueFlags = new Set(["--editor"]);
+    const cleanFlags: string[] = [];
+    for (let i = 0; i < flags.length; i++) {
+      if (valueFlags.has(flags[i])) { i++; continue; }
+      if (Array.from(valueFlags).some((f) => flags[i].startsWith(`${f}=`))) continue;
+      cleanFlags.push(flags[i]);
+    }
+    const projectPath = await resolveProjectPath(cleanFlags);
+
+    const { getProjectConfig } = await import("../src/utils/config.js");
+    const { Indexer } = await import("../src/indexer/indexer.js");
+    const { renderMarkdownCombined, parseMarkdownEdits } = await import(
+      "../src/memory/export.js"
+    );
+    const { writeFileSync, readFileSync, mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join: joinPath } = await import("node:path");
+    const { spawnSync: spawn } = await import("node:child_process");
+
+    const config = getProjectConfig(projectPath);
+    const indexer = new Indexer(config);
+    await indexer.index();
+
+    const rows = indexer.memoryStore.getAll(10_000);
+    if (rows.length === 0) {
+      console.log("(no memories to edit)");
+      indexer.close();
+      process.exit(0);
+    }
+
+    const dir = mkdtempSync(joinPath(tmpdir(), "sverklo-memory-edit-"));
+    const filePath = joinPath(dir, "memory.md");
+    const original = renderMarkdownCombined(rows);
+    writeFileSync(filePath, original, "utf-8");
+
+    console.log(`Opening ${filePath} in ${editor}...`);
+    const result = spawn(editor, [filePath], { stdio: "inherit" });
+    if (result.status !== 0) {
+      console.error(`✗ editor exited with status ${result.status}; no changes applied`);
+      indexer.close();
+      process.exit(1);
+    }
+
+    const after = readFileSync(filePath, "utf-8");
+    if (after === original) {
+      console.log("(no edits — exiting)");
+      indexer.close();
+      process.exit(0);
+    }
+
+    const parsed = parseMarkdownEdits(after);
+    if (parsed === null) {
+      console.error("✗ couldn't parse the edited file (heading structure broken). No changes applied.");
+      console.error(`  Your edits are preserved at ${filePath} in case you want to recover them.`);
+      indexer.close();
+      process.exit(1);
+    }
+
+    // Compute the diff: ids whose content changed.
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const updates: Array<{ id: number; content: string; before: string }> = [];
+    for (const edit of parsed) {
+      const original = byId.get(edit.id);
+      if (!original) continue; // edit references an unknown id — skip silently
+      if (original.content === edit.content) continue;
+      updates.push({ id: edit.id, content: edit.content, before: original.content });
+    }
+    if (updates.length === 0) {
+      console.log("(content unchanged — only metadata or formatting edits, ignoring)");
+      indexer.close();
+      process.exit(0);
+    }
+
+    for (const u of updates) {
+      indexer.memoryStore.update(u.id, u.content);
+    }
+    console.log(`✓ updated ${updates.length} memor${updates.length === 1 ? "y" : "ies"}:`);
+    for (const u of updates) {
+      const beforeSnip = u.before.slice(0, 60).replace(/\n/g, " ");
+      const afterSnip = u.content.slice(0, 60).replace(/\n/g, " ");
+      console.log(`  #${u.id}: "${beforeSnip}${u.before.length > 60 ? "..." : ""}"`);
+      console.log(`       → "${afterSnip}${u.content.length > 60 ? "..." : ""}"`);
+    }
+    console.log(
+      `\nNote: omitted memories are preserved. Use \`sverklo_demote <id>\` from MCP\n` +
+      `to explicitly archive a memory.`
+    );
+    indexer.close();
     process.exit(0);
   }
 

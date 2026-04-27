@@ -42,6 +42,7 @@ export interface ExportReport {
 const CATEGORY_HEADINGS: Record<MemoryCategory, string> = {
   decision: "Decisions",
   preference: "Preferences",
+  correction: "Corrections",
   pattern: "Patterns",
   context: "Context",
   todo: "Open todos",
@@ -88,52 +89,133 @@ export function runMemoryExport(
 
 function writeMarkdown(rows: Memory[], outDir: string): string[] {
   mkdirSync(outDir, { recursive: true });
+  const grouped = groupByCategory(rows);
+  const written: string[] = [];
+  for (const [category, list] of grouped) {
+    const heading = CATEGORY_HEADINGS[category] ?? category;
+    const fileName = `${category}.md`;
+    const filePath = join(outDir, fileName);
+    const body = renderCategoryBlock(heading, list);
+    writeFileSync(filePath, body, "utf-8");
+    written.push(filePath);
+  }
+  return written;
+}
+
+/**
+ * Render every memory row as one combined markdown document, grouped by
+ * category. Used by `sverklo memory show` (prints to stdout) and
+ * `sverklo memory edit` (round-trips through $EDITOR). The format is the
+ * same per-memory shape as `writeMarkdown` so users can pipe `show`
+ * output into the existing export markdown without surprises.
+ *
+ * Memory headings carry the row id (`## #42 · ...`) so the round-trip
+ * parser in `parseMarkdownEdits` can match edited content back to the
+ * source row by id.
+ */
+export function renderMarkdownCombined(rows: Memory[]): string {
+  const grouped = groupByCategory(rows);
+  if (grouped.size === 0) return "_no memories_\n";
+  const sections: string[] = [];
+  for (const [category, list] of grouped) {
+    const heading = CATEGORY_HEADINGS[category] ?? category;
+    sections.push(renderCategoryBlock(heading, list));
+  }
+  return sections.join("\n");
+}
+
+function groupByCategory(rows: Memory[]): Map<MemoryCategory, Memory[]> {
   const grouped = new Map<MemoryCategory, Memory[]>();
   for (const m of rows) {
     const list = grouped.get(m.category) ?? [];
     list.push(m);
     grouped.set(m.category, list);
   }
-  const written: string[] = [];
-  for (const [category, list] of grouped) {
-    const heading = CATEGORY_HEADINGS[category] ?? category;
-    const fileName = `${category}.md`;
-    const filePath = join(outDir, fileName);
-    const parts: string[] = [
-      `# ${heading}`,
-      "",
-      `_${list.length} memor${list.length === 1 ? "y" : "ies"} from sverklo. Exported ${new Date().toISOString().slice(0, 10)}._`,
-      "",
-    ];
-    for (const m of list) {
-      parts.push(`## #${m.id} · ${m.kind}${m.tier === "core" ? " · core" : ""}`);
-      parts.push("");
-      parts.push(m.content);
-      parts.push("");
-      const meta: string[] = [];
-      if (m.tags) {
-        try {
-          const tags = JSON.parse(m.tags) as string[];
-          if (tags.length > 0) meta.push(`**tags:** ${tags.join(", ")}`);
-        } catch { /* malformed tags column — skip */ }
-      }
-      if (m.git_branch && m.git_sha) {
-        meta.push(`**git:** \`${m.git_branch}@${m.git_sha.slice(0, 7)}\``);
-      }
-      meta.push(`**confidence:** ${m.confidence}`);
-      meta.push(`**created:** ${new Date(m.created_at).toISOString().slice(0, 10)}`);
-      if (m.valid_until_sha) {
-        meta.push(`**superseded at:** \`${m.valid_until_sha.slice(0, 7)}\` by \`#${m.superseded_by ?? "?"}\``);
-      }
-      parts.push(meta.join(" · "));
-      parts.push("");
-      parts.push("---");
-      parts.push("");
+  return grouped;
+}
+
+function renderCategoryBlock(heading: string, list: Memory[]): string {
+  const parts: string[] = [
+    `# ${heading}`,
+    "",
+    `_${list.length} memor${list.length === 1 ? "y" : "ies"} from sverklo. Exported ${new Date().toISOString().slice(0, 10)}._`,
+    "",
+  ];
+  for (const m of list) {
+    parts.push(`## #${m.id} · ${m.kind}${m.tier === "core" ? " · core" : ""}`);
+    parts.push("");
+    parts.push(m.content);
+    parts.push("");
+    const meta: string[] = [];
+    if (m.tags) {
+      try {
+        const tags = JSON.parse(m.tags) as string[];
+        if (tags.length > 0) meta.push(`**tags:** ${tags.join(", ")}`);
+      } catch { /* malformed tags column — skip */ }
     }
-    writeFileSync(filePath, parts.join("\n"), "utf-8");
-    written.push(filePath);
+    if (m.git_branch && m.git_sha) {
+      meta.push(`**git:** \`${m.git_branch}@${m.git_sha.slice(0, 7)}\``);
+    }
+    meta.push(`**confidence:** ${m.confidence}`);
+    meta.push(`**created:** ${new Date(m.created_at).toISOString().slice(0, 10)}`);
+    if (m.valid_until_sha) {
+      meta.push(`**superseded at:** \`${m.valid_until_sha.slice(0, 7)}\` by \`#${m.superseded_by ?? "?"}\``);
+    }
+    parts.push(meta.join(" · "));
+    parts.push("");
+    parts.push("---");
+    parts.push("");
   }
-  return written;
+  return parts.join("\n");
+}
+
+/**
+ * Parse `renderMarkdownCombined` output back into a list of {id, content}
+ * pairs. Used by `sverklo memory edit` to round-trip user edits.
+ *
+ * Safety policy: this parser only emits {id, content} pairs for headings
+ * the user kept. It NEVER deletes by omission — if a heading was removed
+ * from the file, the corresponding row is left alone, not deleted. Users
+ * who actually want to delete a memory should use `sverklo memory demote`
+ * or `sverklo_demote` from MCP.
+ *
+ * Returns `null` if the parser can't match a clean structure (so the
+ * caller can abort instead of writing partial garbage).
+ */
+export function parseMarkdownEdits(
+  text: string
+): Array<{ id: number; content: string }> | null {
+  const lines = text.split(/\r?\n/);
+  const out: Array<{ id: number; content: string }> = [];
+  let i = 0;
+  while (i < lines.length) {
+    const headingMatch = /^##\s+#(\d+)\s+/.exec(lines[i]);
+    if (!headingMatch) { i++; continue; }
+    const id = Number.parseInt(headingMatch[1], 10);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    i++;
+    // Skip the blank line(s) immediately after the heading.
+    while (i < lines.length && lines[i].trim() === "") i++;
+    // Collect content until we hit the metadata line (starts with "**")
+    // or a section break ("---") or the next "## #" heading. Trailing
+    // blank lines are trimmed.
+    const contentLines: string[] = [];
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^##\s+#\d+\s+/.test(line)) break;
+      if (line.startsWith("**") && line.endsWith("**")) break;
+      if (/^\*\*[a-z]+:\*\*/.test(line)) break;
+      if (line.trim() === "---") break;
+      contentLines.push(line);
+      i++;
+    }
+    while (contentLines.length > 0 && contentLines[contentLines.length - 1].trim() === "") {
+      contentLines.pop();
+    }
+    if (contentLines.length === 0) continue; // empty body — skip
+    out.push({ id, content: contentLines.join("\n") });
+  }
+  return out;
 }
 
 function writeJson(rows: Memory[], outFile: string): string {

@@ -10,6 +10,10 @@ function defaultKindFor(category: MemoryCategory): MemoryKind {
       return "procedural";
     case "preference":
     case "pattern":
+    case "correction":
+      // Corrections are timeless rules (e.g. "never use em-dashes") that
+      // shouldn't decay with time, so they live in the semantic axis
+      // alongside preferences and patterns.
       return "semantic";
     default:
       return "episodic";

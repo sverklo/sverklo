@@ -35,6 +35,7 @@ Sverklo is a sharper tool for specific kinds of work. Use it where it fits, not 
 
 **Memory discipline (\`sverklo_remember\`):**
 - Save a memory only when (a) a bug took >1 hour to debug, (b) the same mistake repeats across sessions, (c) a non-obvious architectural decision needs to survive context loss, or (d) an audit finding requires user judgment. Do not save routine task summaries — \`sverklo_recall\` is most useful when its hits are signal-dense.
+- **Capture user corrections automatically.** When the user corrects you with phrasing like "stop using X", "never X", "always Y", "don't Y", "prefer Z", "remember that I want Q", or "actually, do W instead" — call \`sverklo_remember\` once with \`category:correction\` (for "stop/never/don't" forms) or \`category:preference\` ("prefer/want/like"), \`kind:semantic\`, and the user's instruction as the content. Save before you continue with the response. Don't ask permission; corrections are explicit instructions to persist behavior across sessions, and silently re-violating the same correction next session is the failure mode this captures.
 
 **Output discipline:**
 - No preambles ("Here are the results", "Great question"), no closing affirmations, no em-dashes used as conversational pauses. State the finding, show the fix, stop.
