@@ -61,4 +61,62 @@ describe("scoreTask", () => {
     // The hit covered both requirements so it isn't wasted.
     expect(score.wasted_hits).toBe(0);
   });
+
+  it("MRR is 1.0 when every required file is at rank 1", () => {
+    // Two requirements; first hit covers both because the symbol match also
+    // satisfies the file-only requirement. Both reciprocal ranks = 1/1 = 1.
+    const task = mkTask([{ file: "a.ts" }, { file: "a.ts", symbol: "x" }]);
+    const hits = [hit("a.ts", "x", 1, 10)];
+    const score = scoreTask(task, hits, 1);
+    expect(score.mrr).toBe(1);
+  });
+
+  it("MRR penalises lower-ranked matches", () => {
+    // Three required files, found at ranks 1, 5, and 10.
+    // Per-file reciprocal ranks: 1/1, 1/5, 1/10. Mean = (1 + 0.2 + 0.1)/3 = 0.4333.
+    const task = mkTask([{ file: "a.ts" }, { file: "b.ts" }, { file: "c.ts" }]);
+    const hits = [
+      hit("a.ts"),       // rank 1
+      hit("noise1.ts"), hit("noise2.ts"), hit("noise3.ts"),
+      hit("b.ts"),       // rank 5
+      hit("noise4.ts"), hit("noise5.ts"), hit("noise6.ts"), hit("noise7.ts"),
+      hit("c.ts"),       // rank 10
+    ];
+    const score = scoreTask(task, hits, 1);
+    expect(score.recall).toBe(1);
+    // (1 + 1/5 + 1/10) / 3 = 0.4333...
+    expect(score.mrr).toBeCloseTo((1 + 0.2 + 0.1) / 3, 4);
+  });
+
+  it("MRR contributes 0 for missed required files", () => {
+    // a.ts is at rank 1, b.ts is missing. MRR = (1 + 0)/2 = 0.5.
+    const task = mkTask([{ file: "a.ts" }, { file: "b.ts" }]);
+    const hits = [hit("a.ts"), hit("c.ts")];
+    const score = scoreTask(task, hits, 1);
+    expect(score.recall).toBeCloseTo(0.5, 5);
+    expect(score.mrr).toBeCloseTo(0.5, 5);
+  });
+
+  it("MRR distinguishes a rank-30 result from a rank-5 result at equal recall", () => {
+    // Both runs find the required file in top-50, so binary recall is 1.0
+    // for both. MRR should reflect the rank improvement.
+    const task = mkTask([{ file: "target.ts" }]);
+    const noise = (n: number): ResearchHit[] => {
+      const out: ResearchHit[] = [];
+      for (let i = 0; i < n; i++) out.push(hit(`n${i}.ts`));
+      return out;
+    };
+
+    const rank30Hits = [...noise(29), hit("target.ts")];
+    const rank5Hits = [...noise(4), hit("target.ts")];
+
+    const at30 = scoreTask(task, rank30Hits, 1);
+    const at5 = scoreTask(task, rank5Hits, 1);
+
+    expect(at30.recall).toBe(1);
+    expect(at5.recall).toBe(1);
+    expect(at30.mrr).toBeCloseTo(1 / 30, 5);
+    expect(at5.mrr).toBeCloseTo(1 / 5, 5);
+    expect(at5.mrr).toBeGreaterThan(at30.mrr);
+  });
 });

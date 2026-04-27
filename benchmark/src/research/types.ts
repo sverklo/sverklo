@@ -48,6 +48,17 @@ export interface ResearchScore {
   task_id: string;
   /** recall = matched required / |required|. 1.0 = all evidence surfaced. */
   recall: number;
+  /**
+   * Mean reciprocal rank across required-evidence files. For each required
+   * file, the score contribution is 1/rank (1-indexed) if the file was
+   * found in the top-K hits, or 0 if missed. The per-task value is the
+   * mean of those contributions across required files. This is sensitive
+   * to within-top-K rank changes that the binary `recall` metric ignores
+   * — a retrieval improvement that lifts a file from rank 30 to rank 5
+   * shows up as MRR going from 0.033 to 0.20 even though both runs hit
+   * the top-50 cap.
+   */
+  mrr: number;
   /** total hits returned — higher ≠ better on its own. */
   total_hits: number;
   /** hits that matched no required-evidence row — "wasted". */
@@ -65,6 +76,9 @@ export interface ResearchRunSummary {
   total_tasks: number;
   avg_recall: number;
   perfect_recall: number;           // count of tasks with recall = 1.0
+  /** Average mean-reciprocal-rank across tasks. Captures intra-top-K
+   * ranking improvements that the binary recall metric does not. */
+  avg_mrr: number;
   avg_wasted_hits: number;
   avg_duration_ms: number;
   scores: ResearchScore[];

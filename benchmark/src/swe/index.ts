@@ -131,17 +131,18 @@ console.log(`**repos:** ${aggregate.reposEvaluated}/${targets.length}`);
 console.log(`**total tasks:** ${aggregate.totalTasks}`);
 console.log(`**avg recall:** ${(aggregate.weightedRecall * 100).toFixed(1)}%`);
 console.log(`**perfect recall:** ${aggregate.perfectRecall}/${aggregate.totalTasks}`);
+console.log(`**avg MRR:** ${aggregate.weightedMrr.toFixed(3)}`);
 console.log("");
-console.log("| Repo | Tasks | Avg recall | Perfect |");
-console.log("|---|---|---|---|");
+console.log("| Repo | Tasks | Avg recall | Perfect | MRR |");
+console.log("|---|---|---|---|---|");
 for (const r of results) {
   if (!r.summary) {
-    console.log(`| ${r.repo} | — | — | (${r.error}) |`);
+    console.log(`| ${r.repo} | — | — | (${r.error}) | — |`);
     continue;
   }
   const s = r.summary;
   console.log(
-    `| ${r.repo} | ${s.total_tasks} | ${(s.avg_recall * 100).toFixed(1)}% | ${s.perfect_recall}/${s.total_tasks} |`
+    `| ${r.repo} | ${s.total_tasks} | ${(s.avg_recall * 100).toFixed(1)}% | ${s.perfect_recall}/${s.total_tasks} | ${s.avg_mrr.toFixed(3)} |`
   );
 }
 
@@ -156,12 +157,14 @@ interface Aggregate {
   reposEvaluated: number;
   totalTasks: number;
   weightedRecall: number;
+  weightedMrr: number;
   perfectRecall: number;
 }
 
 function computeAggregate(rs: CrossRepoResult[]): Aggregate {
   let totalTasks = 0;
   let recallSum = 0;
+  let mrrSum = 0;
   let perfect = 0;
   let evaluated = 0;
   for (const r of rs) {
@@ -169,12 +172,14 @@ function computeAggregate(rs: CrossRepoResult[]): Aggregate {
     evaluated++;
     totalTasks += r.summary.total_tasks;
     recallSum += r.summary.avg_recall * r.summary.total_tasks;
+    mrrSum += r.summary.avg_mrr * r.summary.total_tasks;
     perfect += r.summary.perfect_recall;
   }
   return {
     reposEvaluated: evaluated,
     totalTasks,
     weightedRecall: totalTasks === 0 ? 0 : recallSum / totalTasks,
+    weightedMrr: totalTasks === 0 ? 0 : mrrSum / totalTasks,
     perfectRecall: perfect,
   };
 }

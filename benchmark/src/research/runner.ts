@@ -99,12 +99,16 @@ export function scoreTask(
   // both specifiers match — that's not double-counting, it's the chunk
   // genuinely demonstrating both invariants.
   const coveredHitIdx = new Set<number>();
+  // Reciprocal-rank accumulator: 1/(1-indexed rank) for hits that matched
+  // a requirement, 0 for misses. Mean across required files = task MRR.
+  let reciprocalRankSum = 0;
 
   for (const req of required) {
     const hitIdx = hits.findIndex((h) => matches(req, h));
     if (hitIdx >= 0) {
       matched.push(req);
       coveredHitIdx.add(hitIdx);
+      reciprocalRankSum += 1 / (hitIdx + 1);
     } else {
       missed.push(req);
     }
@@ -113,6 +117,7 @@ export function scoreTask(
   return {
     task_id: task.id,
     recall: required.length === 0 ? 1 : matched.length / required.length,
+    mrr: required.length === 0 ? 1 : reciprocalRankSum / required.length,
     total_hits: hits.length,
     wasted_hits: Math.max(0, hits.length - coveredHitIdx.size),
     matched,
@@ -139,6 +144,7 @@ function summarise(scores: ResearchScore[], dataset: string): ResearchRunSummary
       total_tasks: 0,
       avg_recall: 0,
       perfect_recall: 0,
+      avg_mrr: 0,
       avg_wasted_hits: 0,
       avg_duration_ms: 0,
       scores,
@@ -152,6 +158,7 @@ function summarise(scores: ResearchScore[], dataset: string): ResearchRunSummary
     total_tasks: scores.length,
     avg_recall: avg(scores.map((s) => s.recall)),
     perfect_recall: scores.filter((s) => s.recall === 1).length,
+    avg_mrr: avg(scores.map((s) => s.mrr)),
     avg_wasted_hits: avg(scores.map((s) => s.wasted_hits)),
     avg_duration_ms: avg(scores.map((s) => s.duration_ms)),
     scores,
@@ -166,14 +173,15 @@ export function formatReport(summary: ResearchRunSummary): string {
   parts.push("");
   parts.push(`**avg recall:** ${(summary.avg_recall * 100).toFixed(1)}%`);
   parts.push(`**perfect recall:** ${summary.perfect_recall}/${summary.total_tasks}`);
+  parts.push(`**avg MRR:** ${summary.avg_mrr.toFixed(3)}`);
   parts.push(`**avg wasted hits:** ${summary.avg_wasted_hits.toFixed(1)}`);
   parts.push(`**avg duration:** ${summary.avg_duration_ms.toFixed(0)} ms`);
   parts.push("");
-  parts.push("| Task | Recall | Hits | Wasted | ms |");
-  parts.push("|---|---|---|---|---|");
+  parts.push("| Task | Recall | MRR | Hits | Wasted | ms |");
+  parts.push("|---|---|---|---|---|---|");
   for (const s of summary.scores) {
     parts.push(
-      `| ${s.task_id} | ${(s.recall * 100).toFixed(0)}% | ${s.total_hits} | ${s.wasted_hits} | ${s.duration_ms} |`
+      `| ${s.task_id} | ${(s.recall * 100).toFixed(0)}% | ${s.mrr.toFixed(3)} | ${s.total_hits} | ${s.wasted_hits} | ${s.duration_ms} |`
     );
   }
 
