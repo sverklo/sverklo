@@ -1,6 +1,7 @@
 import type { Indexer } from "../../indexer/indexer.js";
 import { runInvestigate } from "../../search/investigate.js";
 import { cosineSimilarity } from "../../indexer/embedder.js";
+import { emitForHits } from "../../memory/evidence-emit.js";
 
 // P1-15: thin natural-language router. Composes existing primitives —
 // concepts (P1-7) → investigate (P0-2) → refs / impact (existing) — to
@@ -100,7 +101,18 @@ export async function handleAsk(
     `_Mode: ${mode}. Drill in: \`sverklo_investigate query:"${query}"\` for the raw fan-out, or \`sverklo_search_iterative\` for a wider pool with refinement hints._`
   );
 
-  return lines.join("\n");
+  // Bug-bash 2 finding #3: the description promised "evidence + hits, no
+  // generated prose" but no `ev_` ids were ever emitted, so any agent
+  // that called sverklo_verify on the output got "non-string id".
+  // Emit the same per-hit evidence footer that sverklo_investigate uses.
+  const maxHits = Math.min(8, inv.hits.length);
+  const { footer } = emitForHits(
+    indexer,
+    inv.hits.slice(0, maxHits).map((h) => ({ chunk: h.chunk, file: h.file, score: h.score })),
+    "investigate",
+    Math.min(maxHits, 16)
+  );
+  return lines.join("\n") + footer;
 }
 
 async function topConcepts(

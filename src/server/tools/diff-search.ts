@@ -106,14 +106,19 @@ export async function handleDiffSearch(
     }
   }
 
-  // Run hybrid search with no scope filter (we'll filter results ourselves)
+  // Bug-bash 2 finding #4: previously over-fetched with `tokenBudget*2`
+  // and filtered after ranking, which silently emptied results when the
+  // top global hits didn't live in the changed files. Over-fetch much
+  // more aggressively (effectively the full ranked pool) so the filter
+  // can find diff-relevant matches that the global rank pushed below
+  // the cut. The packing loop below caps actual returned tokens.
   const allResults = await hybridSearch(indexer, {
     query,
-    tokenBudget: tokenBudget * 2, // grab more, we'll filter down
+    tokenBudget: Math.max(tokenBudget * 20, 50_000),
     type,
   });
 
-  // Filter to allowed paths
+  // Filter to allowed paths.
   const filtered = allResults.filter((r) => allowed.has(r.file.path));
 
   // Re-pack to fit budget

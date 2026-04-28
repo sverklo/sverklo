@@ -2049,6 +2049,49 @@ const positionalArgs = args.filter((a) => !a.startsWith("--mode=") && !a.startsW
 const hasExplicitPath = positionalArgs.length > 0 && positionalArgs[0] !== undefined;
 const isGlobalFlag = args.includes("--global");
 
+// Bug-bash 2 finding: `sverklo search "query"` silently fell through
+// to MCP-server-start with "search" treated as a project path. The
+// server then hung on stdin waiting for MCP protocol traffic. First-
+// time users would conclude sverklo was broken. Detect that case
+// up-front and emit a friendly error.
+const MCP_TOOL_VERBS = new Set([
+  "search", "lookup", "refs", "find-references", "impact", "deps", "dependencies",
+  "overview", "context", "ask", "recall", "remember", "forget", "promote", "demote",
+  "memories", "ast-grep", "ast_grep", "review-diff", "review_diff", "test-map", "test_map",
+  "diff-search", "diff_search", "status", "pin", "unpin", "clusters", "concepts",
+  "patterns", "critique", "verify", "investigate", "search-iterative", "search_iterative",
+  "grep-results", "grep_results", "head-results", "head_results",
+  "ctx-peek", "ctx_peek", "ctx-slice", "ctx_slice", "ctx-grep", "ctx_grep",
+  "ctx-stats", "ctx_stats",
+]);
+if (hasExplicitPath) {
+  const candidate = positionalArgs[0];
+  if (MCP_TOOL_VERBS.has(candidate.toLowerCase())) {
+    process.stderr.write(`Error: \`sverklo ${candidate}\` is an MCP tool, not a CLI command.\n\n`);
+    process.stderr.write(`MCP tools are called by AI agents (Claude Code, Cursor, Windsurf, Zed) —\n`);
+    process.stderr.write(`not from the command line. To use them:\n\n`);
+    process.stderr.write(`  1. cd to your project\n`);
+    process.stderr.write(`  2. sverklo init                  # set up MCP integration\n`);
+    process.stderr.write(`  3. claude                        # ask in natural language\n\n`);
+    process.stderr.write(`If you wanted to start the MCP server directly (e.g. for a custom\n`);
+    process.stderr.write(`client), run \`sverklo\` with no args from the project root.\n\n`);
+    process.stderr.write(`For CLI commands (init, audit, doctor, ui, …) run \`sverklo --help\`.\n`);
+    process.exit(2);
+  }
+  // Validate the path actually exists, otherwise the user typo'd a
+  // command verb and starting an MCP server on a non-existent dir
+  // would silently hang on stdin like the case above.
+  const { statSync: _stat } = await import("node:fs");
+  try {
+    if (!_stat(resolve(candidate)).isDirectory()) throw new Error("not a directory");
+  } catch {
+    process.stderr.write(`Error: \`${candidate}\` is not a valid project path or known command.\n\n`);
+    process.stderr.write(`Run \`sverklo --help\` to see available commands, or \`sverklo init\`\n`);
+    process.stderr.write(`from a project directory to set up MCP integration.\n`);
+    process.exit(2);
+  }
+}
+
 // Auto-download model if missing (no separate setup step needed)
 const { existsSync } = await import("node:fs");
 const { join } = await import("node:path");

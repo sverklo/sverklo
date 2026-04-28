@@ -86,16 +86,17 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
   );
 
   const orphans: { name: string; type: string; file: string; line: number }[] = [];
+  let orphanTotal = 0;
   const MAX_ORPHANS = 15;
+  // Bug-bash 2 finding: previously we early-returned at MAX_ORPHANS, so
+  // the "Suggested Next Steps" section under-reported the orphan count
+  // ("15+ potential orphans" even when the real number was 200+). Walk
+  // the full set to compute a true total, but only keep MAX_ORPHANS for
+  // the rendered list.
+  const DECORATOR_ENTRY = /@(?:Get|Post|Put|Delete|Patch|Head|Options|All|Sse|Subscribe|OnEvent|OnMessage|MessagePattern|EventPattern|Cron|Interval|Timeout|UseGuards|UseInterceptors|UsePipes|UseFilters|Render|Header|Redirect|HttpCode|Query|Param|Body|Req|Res|Next|Session|UploadedFile|HostParam|Controller|Injectable|Module|Resolver|Mutation|Subscription|ResolveField|OnModuleInit|OnModuleDestroy|BeforeInsert|AfterInsert|BeforeUpdate|AfterUpdate|BeforeRemove|AfterRemove|EventSubscriber|Entity|Column|PrimaryColumn|PrimaryGeneratedColumn|CreateDateColumn|UpdateDateColumn|OneToMany|ManyToOne|ManyToMany|OneToOne)\s*\(/;
   for (const c of namedChunks) {
-    if (orphans.length >= MAX_ORPHANS) break;
-    // Skip common exports like main, default, index, __init__
     if (["main", "default", "index", "__init__", "constructor"].includes(c.name!)) continue;
-    // Skip symbols in high-PageRank files — the file is heavily imported,
-    // so its symbols are clearly used even if we can't trace the exact reference
     if (highPrFiles.has(c.filePath)) continue;
-    // Skip methods with route/handler/listener decorators — framework entry points
-    const DECORATOR_ENTRY = /@(?:Get|Post|Put|Delete|Patch|Head|Options|All|Sse|Subscribe|OnEvent|OnMessage|MessagePattern|EventPattern|Cron|Interval|Timeout|UseGuards|UseInterceptors|UsePipes|UseFilters|Render|Header|Redirect|HttpCode|Query|Param|Body|Req|Res|Next|Session|UploadedFile|HostParam|Controller|Injectable|Module|Resolver|Mutation|Subscription|ResolveField|OnModuleInit|OnModuleDestroy|BeforeInsert|AfterInsert|BeforeUpdate|AfterUpdate|BeforeRemove|AfterRemove|EventSubscriber|Entity|Column|PrimaryColumn|PrimaryGeneratedColumn|CreateDateColumn|UpdateDateColumn|OneToMany|ManyToOne|ManyToMany|OneToOne)\s*\(/;
     if (c.content && DECORATOR_ENTRY.test(c.content)) continue;
     const fullName = c.name!;
     const dot = fullName.lastIndexOf(".");
@@ -104,12 +105,15 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
       (refsByName.get(fullName) || 0) +
       (dot >= 0 ? (refsByName.get(bareName) || 0) : 0);
     if (refs === 0) {
-      orphans.push({
-        name: fullName,
-        type: c.type,
-        file: c.filePath,
-        line: c.start_line,
-      });
+      orphanTotal++;
+      if (orphans.length < MAX_ORPHANS) {
+        orphans.push({
+          name: fullName,
+          type: c.type,
+          file: c.filePath,
+          line: c.start_line,
+        });
+      }
     }
   }
 
@@ -212,7 +216,8 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
   {
     const orphanLines: string[] = [];
     if (orphans.length > 0) {
-      orphanLines.push(`## Orphans (potential dead code)`);
+      const totalSuffix = orphanTotal > orphans.length ? ` of ${orphanTotal} total` : "";
+      orphanLines.push(`## Orphans (potential dead code)${totalSuffix ? ` — showing ${Math.min(10, orphans.length)}${totalSuffix}` : ""}`);
       orphanLines.push(`Named ${orphans[0].type}s with zero detected references. Could be dead code, public API exports, or referenced dynamically.`);
       orphanLines.push("");
       for (const o of orphans.slice(0, 10)) {
@@ -310,8 +315,8 @@ export function handleAudit(indexer: Indexer, args: Record<string, unknown>): st
     if (hubFiles[0]) {
       suggestLines.push(`- \`${hubFiles[0].path}\` is your most-imported file — changes here cascade widely`);
     }
-    if (orphans.length > 3) {
-      suggestLines.push(`- ${orphans.length}+ potential orphans detected — audit for dead code`);
+    if (orphanTotal > 3) {
+      suggestLines.push(`- ${orphanTotal} potential orphan${orphanTotal === 1 ? "" : "s"} detected — audit for dead code`);
     }
     suggestLines.push("");
     addSection(suggestLines.join("\n"));

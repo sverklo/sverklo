@@ -97,7 +97,21 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   },
   {
     name: "API token",
-    regex: /(ghp_|gho_|github_pat_|sk-|pk_live_|pk_test_|sk_live_|sk_test_|AKIA|xoxb-|xoxp-|xoxs-|npm_|pypi-|SG\.|sk-ant-)[a-zA-Z0-9_\-]{16,}/,
+    // The `npm_` prefix without a context anchor matched
+    // `npm_config_user_agent`, `npm_package_version`, etc. — every
+    // standard npm internal env-var name. v0.18.2: require the npm
+    // token format (`npm_` + 36 hex/base62 chars) and explicitly
+    // anchor to a string-literal context so config keys in package
+    // lockfiles don't trigger. Other prefixes unchanged.
+    regex: /(?:['"=]|^|\s)(ghp_|gho_|github_pat_|pk_live_|pk_test_|sk_live_|sk_test_|AKIA|xoxb-|xoxp-|xoxs-|pypi-|SG\.|sk-ant-)[a-zA-Z0-9_\-]{16,}/,
+    severity: "critical",
+  },
+  // sk- (OpenAI keys) and npm_ tokens get their own narrower regexes
+  // because their prefix is shared with non-secret strings (like
+  // `sk-learn` import statements or `npm_config_*` env vars).
+  {
+    name: "API token",
+    regex: /['"](sk-[a-zA-Z0-9]{32,}|npm_[a-zA-Z0-9]{36})['"]/,
     severity: "critical",
   },
   // Command injection — critical for Node.js

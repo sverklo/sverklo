@@ -35,8 +35,14 @@ export function handleDependencies(
   indexer: Indexer,
   args: Record<string, unknown>
 ): string {
-  const path = args.path as string;
+  if (typeof args.path !== "string" || args.path.trim() === "") {
+    return "Error: `path` is required (file path to analyze).";
+  }
+  const path = args.path;
   const direction = (args.direction as string) || "both";
+  if (direction !== "imports" && direction !== "importers" && direction !== "both") {
+    return `Error: \`direction\` must be "imports", "importers", or "both" (got ${JSON.stringify(args.direction)}).`;
+  }
   const depth = (args.depth as number) || 1;
   const tokenBudget = resolveBudget(args, "deps", null, 1500);
 

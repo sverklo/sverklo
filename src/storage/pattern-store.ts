@@ -78,6 +78,7 @@ export class PatternStore {
   private getByChunkStmt: Database.Statement;
   private getByPatternStmt: Database.Statement;
   private countStmt: Database.Statement;
+  private countByPatternStmt: Database.Statement;
 
   constructor(private db: Database.Database) {
     this.upsertStmt = db.prepare(`
@@ -107,6 +108,9 @@ export class PatternStore {
       LIMIT ?
     `);
     this.countStmt = db.prepare("SELECT COUNT(*) as c FROM pattern_edges");
+    this.countByPatternStmt = db.prepare(
+      "SELECT COUNT(*) as c FROM pattern_edges WHERE pattern = ?"
+    );
   }
 
   upsert(input: PatternEdgeInput, labeledAt = Date.now()): void {
@@ -144,5 +148,10 @@ export class PatternStore {
 
   count(): number {
     return (this.countStmt.get() as { c: number }).c;
+  }
+
+  countByPattern(pattern: string): number {
+    if (!PATTERN_SET.has(pattern)) return 0;
+    return (this.countByPatternStmt.get(pattern) as { c: number }).c;
   }
 }

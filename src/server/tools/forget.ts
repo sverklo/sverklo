@@ -24,7 +24,10 @@ export function handleForget(
   indexer: Indexer,
   args: Record<string, unknown>
 ): string {
-  const id = args.id as number;
+  if (typeof args.id !== "number" || !Number.isInteger(args.id)) {
+    return `Error: \`id\` must be an integer, got ${JSON.stringify(args.id)}.`;
+  }
+  const id = args.id;
 
   const memory = indexer.memoryStore.getById(id);
   if (!memory) {

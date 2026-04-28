@@ -26,7 +26,7 @@ Sverklo drills into your repo before the agent does — symbol graph, blast radi
 <table>
 <tr>
 <td align="center"><b>37</b><br/>MCP tools your agent uses</td>
-<td align="center"><b>&lt; 2 s</b><br/>to index a 1,700-file monorepo</td>
+<td align="center"><b>&lt; 1 s</b><br/>incremental refresh after each edit</td>
 <td align="center"><b>0 bytes</b><br/>of your code leave the machine</td>
 </tr>
 </table>
@@ -108,10 +108,16 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 | Tool | What |
 |------|------|
 | `sverklo_search` | Hybrid BM25 + ONNX vector + PageRank, fused with Reciprocal Rank Fusion |
+| `sverklo_search_iterative` | Wider candidate pool with refinement hints between rounds |
+| `sverklo_investigate` | Parallel multi-channel fan-out (FTS / vector / path / symbol) with per-channel RRF |
+| `sverklo_ask` | Natural-language router — concepts + investigate + refs in one call |
 | `sverklo_overview` | Structural codebase map ranked by PageRank importance |
 | `sverklo_lookup` | Find any function, class, or type by name (typo-tolerant) |
 | `sverklo_context` | One-call onboarding — combines overview, code, and saved memories |
 | `sverklo_ast_grep` | Structural pattern matching across the AST, not just text |
+| `sverklo_concepts` | Browse the LLM-derived concept index (themes across the codebase) |
+| `sverklo_clusters` | Semantic clusters of related symbols, computed offline |
+| `sverklo_patterns` | Query symbols tagged with a design pattern (observer, repository, validator, ...) |
 
 ### Impact — refactor without the regression
 | Tool | What |
@@ -125,8 +131,10 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 | Tool | What |
 |------|------|
 | `sverklo_review_diff` | Risk-scored review of `git diff` — touched-symbol importance x coverage x churn |
+| `sverklo_critique` | Second-pass critique of a review — what did the first read miss |
 | `sverklo_test_map` | Which tests cover which changed symbols; flag untested production changes |
 | `sverklo_diff_search` | Semantic search restricted to the changed surface of a diff |
+| `sverklo_verify` | Verify a quoted code span is still present at the cited SHA — citation gate |
 
 ### Memory — bi-temporal, git-aware, never stale
 | Tool | What |
@@ -135,13 +143,24 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 | `sverklo_recall` | Semantic search over saved memories with staleness detection |
 | `sverklo_memories` | List all memories with health metrics (still valid / stale / orphaned) |
 | `sverklo_forget` | Delete a memory |
-| `sverklo_promote` / `sverklo_demote` | Move memories between tiers (project / global / archived) |
+| `sverklo_promote` / `sverklo_demote` | Move memories between tiers (core / archive) |
+| `sverklo_pin` / `sverklo_unpin` | Pin a memory to a file path or symbol so recall surfaces it without semantic search |
+
+### Post-filter primitives — refine the last response without re-querying
+| Tool | What |
+|------|------|
+| `sverklo_grep_results` | Grep inside the previous result block instead of re-running the search |
+| `sverklo_head_results` | Take the first N hits from the previous response |
+| `sverklo_ctx_peek` | Peek at a referenced span by its handle without expanding it fully |
+| `sverklo_ctx_slice` | Slice a stored response by line range |
+| `sverklo_ctx_grep` | Grep within a stored context window |
+| `sverklo_ctx_stats` | Token-budget stats for stored response handles |
 
 ### Index health
 | Tool | What |
 |------|------|
 | `sverklo_status` | Index health check, file counts, last update |
-| `sverklo_wakeup` | Warm the index after a long pause; incremental refresh |
+| `sverklo_wakeup` | 500-token codebase summary for system prompts on agents that can't run MCP |
 
 </details>
 

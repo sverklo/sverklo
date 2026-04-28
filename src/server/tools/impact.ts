@@ -73,7 +73,11 @@ export function handleImpact(indexer: Indexer, args: Record<string, unknown>): s
   const results = indexer.symbolRefStore.getImpact(symbol, limit);
 
   const confidenceIcon = confidence === "DIRECT" ? "●" : confidence === "UNCERTAIN" ? "◐" : "○";
-  const header = `## Impact analysis: '${symbol}' ${confidenceIcon} ${confidence}\n${count} reference${count === 1 ? "" : "s"} across ${new Set(results.map(r => r.file_path)).size} file${count === 1 ? "" : "s"}\n_${confidenceNote}_\n`;
+  // Bug-bash 2 finding #2: file-count pluralization was using the
+  // reference count, so a symbol with 5 refs in 1 file printed
+  // "5 references across 1 files".
+  const fileCount = new Set(results.map((r) => r.file_path)).size;
+  const header = `## Impact analysis: '${symbol}' ${confidenceIcon} ${confidence}\n${count} reference${count === 1 ? "" : "s"} across ${fileCount} file${fileCount === 1 ? "" : "s"}\n_${confidenceNote}_\n`;
 
   // P1-11: partition plan when the caller set is too big to scan in one pass.
   // Threshold 0 disables; default comes from src/search/partition.ts.
