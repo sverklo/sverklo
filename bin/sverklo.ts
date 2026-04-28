@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
+import { resolve, basename } from "node:path";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -879,7 +879,8 @@ if (command === "history") {
     process.exit(0);
   }
 
-  const projectName = projectPath.split("/").pop() || "unknown";
+  // Issue #20: basename() is platform-aware.
+  const projectName = basename(projectPath) || "unknown";
   console.log(`\nAudit History — ${projectName}\n`);
 
   // Dimension short names for the compact display

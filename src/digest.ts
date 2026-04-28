@@ -7,6 +7,7 @@
 // already holds. The Slack/email/scheduled output paths are deferred to
 // v0.18 along with the rest of the habit-loop work.
 
+import { basename } from "node:path";
 import type { Indexer } from "./indexer/indexer.js";
 import { getAuditHistory, formatTrend } from "./utils/audit-history.js";
 
@@ -27,7 +28,8 @@ export function generateDigest(indexer: Indexer, opts: DigestOptions = {}): stri
   const bullet = (s: string) => (format === "markdown" ? `- ${s}` : `• ${s}`);
 
   // Line 1: title with project name + window
-  const projectName = indexer.rootPath.split("/").pop() || "project";
+  // Issue #20: basename() is platform-aware (rootPath uses native separators).
+  const projectName = basename(indexer.rootPath) || "project";
   lines.push(h2(`sverklo digest — ${projectName} (last ${sinceDays}d)`));
   lines.push("");
 

@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -17,7 +17,9 @@ const MAX_ENTRIES = 100;
 
 function projectDir(projectPath: string): string {
   const hash = createHash("sha256").update(projectPath).digest("hex").slice(0, 12);
-  const name = projectPath.split("/").pop() || "unknown";
+  // Issue #20: basename() is platform-aware (avoids the Windows
+  // `C:\repos\...` -> entire-path-as-name failure mode).
+  const name = basename(projectPath) || "unknown";
   return join(homedir(), ".sverklo", `${name}-${hash}`);
 }
 

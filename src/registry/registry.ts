@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 import { homedir } from "node:os";
 
 export interface RegistryEntry {
@@ -69,9 +69,10 @@ export function deriveRepoName(repoPath: string): string {
   if (!repos[base] || repos[base].path === repoPath) return base;
   // Collision: another repo already has this name with a different path.
   // Append parent directory name for disambiguation.
-  const parts = repoPath.split("/").filter(Boolean);
-  if (parts.length >= 2) {
-    const candidate = `${parts[parts.length - 2]}-${base}`;
+  // Issue #20: dirname/basename round-trip is platform-aware on Windows.
+  const parentDir = basename(dirname(repoPath));
+  if (parentDir) {
+    const candidate = `${parentDir}-${base}`;
     if (!repos[candidate] || repos[candidate].path === repoPath) return candidate;
   }
   // Last resort: append a numeric suffix

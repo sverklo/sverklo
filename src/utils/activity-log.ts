@@ -1,5 +1,5 @@
 import { appendFileSync, statSync, renameSync, readFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 
@@ -13,7 +13,8 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 function activityDir(projectPath: string): string {
   const hash = createHash("sha256").update(projectPath).digest("hex").slice(0, 12);
-  const name = projectPath.split("/").pop() || "unknown";
+  // Issue #20: basename() is platform-aware.
+  const name = basename(projectPath) || "unknown";
   return join(homedir(), ".sverklo", `${name}-${hash}`);
 }
 

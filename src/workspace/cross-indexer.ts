@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, basename } from "node:path";
 import { execSync } from "node:child_process";
 import ignore from "ignore";
 import picomatch from "picomatch";
@@ -213,7 +213,8 @@ export async function crossIndex(
 
 /** Derive a stable project ID from its path (last path segment). */
 function projectKey(project: WorkspaceProject): string {
-  return project.path.split("/").filter(Boolean).pop() ?? project.path;
+  // Issue #20: basename() is platform-aware (handles Windows backslashes).
+  return basename(project.path) || project.path;
 }
 
 // ---------------------------------------------------------------------------
