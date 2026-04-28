@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" font-family="ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', Arial">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0E0D0B"/>
+      <stop offset="1" stop-color="#161412"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E85A2A"/>
+      <stop offset="1" stop-color="#FF7A4A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Top label -->
+  <text x="600" y="78" fill="#9D9690" font-size="20" font-weight="500" letter-spacing="3" text-anchor="middle">
+    BENCH:PRIMITIVES — 60 RETRIEVAL TASKS, PEER-REVIEWABLE
+  </text>
+
+  <!-- Headline -->
+  <text x="600" y="158" fill="#F5EFE5" font-size="62" font-weight="700" text-anchor="middle" letter-spacing="-1">
+    Sverklo cuts agent context by
+  </text>
+  <text x="600" y="240" fill="url(#accent)" font-size="92" font-weight="800" text-anchor="middle" letter-spacing="-2">
+    65 % vs grep.
+  </text>
+
+  <!-- Comparison row -->
+  <g transform="translate(0, 308)">
+    <!-- Left: Tuned grep -->
+    <g transform="translate(180, 0)">
+      <text x="180" y="0" fill="#9D9690" font-size="22" font-weight="500" text-anchor="middle">tuned grep baseline</text>
+      <text x="180" y="92" fill="#F5EFE5" font-size="86" font-weight="700" text-anchor="middle" letter-spacing="-1">731</text>
+      <text x="180" y="124" fill="#9D9690" font-size="20" text-anchor="middle">input tokens / task</text>
+    </g>
+
+    <!-- Arrow -->
+    <g transform="translate(580, 60)">
+      <path d="M0 30 L40 30 L30 22 M40 30 L30 38" stroke="#E85A2A" stroke-width="3" fill="none"/>
+    </g>
+
+    <!-- Right: Sverklo -->
+    <g transform="translate(660, 0)">
+      <text x="180" y="0" fill="url(#accent)" font-size="22" font-weight="600" text-anchor="middle">sverklo</text>
+      <text x="180" y="92" fill="url(#accent)" font-size="86" font-weight="700" text-anchor="middle" letter-spacing="-1">255</text>
+      <text x="180" y="124" fill="#9D9690" font-size="20" text-anchor="middle">input tokens / task</text>
+    </g>
+  </g>
+
+  <!-- Footer -->
+  <g transform="translate(0, 540)">
+    <text x="600" y="0" fill="#F5EFE5" font-size="22" font-weight="500" text-anchor="middle">
+      The only code-intel MCP with a published benchmark and reproducible eval harness.
+    </text>
+    <text x="600" y="40" fill="#9D9690" font-size="18" text-anchor="middle">
+      sverklo.com  ·  doi.org/10.5281/zenodo.19802051  ·  npm install -g sverklo
+    </text>
+  </g>
+</svg>

@@ -2,14 +2,18 @@
   <img src="./docs/logo.svg" alt="sverklo" width="280" height="79"/>
 </p>
 
-> **Stop your AI from making things up about your codebase.**
+> **The only code-intel MCP with a published benchmark and reproducible eval harness.**
 > Local-first MCP server that gives Claude Code, Cursor, Windsurf, and Zed a real symbol graph, a blast-radius lens, and a git-pinned memory — so the agent stops guessing. MIT. Zero config. Your code never leaves the machine.
+>
+> [Paper (Zenodo, CC BY 4.0)](https://doi.org/10.5281/zenodo.19802051) · [bench:primitives](./benchmark/) — sverklo cuts agent context by **65 % vs grep** (255 vs 731 tokens per task, n=60) · [bench:swe](https://sverklo.com/blog/bench-swe-first-results/) — 38/65 perfect recall on 5 OSS repos, including the runs we lose.
 
 [![npm version](https://img.shields.io/npm/v/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![npm downloads](https://img.shields.io/npm/dw/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-E85A2A.svg)](LICENSE)
 [![Audited repos](https://img.shields.io/badge/audited_repos-47-E85A2A)](https://sverklo.com/report)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19802051.svg)](https://doi.org/10.5281/zenodo.19802051)
+
+![Sverklo cuts agent context by 65 % vs grep — bench:primitives, 60 retrieval tasks, peer-reviewable](./docs/hero-token-comparison.png)
 
 ![Sverklo demo — audit and badge](./docs/demo.gif)
 
