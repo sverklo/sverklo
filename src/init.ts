@@ -42,6 +42,78 @@ Sverklo is a sharper tool for specific kinds of work. Use it where it fits, not 
 - User instructions always override this file.
 `;
 
+function readFileMaybe(path: string): { exists: boolean; content: string; path: string } {
+  if (!existsSync(path)) return { exists: false, content: "", path };
+  return { exists: true, content: readFileSync(path, "utf-8"), path };
+}
+
+export interface AgentsFileInputs {
+  projectPath: string;
+  claudeMd: { exists: boolean; content: string; path: string };
+  agentsMd: { exists: boolean; content: string; path: string };
+  sentinel: string;
+}
+
+export type AgentsFileAction =
+  | { action: "skip"; fileName: string; path: string }
+  | { action: "append"; fileName: string; path: string; existingContent: string; note?: string }
+  | { action: "create-claude-md"; fileName: "CLAUDE.md"; path: string };
+
+/**
+ * Decide which agent-instructions file to write the prefer-sverklo
+ * snippet into. Issue #19 (RuslanZavacky): respect AGENTS.md when it
+ * exists, especially when CLAUDE.md is a redirect-only file.
+ *
+ * Rules (in order):
+ *   1. If either file already contains the sentinel, skip — idempotent.
+ *   2. If AGENTS.md exists, append to it. AGENTS.md is the universal
+ *      convention (Codex, OpenCode, Cursor, Claude Code all read it),
+ *      so writing there reaches every agent. Note in the message if
+ *      CLAUDE.md is a redirect-only stub so the user understands why
+ *      we left it alone.
+ *   3. Else if CLAUDE.md exists, append to it.
+ *   4. Else create CLAUDE.md (don't auto-create AGENTS.md — too
+ *      opinionated; we only modify files the user has already opted
+ *      into by creating).
+ */
+export function resolveAgentsFileTarget(inputs: AgentsFileInputs): AgentsFileAction {
+  const { claudeMd, agentsMd, sentinel } = inputs;
+  if (agentsMd.exists && agentsMd.content.includes(sentinel)) {
+    return { action: "skip", fileName: "AGENTS.md", path: agentsMd.path };
+  }
+  if (claudeMd.exists && claudeMd.content.includes(sentinel)) {
+    return { action: "skip", fileName: "CLAUDE.md", path: claudeMd.path };
+  }
+  if (agentsMd.exists) {
+    const note =
+      claudeMd.exists && /agents\.md/i.test(claudeMd.content)
+        ? "CLAUDE.md left alone — already delegates to AGENTS.md"
+        : claudeMd.exists
+          ? "CLAUDE.md left alone — AGENTS.md is the canonical location"
+          : undefined;
+    return {
+      action: "append",
+      fileName: "AGENTS.md",
+      path: agentsMd.path,
+      existingContent: agentsMd.content,
+      note,
+    };
+  }
+  if (claudeMd.exists) {
+    return {
+      action: "append",
+      fileName: "CLAUDE.md",
+      path: claudeMd.path,
+      existingContent: claudeMd.content,
+    };
+  }
+  return {
+    action: "create-claude-md",
+    fileName: "CLAUDE.md",
+    path: claudeMd.path,
+  };
+}
+
 /**
  * Resolve the absolute path to the sverklo binary.
  * Using a full path is more reliable than relying on PATH inheritance
@@ -141,22 +213,35 @@ export async function initProject(
   console.log("Initializing Sverklo in", projectPath);
   console.log("");
 
-  // 1. Add CLAUDE.md snippet
-  const claudeMdPath = join(projectPath, "CLAUDE.md");
+  // 1. Add prefer-sverklo snippet to AGENTS.md / CLAUDE.md (issue #19).
+  //    AGENTS.md is the universal convention (Codex, OpenCode, Cursor,
+  //    Claude Code all read it); CLAUDE.md is Claude-Code-specific.
+  //    Many projects keep CLAUDE.md as a one-line redirect to AGENTS.md
+  //    so the universal instructions reach every agent.
+  const agentsTarget = resolveAgentsFileTarget({
+    projectPath,
+    claudeMd: readFileMaybe(join(projectPath, "CLAUDE.md")),
+    agentsMd: readFileMaybe(join(projectPath, "AGENTS.md")),
+    sentinel: "sverklo_search",
+  });
   let claudeMdCreatedByInit = false;
-  if (existsSync(claudeMdPath)) {
-    const content = readFileSync(claudeMdPath, "utf-8");
-    if (content.includes("sverklo_search")) {
-      console.log("  CLAUDE.md — already has sverklo instructions, skipping");
-    } else {
-      writeFileSync(claudeMdPath, content + "\n" + CLAUDE_MD_SNIPPET);
-      console.log("  CLAUDE.md — appended sverklo instructions");
-    }
-  } else {
-    writeFileSync(claudeMdPath, CLAUDE_MD_SNIPPET.trim() + "\n");
-    console.log("  CLAUDE.md — created with sverklo instructions");
-    claudeMdCreatedByInit = true;
+  switch (agentsTarget.action) {
+    case "skip":
+      console.log(`  ${agentsTarget.fileName} — already has sverklo instructions, skipping`);
+      break;
+    case "append":
+      writeFileSync(agentsTarget.path, agentsTarget.existingContent + "\n" + CLAUDE_MD_SNIPPET);
+      console.log(`  ${agentsTarget.fileName} — appended sverklo instructions${agentsTarget.note ? ` (${agentsTarget.note})` : ""}`);
+      break;
+    case "create-claude-md":
+      writeFileSync(agentsTarget.path, CLAUDE_MD_SNIPPET.trim() + "\n");
+      console.log("  CLAUDE.md — created with sverklo instructions");
+      claudeMdCreatedByInit = true;
+      break;
   }
+  // Carry the legacy variable name forward for the rest of initProject —
+  // ingestion logic in step 5 keys off "did init create CLAUDE.md".
+  const claudeMdPath = join(projectPath, "CLAUDE.md");
 
   // 2. MCP server config — Claude Code reads .mcp.json AT PROJECT ROOT for project-scoped servers.
   //    .claude/mcp.json is NOT read by Claude Code (verified Apr 2026).

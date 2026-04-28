@@ -252,6 +252,52 @@ export function runDoctor(projectPath: string): void {
     });
   }
 
+  // 5.4. AGENTS.md / CLAUDE.md prefer-sverklo block — issue #19.
+  // Catch the drift cases: snippet in CLAUDE.md when CLAUDE.md
+  // delegates to AGENTS.md (so the universal agent never sees it),
+  // or both files exist but neither has the snippet.
+  const agentsFilePath = join(projectPath, "AGENTS.md");
+  const claudeFilePath = join(projectPath, "CLAUDE.md");
+  const agentsExists = existsSync(agentsFilePath);
+  const claudeExists = existsSync(claudeFilePath);
+  if (agentsExists || claudeExists) {
+    const agentsContent = agentsExists ? readFileSync(agentsFilePath, "utf-8") : "";
+    const claudeContent = claudeExists ? readFileSync(claudeFilePath, "utf-8") : "";
+    const agentsHasSnippet = agentsContent.includes("sverklo_search");
+    const claudeHasSnippet = claudeContent.includes("sverklo_search");
+    const claudeDelegatesToAgents = claudeExists && /agents\.md/i.test(claudeContent);
+
+    if (agentsExists && claudeExists && claudeHasSnippet && !agentsHasSnippet && claudeDelegatesToAgents) {
+      // Worst case: snippet went to CLAUDE.md but CLAUDE.md just
+      // points at AGENTS.md, so non-Claude agents (Codex, OpenCode)
+      // never see the prefer-sverklo block.
+      checks.push({
+        name: "prefer-sverklo instructions",
+        status: "warn",
+        message: "snippet is in CLAUDE.md, but CLAUDE.md delegates to AGENTS.md — non-Claude agents won't see it",
+        fix: "move the ## Sverklo block from CLAUDE.md into AGENTS.md, or re-run `sverklo init` after deleting it from CLAUDE.md",
+      });
+    } else if (agentsHasSnippet || claudeHasSnippet) {
+      const where = agentsHasSnippet && claudeHasSnippet
+        ? "AGENTS.md and CLAUDE.md"
+        : agentsHasSnippet
+          ? "AGENTS.md"
+          : "CLAUDE.md";
+      checks.push({
+        name: "prefer-sverklo instructions",
+        status: "ok",
+        message: `installed in ${where}`,
+      });
+    } else {
+      checks.push({
+        name: "prefer-sverklo instructions",
+        status: "warn",
+        message: `${agentsExists ? "AGENTS.md" : "CLAUDE.md"} exists but has no sverklo block`,
+        fix: "sverklo init",
+      });
+    }
+  }
+
   // 5.5. Memory journal (JSONL mirror)
   // Issue #7: the JSONL memory mirror is silently advisory — if it's
   // broken, users never know. Surface it here so `sverklo doctor` is
