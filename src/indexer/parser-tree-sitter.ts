@@ -36,6 +36,7 @@ const LANG_MAP: Record<string, { wasm: string; queryKey: string }> = {
   python:     { wasm: "tree-sitter-python.wasm",     queryKey: "python" },
   go:         { wasm: "tree-sitter-go.wasm",         queryKey: "go" },
   rust:       { wasm: "tree-sitter-rust.wasm",       queryKey: "rust" },
+  csharp:     { wasm: "tree-sitter-c_sharp.wasm",  queryKey: "csharp" },
 };
 
 // Symbol-extraction queries per language family. The capture names map
@@ -68,6 +69,16 @@ const QUERIES: Record<string, string> = {
     (impl_item type: (type_identifier) @impl.name) @impl.body
     (struct_item name: (type_identifier) @class.name) @class.body
     (trait_item name: (type_identifier) @interface.name) @interface.body
+  `,
+  csharp: `
+    (class_declaration name: (identifier) @class.name) @class.body
+    (interface_declaration name: (identifier) @interface.name) @interface.body
+    (struct_declaration name: (identifier) @class.name) @class.body
+    (record_declaration name: (identifier) @class.name) @class.body
+    (enum_declaration name: (identifier) @type.name) @type.body
+    (method_declaration name: (identifier) @method.name) @method.body
+    (constructor_declaration name: (identifier) @method.name) @method.body
+    (namespace_declaration name: (identifier) @module.name) @module.body
   `,
 };
 
@@ -212,6 +223,13 @@ const NODE_TO_CHUNK: Record<string, ChunkType> = {
   trait_item: "interface",
   impl_item: "class",
   type_declaration: "type",
+  // C# (tree-sitter-c-sharp)
+  struct_declaration: "class",
+  enum_declaration: "type",
+  record_declaration: "class",
+  constructor_declaration: "method",
+  namespace_declaration: "module",
+  property_declaration: "method",
 };
 
 function walkSymbols(root: Node, source: string): ParsedChunk[] {
@@ -257,6 +275,17 @@ function extractImports(root: Node, _language: string): ImportRef[] {
           source: m[1],
           names: [],
           isRelative: m[1].startsWith(".") || m[1].startsWith("/"),
+        });
+      }
+    }
+    // C# using directives
+    if (node.type === "using_directive") {
+      const m = /using\s+(?:static\s+)?([^;]+);/.exec(node.text);
+      if (m) {
+        out.push({
+          source: m[1].trim(),
+          names: [],
+          isRelative: false,
         });
       }
     }

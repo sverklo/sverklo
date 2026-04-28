@@ -186,6 +186,7 @@ export const SUPPORTED_LANGUAGES: Record<string, string[]> = {
   zig: [".zig"],
   haskell: [".hs", ".lhs"],
   clojure: [".clj", ".cljs", ".cljc", ".edn"],
+  csharp: [".cs"],
   ocaml: [".ml", ".mli"],
   vue: [".vue"],
   markdown: [".md", ".markdown", ".mdx"],
