@@ -23,3 +23,10 @@ sverklo-arch.html
 sverklo-graph.html
 sverklo-obsidian.md
 sverklo-wiki/
+
+# intellij
+.idea
+
+# claude code
+.claude
+CLAUDE.md

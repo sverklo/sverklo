@@ -694,13 +694,18 @@ function parseCSharp(content: string, lines: string[]): ParseResult {
       i = endLine;
     }
     // Methods and constructors: access modifiers + return type + name(
-    else if (/(?:public|private|protected|internal|static|abstract|virtual|override|sealed|async|new|extern)\s/.test(trimmed) &&
-             /(\w+)\s*\(/.test(trimmed) && !trimmed.includes("=") && trimmed.includes("{") || trimmed.trimEnd().endsWith(")")) {
-      const name = trimmed.match(/(\w+)\s*\(/)?.[1] || null;
-      if (name && !["if", "for", "while", "switch", "catch", "using", "lock"].includes(name)) {
-        const endLine = findBraceEnd(lines, i);
-        chunks.push(extractChunk("method", name, lines, i, endLine));
-        i = endLine;
+    else {
+      const hasModifier = /\b(?:public|private|protected|internal|static|abstract|virtual|override|sealed|async|new|extern)\s/.test(trimmed);
+      const hasCall = /(\w+)\s*\(/.test(trimmed);
+      const hasAssign = trimmed.includes("=");
+      const opensBody = trimmed.includes("{") || trimmed.trimEnd().endsWith(")");
+      if (hasModifier && hasCall && !hasAssign && opensBody) {
+        const name = trimmed.match(/(\w+)\s*\(/)?.[1] || null;
+        if (name && !["if", "for", "while", "switch", "catch", "using", "lock"].includes(name)) {
+          const endLine = findBraceEnd(lines, i);
+          chunks.push(extractChunk("method", name, lines, i, endLine));
+          i = endLine;
+        }
       }
     }
   }

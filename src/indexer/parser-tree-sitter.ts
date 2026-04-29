@@ -36,7 +36,7 @@ const LANG_MAP: Record<string, { wasm: string; queryKey: string }> = {
   python:     { wasm: "tree-sitter-python.wasm",     queryKey: "python" },
   go:         { wasm: "tree-sitter-go.wasm",         queryKey: "go" },
   rust:       { wasm: "tree-sitter-rust.wasm",       queryKey: "rust" },
-  csharp:     { wasm: "tree-sitter-c_sharp.wasm",  queryKey: "csharp" },
+  csharp:     { wasm: "tree-sitter-c_sharp.wasm",    queryKey: "csharp" },
 };
 
 // Symbol-extraction queries per language family. The capture names map
