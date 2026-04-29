@@ -24,6 +24,12 @@ sverklo-graph.html
 sverklo-obsidian.md
 sverklo-wiki/
 
+# intellij
+.idea
+
+# claude code
+.claude
+CLAUDE.md
 # Local-only growth/launch kit — Reddit drafts, unsent DMs, internal
 # playbook. Stays on the maintainer's machine; not for the public repo.
 launch-kit/

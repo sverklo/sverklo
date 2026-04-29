@@ -54,6 +54,11 @@ export const GRAMMARS: GrammarSpec[] = [
     wasm: "tree-sitter-rust.wasm",
     url: "https://cdn.jsdelivr.net/npm/tree-sitter-rust@0.23.2/tree-sitter-rust.wasm",
   },
+  {
+    lang: "csharp",
+    wasm: "tree-sitter-c_sharp.wasm",
+    url: "https://cdn.jsdelivr.net/npm/tree-sitter-c-sharp@0.23.5/tree-sitter-c_sharp.wasm",
+  },
 ];
 
 export function grammarsDir(): string {
