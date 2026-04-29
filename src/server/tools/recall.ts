@@ -265,6 +265,17 @@ export async function handleRecall(
   };
 
   const projectChunks = results.map(({ memory }) => fmt(memory, false));
+
+  // Workspace-only result set — lead with a header so the agent doesn't
+  // mistake cross-repo memories for project-local ones.
+  if (results.length === 0 && workspaceResults.length > 0) {
+    const wsChunks = workspaceResults.map(({ memory }) => fmt(memory, true));
+    return (
+      "_No project memories found for this query. Showing workspace (cross-repo) matches:_\n\n" +
+      wsChunks.join("\n")
+    );
+  }
+
   if (workspaceResults.length === 0) return projectChunks.join("\n");
 
   const wsChunks = workspaceResults.map(({ memory }) => fmt(memory, true));

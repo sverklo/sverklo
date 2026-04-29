@@ -565,7 +565,10 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         name === "sverklo_impact" ||
         name === "sverklo_diff_search" ||
         name === "sverklo_ast_grep" ||
-        name === "sverklo_investigate"
+        name === "sverklo_investigate" ||
+        name === "sverklo_search_iterative" ||
+        name === "sverklo_context" ||
+        name === "sverklo_ask"
       ) {
         const id = responseStore.set(name, result);
         // Persistent handle (P1-8) — survives across MCP sessions.
@@ -1022,7 +1025,10 @@ export async function startGlobalMcpServer(): Promise<void> {
         name === "sverklo_impact" ||
         name === "sverklo_diff_search" ||
         name === "sverklo_ast_grep" ||
-        name === "sverklo_investigate"
+        name === "sverklo_investigate" ||
+        name === "sverklo_search_iterative" ||
+        name === "sverklo_context" ||
+        name === "sverklo_ask"
       ) {
         const id = responseStore.set(name, result);
         // Persistent handle (P1-8) — survives across MCP sessions.

@@ -194,20 +194,27 @@ export function handleReviewDiff(
   // ─── 6. For added symbols, check for similar existing symbols ───
   const duplicateCandidates: { added: SymbolChange; similar: { name: string; file: string; line: number }[] }[] = [];
   if (includeSimilarity) {
+    // Bug-bash 2 finding #1: the original filter
+    //   `fileCache.get(m.file_id ? "" : "")?.path !== added.file`
+    // was a no-op (the conditional always evaluated to ""). The redundant
+    // string-equality filter on line 210 saved the feature from being
+    // completely broken. Replace with an id-based exclusion (drop
+    // matches in the same file as the added symbol) using a parallel
+    // id→path map computed once.
+    const fileById = new Map<number, string>();
+    for (const f of fileCache.values()) fileById.set(f.id, f.path);
+
     for (const added of addedSymbols.slice(0, 10)) {
+      const addedFileId = fileCache.get(added.file)?.id;
       // Find existing chunks with the same exact name (strong signal of duplication)
       const matches = indexer.chunkStore.getByName(added.name, 5);
       const similar = matches
-        .filter((m) => m.name === added.name && (fileCache.get(m.file_id ? "" : "")?.path !== added.file))
-        .map((m) => {
-          const fileEntry = Array.from(fileCache.values()).find((f) => f.id === m.file_id);
-          return {
-            name: m.name!,
-            file: fileEntry?.path || "unknown",
-            line: m.start_line,
-          };
-        })
-        .filter((s) => s.file !== added.file);
+        .filter((m) => m.name === added.name && m.file_id !== addedFileId)
+        .map((m) => ({
+          name: m.name!,
+          file: fileById.get(m.file_id) ?? "unknown",
+          line: m.start_line,
+        }));
       if (similar.length > 0) {
         duplicateCandidates.push({ added, similar });
       }

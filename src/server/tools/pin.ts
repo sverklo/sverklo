@@ -44,8 +44,14 @@ export function handlePin(
   indexer: Indexer,
   args: Record<string, unknown>
 ): string {
-  const memoryId = args.memory_id as number;
-  const target = args.target as string;
+  if (typeof args.memory_id !== "number" || !Number.isInteger(args.memory_id)) {
+    return `Error: \`memory_id\` must be an integer, got ${JSON.stringify(args.memory_id)}.`;
+  }
+  if (typeof args.target !== "string" || args.target.trim() === "") {
+    return `Error: \`target\` must be a non-empty string (file path or symbol name).`;
+  }
+  const memoryId = args.memory_id;
+  const target = args.target;
 
   const memory = indexer.memoryStore.getById(memoryId);
   if (!memory) {
@@ -67,8 +73,14 @@ export function handleUnpin(
   indexer: Indexer,
   args: Record<string, unknown>
 ): string {
-  const memoryId = args.memory_id as number;
-  const target = args.target as string;
+  if (typeof args.memory_id !== "number" || !Number.isInteger(args.memory_id)) {
+    return `Error: \`memory_id\` must be an integer, got ${JSON.stringify(args.memory_id)}.`;
+  }
+  if (typeof args.target !== "string" || args.target.trim() === "") {
+    return `Error: \`target\` must be a non-empty string (file path or symbol name).`;
+  }
+  const memoryId = args.memory_id;
+  const target = args.target;
 
   const memory = indexer.memoryStore.getById(memoryId);
   if (!memory) {

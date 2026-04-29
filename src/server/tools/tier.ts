@@ -53,7 +53,10 @@ export function handleDemote(indexer: Indexer, args: Record<string, unknown>): s
 }
 
 function setTier(indexer: Indexer, args: Record<string, unknown>, tier: MemoryTier): string {
-  const id = args.id as number;
+  if (typeof args.id !== "number" || !Number.isInteger(args.id)) {
+    return `Error: \`id\` must be an integer, got ${JSON.stringify(args.id)}.`;
+  }
+  const id = args.id;
   const mem = indexer.memoryStore.getById(id);
   if (!mem) return `Memory #${id} not found.`;
 

@@ -65,14 +65,15 @@ export function handlePatterns(indexer: Indexer, args: Record<string, unknown>):
 }
 
 function formatTaxonomyOverview(indexer: Indexer): string {
-  // Per-pattern counts via repeated lookups — taxonomy is small (~30).
+  // Per-pattern counts via SQL COUNT — taxonomy is small (~30) so this is
+  // 30 cheap aggregate queries instead of 30 joined-row materializations.
   const parts: string[] = ["## Pattern taxonomy", ""];
   let total = 0;
   for (const p of PATTERN_TAXONOMY) {
-    const rows = indexer.patternStore.getByPattern(p, 1000);
-    if (rows.length === 0) continue;
-    total += rows.length;
-    parts.push(`- \`${p}\` — ${rows.length} symbol(s)`);
+    const n = indexer.patternStore.countByPattern(p);
+    if (n === 0) continue;
+    total += n;
+    parts.push(`- \`${p}\` — ${n} symbol(s)`);
   }
   if (total === 0) {
     return "Pattern index is empty. Run `sverklo enrich-patterns`.";
