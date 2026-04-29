@@ -2,6 +2,10 @@
   <img src="./docs/logo.svg" alt="sverklo" width="280" height="79"/>
 </p>
 
+<p align="left">
+  🇬🇧 <b>English</b> · 🇨🇳 <a href="./README-zh-CN.md">中文</a>
+</p>
+
 > **The only code-intel MCP with a published benchmark and reproducible eval harness.**
 > Local-first MCP server that gives Claude Code, Cursor, Windsurf, and Zed a real symbol graph, a blast-radius lens, and a git-pinned memory — so the agent stops guessing. MIT. Zero config. Your code never leaves the machine.
 >
@@ -268,6 +272,18 @@ Real measurements on real codebases. Reproducible via `npm run bench` ([methodol
 - **Search p95 stays under 26 ms** even on a 4k-file monorepo
 - **Impact analysis is sub-millisecond** — indexed SQL join, not a string scan
 - **11 languages:** TS, JS, Vue, Python, Go, Rust, Java, C, C++, Ruby, PHP
+
+### Retrieval benchmark — bench:primitives
+
+Hybrid retrieval F1 vs grep baselines on a 60-task hand-verified evaluation across two OSS codebases. Public report at **[sverklo.com/bench/](https://sverklo.com/bench/)** — including the slice where sverklo *loses* (P5 dead-code detection, F1 = 0.02).
+
+| baseline | F1 | input tokens | tool calls |
+|---|---:|---:|---:|
+| naive-grep | 0.35 | 15,814 | 7.6 |
+| smart-grep (tuned) | 0.67 | 731 | 11.8 |
+| **sverklo** | 0.58 | **255** | **1.0** |
+
+A tuned grep beats sverklo on F1. Sverklo wins decisively on token economy (62× fewer than naive grep, 2.9× fewer than tuned grep) and tool-call count, which is the load-bearing axis for AI agents with bounded context windows. Reproduce with `npm run bench:primitives`.
 
 ---
 
