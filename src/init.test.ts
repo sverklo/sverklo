@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAgentsFileTarget } from "./init.js";
+import { resolveAgentsFileTarget, resolveCopilotInstructionsTarget } from "./init.js";
 
 const SENTINEL = "sverklo_search";
 
@@ -139,5 +139,116 @@ describe("resolveAgentsFileTarget — issue #19", () => {
       if (result.action !== "append") continue;
       expect(result.note, `variant=${variant}`).toMatch(/delegates to AGENTS\.md/);
     }
+  });
+});
+
+describe("resolveCopilotInstructionsTarget — issue #24", () => {
+  const COPILOT_PATH = "/p/.github/copilot-instructions.md";
+
+  it("skips silently when no signal is present (no .github/, no .vscode/, no extension)", () => {
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(COPILOT_PATH),
+      githubDirExists: false,
+      vscodeDirExists: false,
+      copilotExtensionDetected: false,
+      sentinel: SENTINEL,
+    });
+    expect(result).toEqual({ action: "skip-no-signal" });
+  });
+
+  it("creates the file when .github/ exists but the file does not", () => {
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(COPILOT_PATH),
+      githubDirExists: true,
+      vscodeDirExists: false,
+      copilotExtensionDetected: false,
+      sentinel: SENTINEL,
+    });
+    expect(result).toEqual({ action: "create", path: COPILOT_PATH });
+  });
+
+  it("creates the file when only .vscode/ exists (VS Code is THE Copilot host)", () => {
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(COPILOT_PATH),
+      githubDirExists: false,
+      vscodeDirExists: true,
+      copilotExtensionDetected: false,
+      sentinel: SENTINEL,
+    });
+    expect(result.action).toBe("create");
+  });
+
+  it("creates the file when only the Copilot extension is detected", () => {
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(COPILOT_PATH),
+      githubDirExists: false,
+      vscodeDirExists: false,
+      copilotExtensionDetected: true,
+      sentinel: SENTINEL,
+    });
+    expect(result.action).toBe("create");
+  });
+
+  it("appends when the file exists without the sverklo sentinel", () => {
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(COPILOT_PATH, "# project conventions\nUse 2-space indent.\n"),
+      githubDirExists: true,
+      vscodeDirExists: true,
+      copilotExtensionDetected: true,
+      sentinel: SENTINEL,
+    });
+    expect(result.action).toBe("append");
+    if (result.action !== "append") return;
+    expect(result.existingContent).toContain("project conventions");
+    expect(result.path).toBe(COPILOT_PATH);
+  });
+
+  it("skips when the file already contains the literal sentinel", () => {
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(
+        COPILOT_PATH,
+        "# project rules\nWhen searching, prefer sverklo_search over grep.\n"
+      ),
+      githubDirExists: true,
+      vscodeDirExists: false,
+      copilotExtensionDetected: false,
+      sentinel: SENTINEL,
+    });
+    expect(result).toEqual({ action: "skip-already-present", path: COPILOT_PATH });
+  });
+
+  it("skips when the file has the heading sentinel even after the literal was hand-removed (Finding 7)", () => {
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(
+        COPILOT_PATH,
+        "# project rules\n\n## Sverklo — Code Intelligence\n\n(user removed the body)\n"
+      ),
+      githubDirExists: true,
+      vscodeDirExists: false,
+      copilotExtensionDetected: false,
+      sentinel: SENTINEL,
+    });
+    expect(result.action).toBe("skip-already-present");
+  });
+
+  it("treats existing-without-sentinel as append even when no other signal exists", () => {
+    // If the user already created copilot-instructions.md, that itself
+    // is a signal that they use Copilot — append regardless of dir checks.
+    const result = resolveCopilotInstructionsTarget({
+      projectPath: "/p",
+      copilotFile: file(COPILOT_PATH, "# my rules\n"),
+      githubDirExists: false,
+      vscodeDirExists: false,
+      copilotExtensionDetected: false,
+      sentinel: SENTINEL,
+    });
+    expect(result.action).toBe("append");
   });
 });

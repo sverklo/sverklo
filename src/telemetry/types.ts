@@ -26,6 +26,7 @@ export type EventType =
   | "init.detected.vscode"
   | "init.detected.jetbrains"
   | "init.detected.antigravity"
+  | "init.detected.copilot"
   | "doctor.run"
   | "doctor.issue"
   | "index.cold_start"

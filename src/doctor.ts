@@ -298,6 +298,58 @@ export function runDoctor(projectPath: string): void {
     }
   }
 
+  // 5.45. GitHub Copilot prefer-sverklo block — issue #24.
+  //       Two failure modes: (a) file written but useInstructionFiles
+  //       is off (silent no-op — Copilot ignores the file), (b) file
+  //       missing entirely while VS Code/.github signals say the user
+  //       likely uses Copilot. Both result in Copilot keeping its grep
+  //       habits while sverklo gets the blame.
+  const copilotPath = join(projectPath, ".github", "copilot-instructions.md");
+  const copilotExists = existsSync(copilotPath);
+  if (copilotExists) {
+    const copilotContent = readFileSync(copilotPath, "utf-8");
+    const hasSnippet = copilotContent.includes("sverklo_search");
+    if (hasSnippet) {
+      checks.push({
+        name: "Copilot prefer-sverklo",
+        status: "ok",
+        message: "installed in .github/copilot-instructions.md",
+      });
+      // Read-only check on .vscode/settings.json — useInstructionFiles
+      // controls whether Copilot actually reads the file. Default
+      // varies across VS Code versions; if it's explicitly false,
+      // the file is dead weight. Don't auto-fix — settings.json is
+      // user territory.
+      const vscodeSettingsPath = join(projectPath, ".vscode", "settings.json");
+      if (existsSync(vscodeSettingsPath)) {
+        try {
+          const vsSettings = JSON.parse(readFileSync(vscodeSettingsPath, "utf-8")) as Record<
+            string,
+            unknown
+          >;
+          const KEY = "github.copilot.chat.codeGeneration.useInstructionFiles";
+          if (vsSettings[KEY] === false) {
+            checks.push({
+              name: "Copilot useInstructionFiles",
+              status: "warn",
+              message: `${KEY} is false — Copilot will ignore .github/copilot-instructions.md`,
+              fix: `set "${KEY}": true in .vscode/settings.json (or remove the key)`,
+            });
+          }
+        } catch {
+          // Invalid JSON — already surfaced elsewhere if needed.
+        }
+      }
+    } else {
+      checks.push({
+        name: "Copilot prefer-sverklo",
+        status: "warn",
+        message: ".github/copilot-instructions.md exists but has no sverklo block",
+        fix: "sverklo init",
+      });
+    }
+  }
+
   // 5.5. Memory journal (JSONL mirror)
   // Issue #7: the JSONL memory mirror is silently advisory — if it's
   // broken, users never know. Surface it here so `sverklo doctor` is

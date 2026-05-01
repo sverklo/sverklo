@@ -8,7 +8,12 @@ import { track, hasBeenNudged, markNudged } from "./telemetry/index.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const CLAUDE_MD_SNIPPET = `
+/**
+ * Shared prefer-sverklo instructions written to CLAUDE.md, AGENTS.md,
+ * and .github/copilot-instructions.md. Single source of truth — divergence
+ * across agents would silently desync guidance.
+ */
+export const SVERKLO_SNIPPET = `
 ## Sverklo — Code Intelligence
 
 Sverklo is a sharper tool for specific kinds of work. Use it where it fits, not as a blanket replacement for Grep/Read.
@@ -166,6 +171,85 @@ export function resolveAgentsFileTarget(inputs: AgentsFileInputs): AgentsFileAct
   };
 }
 
+export interface CopilotInstructionsInputs {
+  projectPath: string;
+  copilotFile: { exists: boolean; content: string; path: string };
+  githubDirExists: boolean;
+  vscodeDirExists: boolean;
+  copilotExtensionDetected: boolean;
+  sentinel: string;
+}
+
+export type CopilotInstructionsAction =
+  | { action: "skip-no-signal" }
+  | { action: "skip-already-present"; path: string }
+  | { action: "append"; path: string; existingContent: string }
+  | { action: "create"; path: string };
+
+/**
+ * Decide whether to write `.github/copilot-instructions.md` and how.
+ *
+ * Copilot reads this file as a preamble appended to every Chat prompt
+ * (per github.com/copilot docs, custom-instructions). Without it, even
+ * with sverklo's MCP server wired up, Copilot keeps grep-ing because
+ * nothing tells it to prefer sverklo's tools.
+ *
+ * Signals (any one is enough — Copilot has no project-level marker file):
+ *   - `.github/copilot-instructions.md` already exists (definite — append/skip)
+ *   - `.github/` dir exists (project uses GitHub conventions)
+ *   - `.vscode/` dir exists (VS Code is THE Copilot host)
+ *   - `~/.vscode/extensions/github.copilot*` present (Copilot installed)
+ *
+ * If none of those, skip silently — don't create `.github/` or
+ * `.vscode/` for projects that have nothing to do with either. Match
+ * resolveAgentsFileTarget's "we only modify files the user has opted
+ * into" philosophy.
+ */
+export function resolveCopilotInstructionsTarget(
+  inputs: CopilotInstructionsInputs
+): CopilotInstructionsAction {
+  const { copilotFile, githubDirExists, vscodeDirExists, copilotExtensionDetected, sentinel } =
+    inputs;
+
+  if (copilotFile.exists && snippetAlreadyPresent(copilotFile.content, sentinel)) {
+    return { action: "skip-already-present", path: copilotFile.path };
+  }
+  if (copilotFile.exists) {
+    return { action: "append", path: copilotFile.path, existingContent: copilotFile.content };
+  }
+
+  const hasSignal = githubDirExists || vscodeDirExists || copilotExtensionDetected;
+  if (!hasSignal) {
+    return { action: "skip-no-signal" };
+  }
+
+  return { action: "create", path: copilotFile.path };
+}
+
+/**
+ * Best-effort scan for the GitHub Copilot VS Code extension. Returns
+ * true if any directory under ~/.vscode/extensions/ or
+ * ~/.vscode-insiders/extensions/ matches `github.copilot*`. Silent on
+ * failure (unreadable home, no extensions dir) — never throws.
+ */
+export function detectCopilotExtension(): boolean {
+  const candidates = [
+    join(homedir(), ".vscode", "extensions"),
+    join(homedir(), ".vscode-insiders", "extensions"),
+    join(homedir(), ".vscode-server", "extensions"),
+  ];
+  for (const dir of candidates) {
+    try {
+      if (!existsSync(dir)) continue;
+      const entries = readdirSync(dir);
+      if (entries.some((e) => /^github\.copilot/i.test(e))) return true;
+    } catch {
+      // unreadable — fall through
+    }
+  }
+  return false;
+}
+
 /**
  * Resolve the absolute path to the sverklo binary.
  * Using a full path is more reliable than relying on PATH inheritance
@@ -285,11 +369,11 @@ export async function initProject(
       console.log(`  ${agentsTarget.fileName} — already has sverklo instructions, skipping`);
       break;
     case "append":
-      writeFileSync(agentsTarget.path, agentsTarget.existingContent + "\n" + CLAUDE_MD_SNIPPET);
+      writeFileSync(agentsTarget.path, agentsTarget.existingContent + "\n" + SVERKLO_SNIPPET);
       console.log(`  ${agentsTarget.fileName} — appended sverklo instructions${agentsTarget.note ? ` (${agentsTarget.note})` : ""}`);
       break;
     case "create-claude-md":
-      writeFileSync(agentsTarget.path, CLAUDE_MD_SNIPPET.trim() + "\n");
+      writeFileSync(agentsTarget.path, SVERKLO_SNIPPET.trim() + "\n");
       console.log("  CLAUDE.md — created with sverklo instructions");
       claudeMdCreatedByInit = true;
       break;
@@ -297,6 +381,85 @@ export async function initProject(
   // Carry the legacy variable name forward for the rest of initProject —
   // ingestion logic in step 5 keys off "did init create CLAUDE.md".
   const claudeMdPath = join(projectPath, "CLAUDE.md");
+
+  // 1.5. GitHub Copilot — issue #24. Copilot Chat reads
+  //      `.github/copilot-instructions.md` as a preamble for every prompt.
+  //      Without it, even with `.vscode/mcp.json` wired up, Copilot
+  //      keeps grep-ing because nothing tells it to prefer sverklo.
+  //      MCP integration is already covered by VS Code's `.vscode/mcp.json`
+  //      below, so this block is purely about behavioral steering.
+  const copilotInstructionsPath = join(projectPath, ".github", "copilot-instructions.md");
+  const copilotExtensionDetected = detectCopilotExtension();
+  const copilotTarget = resolveCopilotInstructionsTarget({
+    projectPath,
+    copilotFile: readFileMaybe(copilotInstructionsPath),
+    githubDirExists: existsSync(join(projectPath, ".github")),
+    vscodeDirExists: existsSync(join(projectPath, ".vscode")),
+    copilotExtensionDetected,
+    sentinel: "sverklo_search",
+  });
+  switch (copilotTarget.action) {
+    case "skip-no-signal":
+      // Silent — most projects don't use GitHub Copilot, no need for noise.
+      break;
+    case "skip-already-present":
+      console.log("  .github/copilot-instructions.md — already has sverklo instructions, skipping");
+      break;
+    case "append":
+      writeFileSync(copilotTarget.path, copilotTarget.existingContent + "\n" + SVERKLO_SNIPPET);
+      console.log("  .github/copilot-instructions.md — appended sverklo instructions");
+      break;
+    case "create": {
+      // Capture trigger reason BEFORE mkdirSync — otherwise `.github/`
+      // would always show as the reason since mkdirSync creates it.
+      const why = copilotExtensionDetected
+        ? "Copilot extension detected"
+        : existsSync(join(projectPath, ".github"))
+          ? ".github/ exists"
+          : ".vscode/ exists";
+      mkdirSync(dirname(copilotTarget.path), { recursive: true });
+      writeFileSync(copilotTarget.path, SVERKLO_SNIPPET.trim() + "\n");
+      console.log(`  .github/copilot-instructions.md — created with sverklo instructions (${why})`);
+      break;
+    }
+  }
+
+  // 1.6. VS Code settings.json — flip on `useInstructionFiles` so
+  //      Copilot actually reads `.github/copilot-instructions.md`.
+  //      The default varies across VS Code versions, and a Copilot user
+  //      with the file but the setting off gets a silent no-op (sverklo
+  //      took the blame). Only touch this key — preserve everything else.
+  if (
+    copilotTarget.action === "create" ||
+    copilotTarget.action === "append" ||
+    copilotTarget.action === "skip-already-present"
+  ) {
+    const vscodeDir = join(projectPath, ".vscode");
+    const vscodeSettingsPath = join(vscodeDir, "settings.json");
+    if (existsSync(vscodeDir)) {
+      type VsCodeSettings = Record<string, unknown>;
+      let vsSettings: VsCodeSettings = {};
+      let parsedOk = true;
+      if (existsSync(vscodeSettingsPath)) {
+        try {
+          vsSettings = JSON.parse(readFileSync(vscodeSettingsPath, "utf-8")) as VsCodeSettings;
+        } catch {
+          // Don't clobber a broken-but-user-edited file.
+          parsedOk = false;
+        }
+      }
+      if (parsedOk) {
+        const KEY = "github.copilot.chat.codeGeneration.useInstructionFiles";
+        if (vsSettings[KEY] !== true) {
+          vsSettings[KEY] = true;
+          writeFileSync(vscodeSettingsPath, JSON.stringify(vsSettings, null, 2) + "\n");
+          console.log(`  .vscode/settings.json — set ${KEY}: true`);
+        }
+      } else {
+        console.log("  .vscode/settings.json — invalid JSON, skipping Copilot instructionFiles toggle");
+      }
+    }
+  }
 
   // 2. MCP server config — Claude Code reads .mcp.json AT PROJECT ROOT for project-scoped servers.
   //    .claude/mcp.json is NOT read by Claude Code (verified Apr 2026).
@@ -536,6 +699,12 @@ export async function initProject(
   }
   if (existsSync(join(homedir(), ".gemini", "antigravity"))) {
     void track("init.detected.antigravity");
+  }
+  if (
+    copilotExtensionDetected ||
+    existsSync(join(projectPath, ".github", "copilot-instructions.md"))
+  ) {
+    void track("init.detected.copilot");
   }
 
   // 8. First-run nudge: ask once whether the user wants to opt in. Stored in
