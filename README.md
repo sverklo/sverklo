@@ -10,7 +10,7 @@
 >
 > Training data is the map. Your codebase is the territory. **Sverklo gives the agent the territory.**
 
-**The only code-intel MCP with a published benchmark and reproducible eval harness.** Local-first MCP server that gives Claude Code, Cursor, Windsurf, and Zed a real symbol graph, a blast-radius lens, and a git-pinned memory — so the agent stops guessing. MIT. Zero config. Your code never leaves the machine.
+**Sverklo is the open-source, local-first MCP server for code intelligence — the only one with a published benchmark and reproducible eval harness.** It gives Claude Code, Cursor, Windsurf, and Zed a real symbol graph, blast-radius analysis, and git-pinned memory — so your AI coding agent stops hallucinating function names on large repos. MIT-licensed alternative to Greptile and Sourcegraph Cody. Zero config. Your code never leaves the machine.
 
 [Paper (Zenodo, CC BY 4.0)](https://doi.org/10.5281/zenodo.19802051) · [bench:primitives](https://sverklo.com/bench/) — **62× fewer tokens than naive grep**, 2.9× fewer than tuned grep, single tool call vs grep's 7-12 (n=60) · [bench:swe](https://sverklo.com/blog/bench-swe-first-results/) — 38/65 perfect recall on 5 OSS repos, including the runs we lose.
 

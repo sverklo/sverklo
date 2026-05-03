@@ -55,6 +55,7 @@ if (command && command !== "--help" && command !== "-h") {
       dashboard: "Alias for `sverklo ui`.",
       wakeup: "Print compressed project context (for system-prompt injection in non-MCP clients).",
       digest: "5-line summary of what changed in this project. Flags: --since 7d, --format markdown|plain.",
+      receipt: "Token-spend receipt for your recent Claude Code sessions. Shows where tokens went and projected yearly cost. Flags: --since 7d, --format plain|json.",
       memory: "Manage the memory store. Subcommands: show, edit, export.",
       grammars: "Manage tree-sitter grammars for the SVERKLO_PARSER=tree-sitter opt-in path. Subcommands: install.",
       "audit-prompt": "Print a ready-to-paste codebase-audit prompt (hybrid agent workflow).",
@@ -1852,6 +1853,37 @@ if (command === "digest") {
   await indexer.index();
   console.log(generateDigest(indexer, { sinceDays, format: formatRaw }));
   indexer.close();
+  process.exit(0);
+}
+
+if (command === "receipt") {
+  // Spotify-Wrapped-style summary of token spend across recent Claude
+  // Code sessions. Reads ~/.claude/projects/**/*.jsonl, aggregates tool
+  // calls and usage, and prints a screenshotable receipt. The point is
+  // to make the cost concrete enough that the share-instinct kicks in.
+  //
+  //   sverklo receipt [--since 7d] [--format plain|json]
+  const flags = args.slice(1);
+  const flagVal = (name: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    return prefixed ? prefixed.slice(name.length + 1) : undefined;
+  };
+  const sinceRaw = flagVal("--since") ?? "7d";
+  const sinceMatch = /^(\d+)d?$/.exec(sinceRaw);
+  if (!sinceMatch) {
+    console.error(`✗ --since expects N or Nd (e.g. 7 or 7d), got "${sinceRaw}"`);
+    process.exit(2);
+  }
+  const sinceDays = parseInt(sinceMatch[1], 10);
+  const formatRaw = flagVal("--format") ?? "plain";
+  if (formatRaw !== "plain" && formatRaw !== "json") {
+    console.error(`✗ --format must be plain or json, got "${formatRaw}"`);
+    process.exit(2);
+  }
+  const { runReceipt } = await import("../src/receipt.js");
+  console.log(runReceipt({ sinceDays, format: formatRaw }));
   process.exit(0);
 }
 
