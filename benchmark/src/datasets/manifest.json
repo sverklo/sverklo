@@ -11,6 +11,13 @@
       "repo": "https://github.com/expressjs/express.git",
       "ref": "4.21.1",
       "checkoutDir": "benchmark/.cache/express-4.21.1"
+    },
+    {
+      "name": "lodash",
+      "kind": "git",
+      "repo": "https://github.com/lodash/lodash.git",
+      "ref": "4.17.21",
+      "checkoutDir": "benchmark/.cache/lodash-4.17.21"
     }
   ]
 }

@@ -12,6 +12,7 @@ import { GitNexusBaseline } from "../baselines/gitnexus.ts";
 import { loadJsonl } from "../ground-truth/schema.ts";
 import { loadManifest } from "../datasets/fetch.ts";
 import { generateExpressTasks } from "../ground-truth/seed/express.gen.ts";
+import { generateLodashTasks } from "../ground-truth/seed/lodash.gen.ts";
 import { writeReport } from "./report.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +38,9 @@ export async function runAll(): Promise<void> {
     } else if (d.name === "express") {
       console.error(`[bench] generating express ground truth`);
       tasksByDataset.set(d.name, generateExpressTasks(d.rootPath));
+    } else if (d.name === "lodash") {
+      console.error(`[bench] generating lodash ground truth`);
+      tasksByDataset.set(d.name, generateLodashTasks(d.rootPath));
     }
   }
 

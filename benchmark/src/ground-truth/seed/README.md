@@ -85,7 +85,44 @@ upstream express releases.
 
 ## lodash.gen.ts
 
-(Pending — see issue #26.) Ground-truth generator for lodash 4.17.21.
-The single-file IIFE structure of lodash 4.17.21 + the call-graph-only
-fallback path in jcodemunch v1.80.9 make this a meaningfully different
-test case from express's modular CommonJS structure.
+Ground-truth generator for lodash 4.17.21 (issue #26). The single-file
+IIFE structure of lodash 4.17.21 + the call-graph-only fallback path in
+jcodemunch v1.80.9 make this a meaningfully different test case from
+express's modular CommonJS structure.
+
+**P1 (definition lookup):** 10 hand-verified line numbers for well-known
+public methods (`map`, `filter`, `reduce`, `debounce`, `throttle`,
+`merge`, `cloneDeep`, `get`, `set`, `chunk`) inside `lodash.js`. If
+upstream shifts these in a future patch, re-verify with:
+
+```bash
+for sym in map filter reduce debounce throttle merge cloneDeep get set chunk; do
+  line=$(grep -nE "^\s*function $sym\\b" lodash.js | head -1 | cut -d: -f1)
+  echo "$sym: line $line"
+done
+```
+
+**P2 (reference finding):** Same 10 names, references resolved at runtime
+via grep. Each method is called many times within the IIFE, so the
+expected set is large but stable.
+
+**P4 (file dependencies):** 5 entries — 4 in `fp/` (which has real
+inter-file imports) plus `lodash.js` itself (no imports, exercises the
+"empty import graph" case).
+
+**P5 (dead code):** Empty-expected pattern, same as `express`. Score
+punishes false positives, which is what jcodemunch v1.80.9's
+monolithic-IIFE fixes specifically reduce. Pre-fix versions flagged
+published methods as dead due to the import-graph-only requirement.
+
+### Re-running the bench on lodash
+
+```bash
+# All 5 baselines on all 3 datasets
+npm run bench:quick
+
+# Just lodash + jcodemunch
+BASELINES=jcodemunch DATASETS=lodash npm run bench:quick
+# (note: DATASETS env not yet implemented, run-primitive.ts loops over
+# all datasets in the manifest)
+```
