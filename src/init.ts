@@ -735,6 +735,7 @@ export async function initProject(
   console.log("");
   console.log("Next steps:");
   console.log("  claude                                 # start coding — sverklo tools are preferred automatically");
+  console.log("  sverklo receipt                        # see how many tokens your agent burned on grep last week");
   console.log("  sverklo ui                             # optional: open the web dashboard");
   console.log("  sverklo review --ref HEAD~1..HEAD      # diff-aware risk review (CI-friendly with --fail-on high)");
   console.log("");
