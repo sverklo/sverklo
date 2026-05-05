@@ -246,6 +246,19 @@ export default {
       if (authResult) return authResult;
       return handleStatsUi();
     }
+    // Route: aggregated CLI-event adoption stats. Same auth as /v1/stats.
+    // Mirrors the pageview pipeline but reads root-level event keys
+    // (init.run, init.detected.*, tool.call, etc.) instead of pageviews/.
+    if (url.pathname === "/v1/adoption") {
+      const authResult = checkBasicAuth(req, env);
+      if (authResult) return authResult;
+      return handleAdoptionStats(req, env, ctx);
+    }
+    if (url.pathname === "/v1/adoption/ui") {
+      const authResult = checkBasicAuth(req, env);
+      if (authResult) return authResult;
+      return handleAdoptionUi();
+    }
     // Route: publish badge grade
     if (url.pathname === "/v1/badge/publish") {
       return handleBadgePublish(req, env);
@@ -801,6 +814,446 @@ async function handleStats(
   ctx.waitUntil(caches.default.put(cacheKey, response.clone()));
   return response;
 }
+
+// ────────────────────────────────────────────────────────────────────
+// Adoption Stats — aggregated CLI event analytics
+// ────────────────────────────────────────────────────────────────────
+//
+// Mirrors the pageview /v1/stats pipeline but reads CLI events
+// (`init.run`, `init.detected.*`, `tool.call`, etc.) stored at
+// root-level `<utcDate>/<uuid>.json` instead of `pageviews/...`.
+//
+// What this answers that npm download counts can't:
+//   - Of the daily npm pulls, how many actually run `sverklo init`?
+//   - Which MCP client wins by adoption? (claude-code / cursor / windsurf / ...)
+//   - Which sverklo version are users on (v0.20.1 vs v0.20.2 split)?
+//   - Which OS dominates? (darwin / linux / win32)
+//   - How many unique install_ids today? = unique users
+//   - What tools do agents call most? (sverklo_search vs sverklo_lookup vs ...)
+//   - How often do init runs fail? (outcome === "error")
+//
+// Auth: same HTTP Basic guard as /v1/stats, behind STATS_PASSWORD secret.
+// Cache: 60s edge cache, same as the pageview path.
+//
+// Endpoints:
+//   GET /v1/adoption        — JSON aggregate (machine-readable)
+//   GET /v1/adoption/ui     — HTML dashboard (browser bookmark target)
+
+interface AdoptionStatsResponse {
+  date: string;
+  total_events: number;
+  unique_installs: number;
+  last_10m_events: number;
+  by_event: Record<string, number>;
+  by_client: Record<string, number>;
+  by_version: Record<string, number>;
+  by_os: Record<string, number>;
+  by_tool: Record<string, number>;
+  outcome: { ok: number; error: number; timeout: number };
+  error_rate: number;
+  init_completion_rate: number; // not currently observable until we add init.complete
+  generated_at: number;
+  cache_age_s: number;
+}
+
+async function handleAdoptionStats(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  if (req.method !== "GET") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  const cacheKey = new Request(`https://t.sverklo.com/__cache/adoption/${todayUtc()}`);
+  const cached = await caches.default.match(cacheKey);
+  if (cached) {
+    const body = await cached.text();
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "access-control-allow-origin": "*",
+        "cache-control": "public, max-age=60",
+        "x-sverklo-cache": "hit",
+      },
+    });
+  }
+
+  // CLI events live at <utcDate>/<uuid>.json — root level, no nested
+  // prefix like pageviews has. Listing with prefix "2026-05-05/" gets
+  // CLI events; pageviews ("pageviews/2026-05-05/...") and badges
+  // ("badges/...") have different prefixes so are excluded automatically.
+  const prefix = `${todayUtc()}/`;
+  const totals: AdoptionStatsResponse = {
+    date: todayUtc(),
+    total_events: 0,
+    unique_installs: 0,
+    last_10m_events: 0,
+    by_event: {},
+    by_client: {},
+    by_version: {},
+    by_os: {},
+    by_tool: {},
+    outcome: { ok: 0, error: 0, timeout: 0 },
+    error_rate: 0,
+    init_completion_rate: 0,
+    generated_at: Math.floor(Date.now() / 1000),
+    cache_age_s: 0,
+  };
+  const cutoff10m = Math.floor(Date.now() / 1000) - 600;
+  const installs = new Set<string>();
+
+  const bump = (map: Record<string, number>, key: string | null | undefined) => {
+    if (!key) return;
+    map[key] = (map[key] || 0) + 1;
+  };
+
+  let cursor: string | undefined;
+  try {
+    do {
+      const listing = await env.TELEMETRY_BUCKET.list({
+        prefix,
+        limit: 1000,
+        cursor,
+      });
+      const BATCH = 20;
+      for (let i = 0; i < listing.objects.length; i += BATCH) {
+        const batch = listing.objects.slice(i, i + BATCH);
+        const bodies = await Promise.all(
+          batch.map(async (obj) => {
+            try {
+              const body = await env.TELEMETRY_BUCKET.get(obj.key);
+              if (!body) return null;
+              return JSON.parse(await body.text());
+            } catch {
+              return null;
+            }
+          })
+        );
+        for (const data of bodies) {
+          if (!data || typeof data !== "object") continue;
+          totals.total_events++;
+          if (typeof data.ts === "number" && data.ts >= cutoff10m) totals.last_10m_events++;
+
+          // install_id uniqueness — counts distinct machines today
+          if (typeof data.install_id === "string") installs.add(data.install_id);
+
+          // Event-name aggregation. The detected.* family also fans out
+          // into a derived "by_client" axis below for easier dashboard
+          // reading without needing the dashboard to know the event names.
+          if (typeof data.event === "string") {
+            bump(totals.by_event, data.event);
+            if (data.event.startsWith("init.detected.")) {
+              const client = data.event.slice("init.detected.".length);
+              bump(totals.by_client, client);
+            }
+          }
+
+          if (typeof data.version === "string") bump(totals.by_version, data.version);
+          if (typeof data.os === "string") bump(totals.by_os, data.os);
+
+          // Tool-call attribution. tool.call events name the specific
+          // sverklo tool (sverklo_search, sverklo_lookup, ...). Other
+          // events have tool === null and don't appear in this slice.
+          if (data.event === "tool.call" && typeof data.tool === "string") {
+            bump(totals.by_tool, data.tool);
+          }
+
+          if (
+            typeof data.outcome === "string" &&
+            (data.outcome === "ok" || data.outcome === "error" || data.outcome === "timeout")
+          ) {
+            totals.outcome[data.outcome]++;
+          }
+        }
+      }
+      cursor = listing.truncated ? listing.cursor : undefined;
+    } while (cursor);
+  } catch {
+    // R2 listing/get errors should not 500. Return what we managed.
+  }
+
+  totals.unique_installs = installs.size;
+  const totalOutcome = totals.outcome.ok + totals.outcome.error + totals.outcome.timeout;
+  totals.error_rate = totalOutcome === 0 ? 0 : totals.outcome.error / totalOutcome;
+  // init_completion_rate left at 0 until we add an "init.complete" event
+  // type. Today the schema only has "init.run" + "init.detected.*", so
+  // we can't distinguish "started but failed" from "started and finished."
+  // Wired into the response shape now so the dashboard renders a row that
+  // says "tracked once init.complete is added to the schema."
+
+  const body = JSON.stringify(totals, null, 2);
+  const response = new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "access-control-allow-origin": "*",
+      "cache-control": "public, max-age=60",
+      "x-sverklo-cache": "miss",
+    },
+  });
+
+  ctx.waitUntil(caches.default.put(cacheKey, response.clone()));
+  return response;
+}
+
+function handleAdoptionUi(): Response {
+  return new Response(ADOPTION_UI_HTML, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "x-frame-options": "DENY",
+      "referrer-policy": "no-referrer",
+    },
+  });
+}
+
+const ADOPTION_UI_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sverklo adoption</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: #0E0D0B;
+  color: #EDE7D9;
+  font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+.wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #E85A2A;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.sub { color: #6B6354; font-size: 12px; margin-bottom: 24px; }
+.hero {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 700px) { .hero { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .hero { grid-template-columns: 1fr; } }
+.metric {
+  background: #16140F;
+  border: 1px solid #2A2620;
+  border-radius: 8px;
+  padding: 20px;
+}
+.metric .label {
+  font-size: 11px;
+  color: #6B6354;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.metric .value {
+  font-size: 28px;
+  font-weight: 600;
+  color: #EDE7D9;
+}
+.metric .value.small { font-size: 18px; }
+section {
+  background: #16140F;
+  border: 1px solid #2A2620;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+section h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6B6354;
+  margin-bottom: 10px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 220px 1fr 60px;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #1F1C16;
+}
+.bar-row:last-child { border-bottom: none; }
+.bar-row .name {
+  font-size: 13px;
+  color: #C0B9AC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-row.client .name { color: #4c8cf7; }
+.bar-row.event .name { color: #b487ff; }
+.bar-row.tool .name { color: #4ade80; }
+.bar-row.version .name { color: #facc15; }
+.bar-row.os .name { color: #f59e0b; }
+.bar-track {
+  background: #2A2620;
+  border-radius: 3px;
+  height: 14px;
+  overflow: hidden;
+}
+.bar-fill {
+  background: #E85A2A;
+  height: 100%;
+  border-radius: 3px;
+}
+.bar-row.client .bar-fill { background: #4c8cf7; }
+.bar-row.event .bar-fill { background: #b487ff; }
+.bar-row.tool .bar-fill { background: #4ade80; }
+.bar-row.version .bar-fill { background: #facc15; }
+.bar-row.os .bar-fill { background: #f59e0b; }
+.bar-row .count {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: #C0B9AC;
+  font-size: 13px;
+}
+.empty { color: #4D463A; font-style: italic; }
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+footer {
+  margin-top: 24px;
+  font-size: 11px;
+  color: #4D463A;
+  line-height: 1.6;
+}
+footer a { color: #6B6354; text-decoration: none; }
+footer a:hover { color: #E85A2A; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>sverklo adoption · today</h1>
+  <p class="sub" id="sub">loading…</p>
+
+  <div class="hero">
+    <div class="metric">
+      <div class="label">unique installs</div>
+      <div class="value" id="m-installs">—</div>
+    </div>
+    <div class="metric">
+      <div class="label">events today</div>
+      <div class="value" id="m-events">—</div>
+    </div>
+    <div class="metric">
+      <div class="label">last 10m</div>
+      <div class="value" id="m-last10">—</div>
+    </div>
+    <div class="metric">
+      <div class="label">error rate</div>
+      <div class="value small" id="m-errors">—</div>
+    </div>
+  </div>
+
+  <section>
+    <h2>by mcp client</h2>
+    <div id="s-client"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>by event type</h2>
+    <div id="s-event"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>by sverklo tool (tool.call events)</h2>
+    <div id="s-tool"><span class="empty">no tool.call events yet</span></div>
+  </section>
+
+  <section>
+    <h2>by sverklo version</h2>
+    <div id="s-version"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>by os</h2>
+    <div id="s-os"><span class="empty">loading…</span></div>
+  </section>
+
+  <footer>
+    Auto-refreshes every 15s · cache-max 60s<br>
+    Data from t.sverklo.com/v1/adoption · R2-backed · CLI telemetry only (opt-in).<br>
+    Companion to the <a href="/v1/stats/ui">pageview dashboard</a> at /v1/stats/ui.
+  </footer>
+</div>
+
+<script>
+let lastEvents = null;
+
+async function fetchStats() {
+  try {
+    const r = await fetch('/v1/adoption', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    render(data);
+  } catch (e) {
+    document.getElementById('sub').innerHTML = '<span style="color:#E5484D">⚠ fetch failed: ' + e + '</span>';
+  }
+}
+
+function renderBars(elId, obj, rowClass) {
+  const el = document.getElementById(elId);
+  const entries = Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    el.innerHTML = '<span class="empty">none yet</span>';
+    return;
+  }
+  const max = Math.max(...entries.map(([, v]) => v));
+  el.innerHTML = entries.map(([name, count]) => {
+    const pct = Math.max(2, Math.round((count / max) * 100));
+    return '<div class="bar-row ' + rowClass + '">' +
+           '<span class="name">' + escapeHtml(name) + '</span>' +
+           '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+           '<span class="count">' + count + '</span>' +
+           '</div>';
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function render(data) {
+  document.getElementById('m-installs').textContent = data.unique_installs;
+  document.getElementById('m-events').textContent = data.total_events;
+  document.getElementById('m-last10').textContent = data.last_10m_events;
+  const errPct = data.error_rate ? (data.error_rate * 100).toFixed(1) + '%' : '0%';
+  document.getElementById('m-errors').textContent = errPct;
+  document.getElementById('sub').innerHTML =
+    '<span class="dot"></span>live · ' + data.date + ' · updated ' + new Date().toLocaleTimeString();
+
+  renderBars('s-client', data.by_client, 'client');
+  renderBars('s-event', data.by_event, 'event');
+  renderBars('s-tool', data.by_tool, 'tool');
+  renderBars('s-version', data.by_version, 'version');
+  renderBars('s-os', data.by_os, 'os');
+
+  lastEvents = data.total_events;
+}
+
+fetchStats();
+setInterval(fetchStats, 15000);
+</script>
+</body>
+</html>`;
 
 // ────────────────────────────────────────────────────────────────────
 // Badge API — publish + serve health grade badges
