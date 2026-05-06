@@ -637,6 +637,85 @@ if (command === "telemetry") {
     process.exit(0);
   }
 
+  if (sub === "test") {
+    // Diagnostic-only: send one event regardless of opt-in/opt-out state.
+    // Does not write to ~/.sverklo/install-id, telemetry.log, or telemetry.enabled.
+    // Uses a fixed sentinel install_id so the dashboard can filter test events
+    // out if it ever wants to. Useful when:
+    //   - debugging the network path between a user and the endpoint
+    //   - confirming the dashboard pipeline works without flipping the opt-in
+    //   - validating a self-hosted SVERKLO_TELEMETRY_ENDPOINT relay
+    const TEST_INSTALL_ID = "00000000-0000-4000-8000-00000000c11d";
+    const endpoint = process.env.SVERKLO_TELEMETRY_ENDPOINT || "https://t.sverklo.com/v1/event";
+    const { platform } = await import("node:os");
+    const p = platform();
+    const os = (p === "darwin" || p === "linux" || p === "win32") ? p : "other";
+    const nodeMajor = parseInt(process.versions.node.split(".")[0], 10) || 0;
+    // Read sverklo version from package.json so the diagnostic carries
+    // the same version field a real event would.
+    let version = "0.0.0";
+    try {
+      const { readFileSync } = await import("node:fs");
+      const { fileURLToPath } = await import("node:url");
+      const { dirname, join } = await import("node:path");
+      const here = dirname(fileURLToPath(import.meta.url));
+      for (const rel of ["..", "../..", "../../..", "../../../.."]) {
+        try {
+          const pkg = JSON.parse(readFileSync(join(here, rel, "package.json"), "utf-8"));
+          if (pkg.name === "sverklo" && pkg.version) { version = pkg.version; break; }
+        } catch {}
+      }
+    } catch {}
+    const payload = {
+      install_id: TEST_INSTALL_ID,
+      version,
+      os,
+      node_major: nodeMajor,
+      event: "init.run",
+      tool: null,
+      outcome: "ok",
+      duration_ms: 0,
+    };
+    console.log("");
+    console.log("Sending one diagnostic event (does NOT enable telemetry):");
+    console.log(`  endpoint:   ${endpoint}`);
+    console.log(`  install_id: ${TEST_INSTALL_ID}  (sentinel — never written to disk)`);
+    console.log(`  payload:    ${JSON.stringify(payload)}`);
+    console.log("");
+    const t0 = Date.now();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json", "user-agent": `sverklo-test/${version}` },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const elapsed = Date.now() - t0;
+      if (res.status === 204) {
+        console.log(`Server accepted (HTTP 204) in ${elapsed}ms.`);
+        console.log("");
+        console.log("Check the dashboard at https://t.sverklo.com/v1/adoption/ui");
+        console.log("(cache TTL: 60s; with days=2+ the cache key is fresh).");
+        process.exit(0);
+      }
+      console.log(`Server responded HTTP ${res.status} in ${elapsed}ms.`);
+      const body = await res.text().catch(() => "");
+      if (body) console.log(`  body: ${body.slice(0, 200)}`);
+      process.exit(1);
+    } catch (e: unknown) {
+      const elapsed = Date.now() - t0;
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`Network error after ${elapsed}ms: ${msg}`);
+      console.log("");
+      console.log("If you're behind a proxy or firewall, set SVERKLO_TELEMETRY_ENDPOINT");
+      console.log("to a reachable relay and re-run.");
+      process.exit(1);
+    }
+  }
+
   console.log(`
 sverklo telemetry — opt-in, privacy-preserving, off by default
 
@@ -645,6 +724,7 @@ Usage:
   sverklo telemetry disable   Opt out permanently (sends one final opt_out event)
   sverklo telemetry status    Show current state
   sverklo telemetry log       Print the local mirror of every event sent
+  sverklo telemetry test      Send one diagnostic event (bypasses opt-in)
 
 Design doc: https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md
 `);
