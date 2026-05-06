@@ -840,10 +840,19 @@ async function handleStats(
 //   GET /v1/adoption/ui     — HTML dashboard (browser bookmark target)
 
 interface AdoptionStatsResponse {
+  /** Window covered by the aggregation. */
+  days: number;
+  /** Earliest UTC date scanned (inclusive). */
+  from_date: string;
+  /** Latest UTC date scanned (inclusive — usually today). */
+  to_date: string;
+  /** Convenience: most-recent date, mirrors `to_date`. Kept for backwards compat with v1 single-day clients. */
   date: string;
   total_events: number;
   unique_installs: number;
   last_10m_events: number;
+  /** Per-day series so the dashboard can draw a sparkline / trend table. Keys are UTC dates. */
+  daily: Record<string, { events: number; installs: number }>;
   by_event: Record<string, number>;
   by_client: Record<string, number>;
   by_version: Record<string, number>;
@@ -856,6 +865,26 @@ interface AdoptionStatsResponse {
   cache_age_s: number;
 }
 
+/** Format a Date as YYYY-MM-DD in UTC. Same convention as todayUtc(). */
+function utcDateString(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Return an array of YYYY-MM-DD strings covering the last `days` UTC days, oldest-first. */
+function lastNUtcDates(days: number): string[] {
+  const out: string[] = [];
+  const today = new Date();
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const d = new Date(today);
+    d.setUTCDate(today.getUTCDate() - offset);
+    out.push(utcDateString(d));
+  }
+  return out;
+}
+
 async function handleAdoptionStats(
   req: Request,
   env: Env,
@@ -865,7 +894,20 @@ async function handleAdoptionStats(
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const cacheKey = new Request(`https://t.sverklo.com/__cache/adoption/${todayUtc()}`);
+  // Parse the time-window parameter. Default 1 day (today only). Capped
+  // at 30 days to bound R2 listing/GET cost (worst case ~30 × 5K events
+  // = 150K reads ≈ $0.06; cached at 60s so a busy dashboard refresh
+  // doesn't multiply that). Anything outside [1, 30] is clamped silently.
+  const url = new URL(req.url);
+  const rawDays = parseInt(url.searchParams.get("days") || "1", 10);
+  const days = Number.isNaN(rawDays) ? 1 : Math.max(1, Math.min(30, rawDays));
+
+  // Cache key includes the window so 1-day and 7-day responses don't
+  // collide. The today-portion of the cache key changes when UTC day
+  // rolls over, naturally invalidating yesterday's cache.
+  const cacheKey = new Request(
+    `https://t.sverklo.com/__cache/adoption/${todayUtc()}/${days}`
+  );
   const cached = await caches.default.match(cacheKey);
   if (cached) {
     const body = await cached.text();
@@ -884,12 +926,16 @@ async function handleAdoptionStats(
   // prefix like pageviews has. Listing with prefix "2026-05-05/" gets
   // CLI events; pageviews ("pageviews/2026-05-05/...") and badges
   // ("badges/...") have different prefixes so are excluded automatically.
-  const prefix = `${todayUtc()}/`;
+  const dates = lastNUtcDates(days);
   const totals: AdoptionStatsResponse = {
-    date: todayUtc(),
+    days,
+    from_date: dates[0],
+    to_date: dates[dates.length - 1],
+    date: dates[dates.length - 1],
     total_events: 0,
     unique_installs: 0,
     last_10m_events: 0,
+    daily: {},
     by_event: {},
     by_client: {},
     by_version: {},
@@ -902,86 +948,91 @@ async function handleAdoptionStats(
     cache_age_s: 0,
   };
   const cutoff10m = Math.floor(Date.now() / 1000) - 600;
-  const installs = new Set<string>();
+  const installsAllTime = new Set<string>();
+  const installsPerDay: Record<string, Set<string>> = {};
+  for (const d of dates) {
+    totals.daily[d] = { events: 0, installs: 0 };
+    installsPerDay[d] = new Set<string>();
+  }
 
   const bump = (map: Record<string, number>, key: string | null | undefined) => {
     if (!key) return;
     map[key] = (map[key] || 0) + 1;
   };
 
-  let cursor: string | undefined;
-  try {
-    do {
-      const listing = await env.TELEMETRY_BUCKET.list({
-        prefix,
-        limit: 1000,
-        cursor,
-      });
-      const BATCH = 20;
-      for (let i = 0; i < listing.objects.length; i += BATCH) {
-        const batch = listing.objects.slice(i, i + BATCH);
-        const bodies = await Promise.all(
-          batch.map(async (obj) => {
-            try {
-              const body = await env.TELEMETRY_BUCKET.get(obj.key);
-              if (!body) return null;
-              return JSON.parse(await body.text());
-            } catch {
-              return null;
+  // Iterate each date in the window and walk that date's R2 prefix.
+  for (const date of dates) {
+    const prefix = `${date}/`;
+    let cursor: string | undefined;
+    try {
+      do {
+        const listing = await env.TELEMETRY_BUCKET.list({
+          prefix,
+          limit: 1000,
+          cursor,
+        });
+        const BATCH = 20;
+        for (let i = 0; i < listing.objects.length; i += BATCH) {
+          const batch = listing.objects.slice(i, i + BATCH);
+          const bodies = await Promise.all(
+            batch.map(async (obj) => {
+              try {
+                const body = await env.TELEMETRY_BUCKET.get(obj.key);
+                if (!body) return null;
+                return JSON.parse(await body.text());
+              } catch {
+                return null;
+              }
+            })
+          );
+          for (const data of bodies) {
+            if (!data || typeof data !== "object") continue;
+            totals.total_events++;
+            totals.daily[date].events++;
+            if (typeof data.ts === "number" && data.ts >= cutoff10m) totals.last_10m_events++;
+
+            // install_id uniqueness — counts distinct machines in window + per-day
+            if (typeof data.install_id === "string") {
+              installsAllTime.add(data.install_id);
+              installsPerDay[date].add(data.install_id);
             }
-          })
-        );
-        for (const data of bodies) {
-          if (!data || typeof data !== "object") continue;
-          totals.total_events++;
-          if (typeof data.ts === "number" && data.ts >= cutoff10m) totals.last_10m_events++;
 
-          // install_id uniqueness — counts distinct machines today
-          if (typeof data.install_id === "string") installs.add(data.install_id);
-
-          // Event-name aggregation. The detected.* family also fans out
-          // into a derived "by_client" axis below for easier dashboard
-          // reading without needing the dashboard to know the event names.
-          if (typeof data.event === "string") {
-            bump(totals.by_event, data.event);
-            if (data.event.startsWith("init.detected.")) {
-              const client = data.event.slice("init.detected.".length);
-              bump(totals.by_client, client);
+            if (typeof data.event === "string") {
+              bump(totals.by_event, data.event);
+              if (data.event.startsWith("init.detected.")) {
+                const client = data.event.slice("init.detected.".length);
+                bump(totals.by_client, client);
+              }
             }
-          }
 
-          if (typeof data.version === "string") bump(totals.by_version, data.version);
-          if (typeof data.os === "string") bump(totals.by_os, data.os);
+            if (typeof data.version === "string") bump(totals.by_version, data.version);
+            if (typeof data.os === "string") bump(totals.by_os, data.os);
 
-          // Tool-call attribution. tool.call events name the specific
-          // sverklo tool (sverklo_search, sverklo_lookup, ...). Other
-          // events have tool === null and don't appear in this slice.
-          if (data.event === "tool.call" && typeof data.tool === "string") {
-            bump(totals.by_tool, data.tool);
-          }
+            if (data.event === "tool.call" && typeof data.tool === "string") {
+              bump(totals.by_tool, data.tool);
+            }
 
-          if (
-            typeof data.outcome === "string" &&
-            (data.outcome === "ok" || data.outcome === "error" || data.outcome === "timeout")
-          ) {
-            totals.outcome[data.outcome]++;
+            if (
+              typeof data.outcome === "string" &&
+              (data.outcome === "ok" || data.outcome === "error" || data.outcome === "timeout")
+            ) {
+              totals.outcome[data.outcome]++;
+            }
           }
         }
-      }
-      cursor = listing.truncated ? listing.cursor : undefined;
-    } while (cursor);
-  } catch {
-    // R2 listing/get errors should not 500. Return what we managed.
+        cursor = listing.truncated ? listing.cursor : undefined;
+      } while (cursor);
+    } catch {
+      // R2 listing/get errors should not 500. Return what we managed.
+    }
   }
 
-  totals.unique_installs = installs.size;
+  totals.unique_installs = installsAllTime.size;
+  for (const d of dates) {
+    totals.daily[d].installs = installsPerDay[d].size;
+  }
   const totalOutcome = totals.outcome.ok + totals.outcome.error + totals.outcome.timeout;
   totals.error_rate = totalOutcome === 0 ? 0 : totals.outcome.error / totalOutcome;
-  // init_completion_rate left at 0 until we add an "init.complete" event
-  // type. Today the schema only has "init.run" + "init.detected.*", so
-  // we can't distinguish "started but failed" from "started and finished."
-  // Wired into the response shape now so the dashboard renders a row that
-  // says "tracked once init.complete is added to the schema."
 
   const body = JSON.stringify(totals, null, 2);
   const response = new Response(body, {
@@ -1137,20 +1188,102 @@ footer {
 }
 footer a { color: #6B6354; text-decoration: none; }
 footer a:hover { color: #E85A2A; }
+
+/* Window selector — one row of buttons above the hero metrics. */
+.window {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.win-btn {
+  background: #16140F;
+  border: 1px solid #2A2620;
+  color: #6B6354;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color 0.1s, border-color 0.1s;
+}
+.win-btn:hover { color: #C0B9AC; border-color: #4D463A; }
+.win-btn.active {
+  background: #2A1812;
+  border-color: #E85A2A;
+  color: #E85A2A;
+}
+
+/* Daily trend table — one row per day, lightweight bar chart. */
+.trend-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 60px 60px;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #1F1C16;
+  font-size: 13px;
+}
+.trend-row:last-child { border-bottom: none; }
+.trend-row .date { color: #6B6354; font-variant-numeric: tabular-nums; }
+.trend-row .events-count, .trend-row .installs-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #C0B9AC;
+}
+.trend-row .installs-count { color: #4ade80; }
+.trend-row .events-track {
+  background: #2A2620;
+  border-radius: 3px;
+  height: 14px;
+  overflow: hidden;
+  position: relative;
+}
+.trend-row .events-fill {
+  background: #E85A2A;
+  height: 100%;
+  border-radius: 3px;
+}
+.trend-row.zero .date { color: #4D463A; }
+.trend-row.zero .events-count, .trend-row.zero .installs-count { color: #4D463A; }
+.trend-header {
+  display: grid;
+  grid-template-columns: 100px 1fr 60px 60px;
+  gap: 12px;
+  padding: 4px 0 8px 0;
+  font-size: 11px;
+  color: #4D463A;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #2A2620;
+  margin-bottom: 4px;
+}
+.trend-header .events-h, .trend-header .installs-h {
+  text-align: right;
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>sverklo adoption · today</h1>
+  <h1>sverklo adoption</h1>
   <p class="sub" id="sub">loading…</p>
+
+  <div class="window">
+    <button class="win-btn active" data-days="1" onclick="setWindow(1, this)">today</button>
+    <button class="win-btn" data-days="7" onclick="setWindow(7, this)">7d</button>
+    <button class="win-btn" data-days="14" onclick="setWindow(14, this)">14d</button>
+    <button class="win-btn" data-days="30" onclick="setWindow(30, this)">30d</button>
+  </div>
 
   <div class="hero">
     <div class="metric">
-      <div class="label">unique installs</div>
+      <div class="label" id="lbl-installs">unique installs</div>
       <div class="value" id="m-installs">—</div>
     </div>
     <div class="metric">
-      <div class="label">events today</div>
+      <div class="label" id="lbl-events">events</div>
       <div class="value" id="m-events">—</div>
     </div>
     <div class="metric">
@@ -1162,6 +1295,11 @@ footer a:hover { color: #E85A2A; }
       <div class="value small" id="m-errors">—</div>
     </div>
   </div>
+
+  <section id="trend-section" style="display:none">
+    <h2>daily trend</h2>
+    <div id="s-trend"></div>
+  </section>
 
   <section>
     <h2>by mcp client</h2>
@@ -1196,11 +1334,24 @@ footer a:hover { color: #E85A2A; }
 </div>
 
 <script>
+let currentDays = 1;
 let lastEvents = null;
+let pollTimer = null;
+
+function setWindow(days, btn) {
+  currentDays = days;
+  document.querySelectorAll('.win-btn').forEach(function (b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  // Re-fetch immediately and reset the auto-refresh cadence so the
+  // user sees the new window right away.
+  if (pollTimer) clearInterval(pollTimer);
+  fetchStats();
+  pollTimer = setInterval(fetchStats, 15000);
+}
 
 async function fetchStats() {
   try {
-    const r = await fetch('/v1/adoption', { credentials: 'same-origin' });
+    const r = await fetch('/v1/adoption?days=' + currentDays, { credentials: 'same-origin' });
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     render(data);
@@ -1211,13 +1362,14 @@ async function fetchStats() {
 
 function renderBars(elId, obj, rowClass) {
   const el = document.getElementById(elId);
-  const entries = Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+  const entries = Object.entries(obj || {}).sort(function (a, b) { return b[1] - a[1]; });
   if (entries.length === 0) {
     el.innerHTML = '<span class="empty">none yet</span>';
     return;
   }
-  const max = Math.max(...entries.map(([, v]) => v));
-  el.innerHTML = entries.map(([name, count]) => {
+  const max = Math.max.apply(null, entries.map(function (e) { return e[1]; }));
+  el.innerHTML = entries.map(function (entry) {
+    const name = entry[0]; const count = entry[1];
     const pct = Math.max(2, Math.round((count / max) * 100));
     return '<div class="bar-row ' + rowClass + '">' +
            '<span class="name">' + escapeHtml(name) + '</span>' +
@@ -1225,6 +1377,36 @@ function renderBars(elId, obj, rowClass) {
            '<span class="count">' + count + '</span>' +
            '</div>';
   }).join('');
+}
+
+function renderTrend(daily) {
+  const section = document.getElementById('trend-section');
+  const dates = Object.keys(daily || {}).sort();
+  if (dates.length <= 1) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  const max = Math.max.apply(null, dates.map(function (d) { return daily[d].events; }));
+  const headerHtml =
+    '<div class="trend-header">' +
+    '<span>date</span>' +
+    '<span>events</span>' +
+    '<span class="events-h">events</span>' +
+    '<span class="installs-h">installs</span>' +
+    '</div>';
+  const rowsHtml = dates.map(function (d) {
+    const row = daily[d];
+    const pct = max === 0 ? 0 : Math.max(0, Math.round((row.events / max) * 100));
+    const cls = row.events === 0 ? 'trend-row zero' : 'trend-row';
+    return '<div class="' + cls + '">' +
+           '<span class="date">' + d + '</span>' +
+           '<div class="events-track"><div class="events-fill" style="width:' + pct + '%"></div></div>' +
+           '<span class="events-count">' + row.events + '</span>' +
+           '<span class="installs-count">' + row.installs + '</span>' +
+           '</div>';
+  }).join('');
+  document.getElementById('s-trend').innerHTML = headerHtml + rowsHtml;
 }
 
 function escapeHtml(s) {
@@ -1237,9 +1419,20 @@ function render(data) {
   document.getElementById('m-last10').textContent = data.last_10m_events;
   const errPct = data.error_rate ? (data.error_rate * 100).toFixed(1) + '%' : '0%';
   document.getElementById('m-errors').textContent = errPct;
-  document.getElementById('sub').innerHTML =
-    '<span class="dot"></span>live · ' + data.date + ' · updated ' + new Date().toLocaleTimeString();
 
+  // Update labels to reflect window — "events today" vs "events (last 7d)".
+  const installsLabel = data.days === 1 ? 'unique installs' : 'unique installs · ' + data.days + 'd';
+  const eventsLabel = data.days === 1 ? 'events today' : 'events · ' + data.days + 'd';
+  document.getElementById('lbl-installs').textContent = installsLabel;
+  document.getElementById('lbl-events').textContent = eventsLabel;
+
+  const windowLabel = data.days === 1
+    ? data.to_date
+    : data.from_date + ' → ' + data.to_date + ' (' + data.days + 'd)';
+  document.getElementById('sub').innerHTML =
+    '<span class="dot"></span>live · ' + windowLabel + ' · updated ' + new Date().toLocaleTimeString();
+
+  renderTrend(data.daily);
   renderBars('s-client', data.by_client, 'client');
   renderBars('s-event', data.by_event, 'event');
   renderBars('s-tool', data.by_tool, 'tool');
@@ -1250,7 +1443,7 @@ function render(data) {
 }
 
 fetchStats();
-setInterval(fetchStats, 15000);
+pollTimer = setInterval(fetchStats, 15000);
 </script>
 </body>
 </html>`;
