@@ -121,7 +121,29 @@ interface SanitizedPageview {
   utm_medium: string | null;
   utm_campaign: string | null;
   device: string; // "mobile" | "tablet" | "desktop" | "unknown"
+  /**
+   * ISO 3166-1 alpha-2 country code from Cloudflare's geo header
+   * (req.cf.country / cf-ipcountry). "XX" when unknown. We never
+   * store IP, region, city, or ASN — only the 2-letter country.
+   * Older events (pre-2026-05-06) lack this field; aggregator
+   * tolerates absence.
+   */
+  country: string;
   ts: number;
+}
+
+/**
+ * Classify a bucketed referrer into a high-level traffic-source class
+ * for the dashboard. The buckets are chosen to mirror the channels
+ * we actually run distribution on (HN, reddit, X) plus the standard
+ * web buckets (organic search, direct).
+ */
+function classifyTrafficSource(bucket: string): string {
+  if (bucket === "direct") return "direct";
+  if (bucket === "hn" || bucket === "reddit" || bucket === "x" || bucket === "lobsters" || bucket === "producthunt") return "social";
+  if (bucket === "google" || bucket === "google-news" || bucket === "duckduckgo") return "organic";
+  if (bucket === "github" || bucket === "self" || bucket === "other") return "referral";
+  return "other";
 }
 
 function isValidPageview(b: unknown): b is Omit<SanitizedPageview, "ts" | "referrer_bucket"> & { referrer?: string } {
@@ -515,6 +537,46 @@ footer {
   margin-bottom: 4px;
 }
 .trend-header .count-h { text-align: right; }
+
+/* SVG area chart for daily trend (replaces the per-row bar table). */
+.area-chart { width: 100%; height: 120px; display: block; }
+.area-chart .grid { stroke: #1F1C16; stroke-width: 1; }
+.area-chart .axis { stroke: #2A2620; stroke-width: 1; }
+.area-chart .area { fill: rgba(232,90,42,0.18); stroke: none; }
+.area-chart .line { fill: none; stroke: #E85A2A; stroke-width: 1.5; }
+.area-chart .dot-pt { fill: #E85A2A; }
+.area-chart .lbl { fill: #6B6354; font-size: 9px; font-family: ui-monospace, monospace; }
+.area-chart .val { fill: #C0B9AC; font-size: 9px; font-family: ui-monospace, monospace; }
+
+/* Hourly histogram — 24 bars, one per UTC hour. */
+.hour-bars { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; height: 80px; margin-bottom: 6px; }
+.hour-bar { background: #2A2620; border-radius: 2px 2px 0 0; min-height: 1px; transition: background 0.15s; position: relative; }
+.hour-bar.has-data { background: #E85A2A; }
+.hour-bar:hover { background: #FF6B33; cursor: default; }
+.hour-bar .tip {
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  background: #16140F; border: 1px solid #2A2620; padding: 3px 7px; border-radius: 3px;
+  font-size: 11px; color: #C0B9AC; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity 0.1s; margin-bottom: 4px;
+}
+.hour-bar:hover .tip { opacity: 1; }
+.hour-axis { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; font-size: 9px; color: #4D463A; font-family: ui-monospace, monospace; text-align: center; }
+.hour-axis span:nth-child(odd) { visibility: hidden; }
+
+/* Traffic-source class strip — 4 chips with proportional bars. */
+.src-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.src-chip { background: #1C1A14; border: 1px solid #2A2620; border-radius: 6px; padding: 10px 12px; }
+.src-chip .src-name { font-size: 10px; color: #6B6354; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.src-chip .src-count { font-size: 20px; font-weight: 700; color: #EDE7D9; line-height: 1; font-variant-numeric: tabular-nums; }
+.src-chip .src-pct { font-size: 11px; color: #6B6354; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.src-chip.direct .src-name { color: #5BA3F5; }
+.src-chip.social .src-name { color: #E85A2A; }
+.src-chip.organic .src-name { color: #8FB339; }
+.src-chip.referral .src-name { color: #D4A535; }
+
+/* Country bars use the same .bar-row primitives but with their own fill color. */
+.bar-row.country .bar-fill { background: #5BA3F5; }
+.bar-row.source-class .bar-fill { background: #8FB339; }
 </style>
 </head>
 <body>
@@ -550,8 +612,23 @@ footer {
   </section>
 
   <section>
+    <h2>hourly distribution (UTC)</h2>
+    <div id="s-hourly"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>traffic source</h2>
+    <div id="s-source-class"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
     <h2>by referrer</h2>
     <div id="s-referrer"><span class="empty">loading…</span></div>
+  </section>
+
+  <section>
+    <h2>by country</h2>
+    <div id="s-country"><span class="empty">no geo data yet — country only captured from 2026-05-06</span></div>
   </section>
 
   <section>
@@ -623,24 +700,91 @@ function renderTrend(daily) {
   const dates = Object.keys(daily || {}).sort();
   if (dates.length <= 1) { section.style.display = 'none'; return; }
   section.style.display = 'block';
+  // SVG area chart. Width is 100% of section; height fixed by CSS.
+  // We render at viewBox 0,0,W,H with W=600 H=120 then CSS scales.
+  const W = 600, H = 120, PAD_T = 10, PAD_B = 22, PAD_L = 32, PAD_R = 8;
   const max = Math.max.apply(null, dates.map(function (d) { return daily[d]; }));
-  const headerHtml =
-    '<div class="trend-header">' +
-    '<span>date</span>' +
-    '<span>pageviews</span>' +
-    '<span class="count-h">count</span>' +
-    '</div>';
-  const rowsHtml = dates.map(function (d) {
-    const v = daily[d];
-    const pct = max === 0 ? 0 : Math.max(0, Math.round((v / max) * 100));
-    const cls = v === 0 ? 'trend-row zero' : 'trend-row';
-    return '<div class="' + cls + '">' +
-           '<span class="date">' + d + '</span>' +
-           '<div class="events-track"><div class="events-fill" style="width:' + pct + '%"></div></div>' +
-           '<span class="count">' + v + '</span>' +
+  const yMax = Math.max(1, max);
+  const xStep = dates.length > 1 ? (W - PAD_L - PAD_R) / (dates.length - 1) : 0;
+  const yScale = function (v) { return PAD_T + (H - PAD_T - PAD_B) * (1 - v / yMax); };
+  const pts = dates.map(function (d, i) {
+    return { x: PAD_L + i * xStep, y: yScale(daily[d]), v: daily[d], d: d };
+  });
+  const linePath = pts.map(function (p, i) { return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+  const areaPath = linePath +
+    ' L' + pts[pts.length - 1].x.toFixed(1) + ',' + (H - PAD_B) +
+    ' L' + pts[0].x.toFixed(1) + ',' + (H - PAD_B) + ' Z';
+  // Y-axis labels: 0 and max.
+  const yLabels =
+    '<text class="lbl" x="4" y="' + (H - PAD_B + 4).toFixed(1) + '">0</text>' +
+    '<text class="lbl" x="4" y="' + (PAD_T + 8).toFixed(1) + '">' + yMax + '</text>';
+  // X-axis labels: first, middle, last (truncate to MM-DD).
+  const xIdxs = dates.length > 8
+    ? [0, Math.floor(dates.length / 2), dates.length - 1]
+    : dates.map(function (_, i) { return i; });
+  const xLabels = xIdxs.map(function (i) {
+    const x = pts[i].x;
+    const d = dates[i].slice(5); // MM-DD
+    return '<text class="lbl" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + d + '</text>';
+  }).join('');
+  // Per-point dots + on-hover value tags. We render value labels for every point
+  // at the bottom of the section if the count is small (≤ 14 points).
+  const dotsHtml = pts.map(function (p) {
+    return '<circle class="dot-pt" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.5"><title>' + p.d + ': ' + p.v + '</title></circle>';
+  }).join('');
+  const baseline = (H - PAD_B).toFixed(1);
+  const svg =
+    '<svg class="area-chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+    '<line class="grid" x1="' + PAD_L + '" y1="' + (PAD_T + (H - PAD_T - PAD_B) / 2).toFixed(1) + '" x2="' + (W - PAD_R) + '" y2="' + (PAD_T + (H - PAD_T - PAD_B) / 2).toFixed(1) + '"/>' +
+    '<line class="axis" x1="' + PAD_L + '" y1="' + baseline + '" x2="' + (W - PAD_R) + '" y2="' + baseline + '"/>' +
+    '<path class="area" d="' + areaPath + '"/>' +
+    '<path class="line" d="' + linePath + '"/>' +
+    dotsHtml + yLabels + xLabels +
+    '</svg>';
+  document.getElementById('s-trend').innerHTML = svg;
+}
+
+function renderHourly(hourly, days) {
+  const el = document.getElementById('s-hourly');
+  if (!Array.isArray(hourly) || hourly.length !== 24) { el.innerHTML = '<span class="empty">none yet</span>'; return; }
+  const total = hourly.reduce(function (a, b) { return a + b; }, 0);
+  if (total === 0) { el.innerHTML = '<span class="empty">none yet</span>'; return; }
+  const max = Math.max.apply(null, hourly);
+  const bars = hourly.map(function (n, h) {
+    const pct = max === 0 ? 0 : Math.max(2, Math.round((n / max) * 100));
+    const cls = n > 0 ? 'hour-bar has-data' : 'hour-bar';
+    return '<div class="' + cls + '" style="height:' + pct + '%">' +
+           '<span class="tip">' + String(h).padStart(2, '0') + ':00 UTC · ' + n + '</span>' +
            '</div>';
   }).join('');
-  document.getElementById('s-trend').innerHTML = headerHtml + rowsHtml;
+  const axis = Array.from({ length: 24 }, function (_, h) { return '<span>' + String(h).padStart(2, '0') + '</span>'; }).join('');
+  const note = days > 1
+    ? '<p style="font-size:11px;color:#6B6354;margin-top:8px">Aggregated across the ' + days + '-day window. Each bar is total pageviews for that UTC hour.</p>'
+    : '<p style="font-size:11px;color:#6B6354;margin-top:8px">UTC hour. Hover a bar for the count.</p>';
+  el.innerHTML = '<div class="hour-bars">' + bars + '</div><div class="hour-axis">' + axis + '</div>' + note;
+}
+
+function renderSourceClass(by_source_class, total) {
+  const el = document.getElementById('s-source-class');
+  const order = ['direct', 'social', 'organic', 'referral'];
+  const counts = order.map(function (k) { return [k, (by_source_class || {})[k] || 0]; });
+  const sum = counts.reduce(function (a, c) { return a + c[1]; }, 0);
+  if (sum === 0) { el.innerHTML = '<span class="empty">none yet</span>'; return; }
+  const html = counts.map(function (c) {
+    const pct = sum === 0 ? 0 : Math.round((c[1] / sum) * 100);
+    return '<div class="src-chip ' + c[0] + '">' +
+           '<div class="src-name">' + c[0] + '</div>' +
+           '<div class="src-count">' + c[1] + '</div>' +
+           '<div class="src-pct">' + pct + '%</div>' +
+           '</div>';
+  }).join('');
+  // Surface "other" bucket (anything classifyTrafficSource returned that
+  // isn't in our 4 chips) only if it has data — keeps the strip honest.
+  const other = (by_source_class || {}).other || 0;
+  const otherHtml = other > 0
+    ? '<p style="font-size:11px;color:#6B6354;margin-top:8px">+' + other + ' uncategorized referrers</p>'
+    : '';
+  el.innerHTML = '<div class="src-chips">' + html + '</div>' + otherHtml;
 }
 
 function escapeHtml(s) {
@@ -662,7 +806,13 @@ function render(data) {
     '<span class="dot"></span>live · ' + windowLabel + ' · updated ' + new Date().toLocaleTimeString();
 
   renderTrend(data.daily);
+  renderHourly(data.hourly, data.days);
+  renderSourceClass(data.by_source_class, data.total);
   renderBars('s-referrer', data.by_referrer, 'referrer');
+  // Filter "XX" (unknown country) out of by_country if it dominates the
+  // map only because of pre-2026-05-06 events. Show it explicitly so
+  // the empty-state message stays accurate.
+  renderBars('s-country', data.by_country, 'country');
   renderBars('s-page', data.by_page, 'page');
   renderBars('s-device', data.by_device, 'device');
   renderBars('s-utm', data.by_utm_source, 'utm');
@@ -757,6 +907,13 @@ async function handlePageview(req: Request, env: Env): Promise<Response> {
   const rawReferrer = typeof body.referrer === "string" ? body.referrer : "";
   const bucket = bucketReferrer(rawReferrer);
 
+  // ISO 3166-1 alpha-2 from Cloudflare's edge geo. We use the header
+  // form rather than `req.cf?.country` because the header is set on
+  // every request while `req.cf` can be absent during local wrangler
+  // dev. Coerce to upper-case 2-letter; otherwise "XX" (unknown).
+  const cfCountry = (req.headers.get("cf-ipcountry") || "").toUpperCase();
+  const country = /^[A-Z]{2}$/.test(cfCountry) ? cfCountry : "XX";
+
   const sanitized: SanitizedPageview = {
     page: body.page,
     referrer_bucket: bucket,
@@ -764,6 +921,7 @@ async function handlePageview(req: Request, env: Env): Promise<Response> {
     utm_medium: body.utm_medium ?? null,
     utm_campaign: body.utm_campaign ?? null,
     device: body.device,
+    country,
     ts: Math.floor(Date.now() / 1000),
   };
 
@@ -810,10 +968,20 @@ interface StatsResponse {
   last_10m: number;
   /** Per-day series so the dashboard can draw a sparkline / trend table. Keys are UTC dates. */
   daily: Record<string, number>;
+  /**
+   * 24-bucket UTC hour-of-day distribution across the entire window.
+   * hourly[h] is the total pageview count where (ts UTC hour) === h.
+   * Useful for finding the peak posting hour for a given audience.
+   */
+  hourly: number[];
   by_referrer: Record<string, number>;
   by_page: Record<string, number>;
   by_device: Record<string, number>;
   by_utm_source: Record<string, number>;
+  /** ISO 3166-1 alpha-2 country code → count. "XX" = unknown. */
+  by_country: Record<string, number>;
+  /** High-level traffic-source class (direct/social/organic/referral). Derived from referrer_bucket. */
+  by_source_class: Record<string, number>;
   generated_at: number;
   cache_age_s: number;
 }
@@ -863,10 +1031,13 @@ async function handleStats(
     total: 0,
     last_10m: 0,
     daily: {},
+    hourly: new Array(24).fill(0),
     by_referrer: {},
     by_page: {},
     by_device: {},
     by_utm_source: {},
+    by_country: {},
+    by_source_class: {},
     generated_at: Math.floor(Date.now() / 1000),
     cache_age_s: 0,
   };
@@ -908,11 +1079,23 @@ async function handleStats(
             if (!data || typeof data !== "object") continue;
             totals.total++;
             totals.daily[date]++;
-            if (typeof data.ts === "number" && data.ts >= cutoff10m) totals.last_10m++;
+            if (typeof data.ts === "number") {
+              if (data.ts >= cutoff10m) totals.last_10m++;
+              // UTC hour-of-day. (ts is unix seconds.) Used for the
+              // 24-bucket histogram in the dashboard.
+              const hour = new Date(data.ts * 1000).getUTCHours();
+              if (hour >= 0 && hour < 24) totals.hourly[hour]++;
+            }
             bump(totals.by_referrer, data.referrer_bucket);
             bump(totals.by_page, data.page);
             bump(totals.by_device, data.device);
             bump(totals.by_utm_source, data.utm_source);
+            // Country: tolerate missing field on pre-2026-05-06 events.
+            const c = typeof data.country === "string" && /^[A-Z]{2}$/.test(data.country) ? data.country : "XX";
+            bump(totals.by_country, c);
+            if (typeof data.referrer_bucket === "string") {
+              bump(totals.by_source_class, classifyTrafficSource(data.referrer_bucket));
+            }
           }
         }
         cursor = listing.truncated ? listing.cursor : undefined;
