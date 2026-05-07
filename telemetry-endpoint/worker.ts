@@ -375,6 +375,13 @@ export default {
     if (badgeMatch && req.method === "GET") {
       return handleBadgeSvg(badgeMatch[1], badgeMatch[2], env);
     }
+    // Route: serve raw audit JSON (per-dimension breakdown).
+    // Used by sverklo.com/mcp/ build script + anyone who wants to
+    // ingest the structured audit data without parsing the SVG.
+    const badgeJsonMatch = url.pathname.match(/^\/v1\/badge\/([^/]+)\/([^/]+)\.json$/);
+    if (badgeJsonMatch && req.method === "GET") {
+      return handleBadgeJson(badgeJsonMatch[1], badgeJsonMatch[2], env);
+    }
     // Route: MCP code-intel index — publish (auth) + read (public).
     // Stores the merged bench summary at index/latest.json so the
     // sverklo.com/mcp/ static page can fetch it at build time.
@@ -2101,6 +2108,33 @@ async function handleBadgeSvg(owner: string, repo: string, env: Env): Promise<Re
       "content-type": "image/svg+xml",
       "cache-control": "public, max-age=300",
       "access-control-allow-origin": "*",
+    },
+  });
+}
+
+async function handleBadgeJson(owner: string, repo: string, env: Env): Promise<Response> {
+  // Lowercase to match handleBadgePublish's storage key.
+  const key = `badges/${owner.toLowerCase()}/${repo.toLowerCase()}.json`;
+  const obj = await env.TELEMETRY_BUCKET.get(key);
+  if (!obj) {
+    return new Response(
+      JSON.stringify({ error: "Audit not published for this repo." }),
+      {
+        status: 404,
+        headers: {
+          "content-type": "application/json",
+          "access-control-allow-origin": "*",
+        },
+      },
+    );
+  }
+  const body = await obj.text();
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "access-control-allow-origin": "*",
+      "cache-control": "public, max-age=300",
     },
   });
 }
