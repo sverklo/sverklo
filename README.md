@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/sverklo-sverklo-badge.png)](https://mseep.ai/app/sverklo-sverklo)
+
 <p align="left">
   <img src="./docs/logo.svg" alt="sverklo" width="280" height="79"/>
 </p>
