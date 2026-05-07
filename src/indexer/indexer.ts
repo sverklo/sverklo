@@ -179,6 +179,25 @@ export class Indexer {
       );
     }
 
+    if (stored < 9 && chunkCount > 0) {
+      // Migration 8 → 9: repair the dependency graph. Pre-9 FileStore
+      // used INSERT OR REPLACE, which silently cascade-deleted every
+      // dependency row involving a re-indexed file (both as source and
+      // target). buildGraph only restored outgoing edges, so over time
+      // every file accumulated phantom-missing incoming edges from
+      // cached sources. Symptom: sv-p4-04 (chunk-store.ts importers)
+      // returned 0 when 3 files actually imported it.
+      //
+      // Repair: drop the corrupted `dependencies` table contents and
+      // wipe `files.hash` so the next index() pass re-parses every
+      // file under the corrected upsert. One-time cost.
+      log(
+        `[migration] data_version ${stored} → 9: clearing corrupted dependency graph (sv-p4-04 fix); next index will re-parse all files`
+      );
+      this.db.exec("DELETE FROM dependencies");
+      this.db.exec("UPDATE files SET hash = ''");
+    }
+
     setDataVersion(this.db, CURRENT_DATA_VERSION);
   }
 

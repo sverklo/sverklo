@@ -41,7 +41,16 @@ import Database from "better-sqlite3";
 //       Also adds doc_mentions.edge_kind ('includes' vs 'references') —
 //       the iwe inclusion-vs-reference split. Derived from match_kind at
 //       insert time (fenced_code → includes, backtick/bare → references).
-export const CURRENT_DATA_VERSION = 8;
+//   9 — sv-p4-04 fix: FileStore.upsert switched from INSERT OR REPLACE
+//       to INSERT…ON CONFLICT DO UPDATE so file_id stays stable across
+//       re-index. The old code triggered ON DELETE CASCADE on every
+//       row in `dependencies` that referenced the file (as source OR
+//       target), and only outgoing edges of the touched file got
+//       restored — incoming edges from cached source files were lost.
+//       Migration clears `dependencies` and resets `files.hash` to ''
+//       so the next index() re-parses every file and rebuilds the graph
+//       from scratch under the corrected upsert. Cost: one re-index.
+export const CURRENT_DATA_VERSION = 9;
 
 const SCHEMA = `
 -- Indexed files

@@ -10,9 +10,29 @@ export class FileStore {
   private getLanguagesStmt: Database.Statement;
 
   constructor(private db: Database.Database) {
+    // INSERT OR REPLACE used to be the implementation here, and it had a
+    // silent data-corruption bug: REPLACE deletes the old row before
+    // inserting the new one, which fires ON DELETE CASCADE on every
+    // dependency edge that referenced this file as either source OR
+    // target. buildGraph only restores OUTGOING edges (the ones the
+    // re-parsed file declares); INCOMING edges from cached files were
+    // wiped permanently. Symptom: sv-p4-04 — chunk-store.ts reported 0
+    // importers when in fact indexer.ts imports it. Fix: ON CONFLICT
+    // DO UPDATE mutates the row in place. Same id, no cascade, edges live.
+    // The RETURNING id clause lets us still hand back the row id whether
+    // the operation was an insert or an update.
+    // Note we deliberately do NOT update pagerank on conflict —
+    // buildGraph recomputes it once at the end of indexing.
     this.insertStmt = db.prepare(`
-      INSERT OR REPLACE INTO files (path, language, hash, last_modified, size_bytes, pagerank, indexed_at)
+      INSERT INTO files (path, language, hash, last_modified, size_bytes, pagerank, indexed_at)
       VALUES (?, ?, ?, ?, ?, 0.0, ?)
+      ON CONFLICT(path) DO UPDATE SET
+        language = excluded.language,
+        hash = excluded.hash,
+        last_modified = excluded.last_modified,
+        size_bytes = excluded.size_bytes,
+        indexed_at = excluded.indexed_at
+      RETURNING id
     `);
     this.getByPathStmt = db.prepare("SELECT * FROM files WHERE path = ?");
     this.getAllStmt = db.prepare("SELECT * FROM files ORDER BY pagerank DESC");
@@ -32,15 +52,15 @@ export class FileStore {
     lastModified: number,
     sizeBytes: number
   ): number {
-    const result = this.insertStmt.run(
+    const row = this.insertStmt.get(
       path,
       language,
       hash,
       lastModified,
       sizeBytes,
       Date.now()
-    );
-    return Number(result.lastInsertRowid);
+    ) as { id: number };
+    return row.id;
   }
 
   getByPath(path: string): FileRecord | undefined {
