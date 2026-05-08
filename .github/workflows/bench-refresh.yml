@@ -53,6 +53,15 @@ jobs:
           node-version: 22
           cache: npm
 
+      # jcodemunch-mcp baseline spawns `uvx jcodemunch-mcp serve` —
+      # uvx ships with astral-sh/uv. Without this step the bench fails
+      # with `Error: spawn uvx ENOENT` after the sverklo slice runs.
+      - name: Setup uv (for jcodemunch baseline)
+        uses: astral-sh/setup-uv@v4
+
+      # gitnexus baseline runs `npx gitnexus …`. npm covers it via Node
+      # setup, no extra step needed. naive-grep/smart-grep are pure shell.
+
       - name: Install + build
         run: |
           npm ci
