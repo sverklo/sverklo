@@ -1,5 +1,5 @@
 name: "sverklo audit"
-description: "Run sverklo audit against your repo and post the code-intel grade as a PR comment. Local-first analysis (no upload). Surfaces dead code, circular deps, coupling, and security findings."
+description: "Local-first code-intel audit on every PR. Grades dead code, deps, coupling, security. Code never leaves the runner."
 author: "Nikita Groshin"
 
 branding:
