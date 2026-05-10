@@ -459,6 +459,18 @@ Output lands in `benchmark/results/<timestamp>/`.
 
 </details>
 
+### Git worktrees
+
+Yes, sverklo works with `git worktree`. Run `sverklo init` inside **each worktree** — that gives you per-worktree isolation:
+
+- **Index** lives at `~/.sverklo/<basename>-<hash>/index.db`, keyed by absolute path. Two worktrees of the same repo → two independent databases.
+- **Memory journal** lives at `<worktree>/.sverklo/memories.jsonl`, inside the worktree itself. Bi-temporal SHA pinning means each memory still answers "what was true at commit X?" correctly across branch switches within one worktree.
+- **`.git` linkfile**: nothing special needed. Sverklo shells out to `git` with `cwd: rootPath`; git CLI handles the worktree linkfile transparently.
+- **MCP config**: keep `args: ["."]` from the worktree root (the default `sverklo init` writes). Pointing at the main checkout from a worktree would defeat per-branch isolation.
+- **Multiple concurrent Claude Code sessions** across different worktrees: safe by default. Different rootPaths = different DB files = no contention.
+
+`sverklo init` adds `.sverklo/` to your `.gitignore` automatically so the per-worktree journal doesn't get committed.
+
 ### Any MCP client (one-shot via `npx`)
 
 ```bash

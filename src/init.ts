@@ -469,6 +469,30 @@ export async function initProject(
     }
   }
 
+  // 1.7. .gitignore — make sure `.sverklo/` (per-project memory journal +
+  //      local state) doesn't get committed. Issue #32 (nviraj) surfaced
+  //      this for git-worktree users where the journal would otherwise
+  //      bleed across worktrees on commit. Idempotent — only appends if
+  //      neither the directory nor a parent pattern is already covered.
+  const gitignorePath = join(projectPath, ".gitignore");
+  if (existsSync(gitignorePath)) {
+    const existing = readFileSync(gitignorePath, "utf-8");
+    const SVERKLO_PATTERNS = [/^\.sverklo\/?$/m, /^\/\.sverklo\/?$/m];
+    const alreadyCovered = SVERKLO_PATTERNS.some((re) => re.test(existing));
+    if (!alreadyCovered) {
+      const trailing = existing.endsWith("\n") ? "" : "\n";
+      writeFileSync(
+        gitignorePath,
+        existing + trailing + "\n# sverklo per-project state (memory journal, etc.)\n.sverklo/\n"
+      );
+      console.log("  .gitignore — added .sverklo/ entry");
+    } else {
+      console.log("  .gitignore — already excludes .sverklo/, skipping");
+    }
+  }
+  // No .gitignore? Don't create one — too opinionated for projects that
+  // aren't git repos or that intentionally don't track ignore rules here.
+
   // 2. MCP server config — Claude Code reads .mcp.json AT PROJECT ROOT for project-scoped servers.
   //    .claude/mcp.json is NOT read by Claude Code (verified Apr 2026).
   const mcpConfigPath = join(projectPath, ".mcp.json");
