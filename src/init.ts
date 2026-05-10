@@ -506,12 +506,12 @@ export async function initProject(
     }
   } else {
     if (!mcpConfig.mcpServers) mcpConfig.mcpServers = {};
-    // SVERKLO_PROFILE=core ships 5 tools (status/search/lookup/refs/overview)
+    // SVERKLO_PROFILE=core ships 6 tools (status/search/lookup/overview/refs/impact)
     // instead of the full 36. Claude Code stalls on tool selection when it
     // sees 36 sverklo tools alongside its built-ins; users with full(36)
-    // report sverklo "doesn't get called" even after init succeeds. core(5)
+    // report sverklo "doesn't get called" even after init succeeds. core
     // is the smallest set that still answers "find / understand / explore"
-    // questions; users who need impact/audit/etc. flip to standard via env.
+    // questions; users who need audit/diff/memory tools flip to lean/full via env.
     mcpConfig.mcpServers.sverklo = {
       command: sverkloBin,
       args: ["."],
@@ -519,7 +519,7 @@ export async function initProject(
     };
     writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + "\n");
     console.log(
-      `  .mcp.json — added sverklo MCP server (${sverkloBin}, profile: core / 5 tools)`
+      `  .mcp.json — added sverklo MCP server (${sverkloBin}, profile: core / 6 tools)`
     );
   }
 

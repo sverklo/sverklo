@@ -59,7 +59,12 @@ let cache: OverrideCache | null = null;
 // profile is set we don't filter.
 export const PROFILES: Record<string, string[]> = {
   core: [
-    // The 5 tools an agent actually reaches for in 80% of code-intel sessions.
+    // The 6 tools an agent actually reaches for in 80% of code-intel sessions.
+    // sverklo_status is included so `sverklo doctor`'s tools/call probe and
+    // first-session "is this alive?" checks work without re-flagging the
+    // profile. Cost: +1 tool above the original 5; well below Claude Code's
+    // tool-choke threshold (~12+).
+    "sverklo_status",
     "sverklo_search",
     "sverklo_lookup",
     "sverklo_overview",
