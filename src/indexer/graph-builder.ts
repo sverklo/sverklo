@@ -69,6 +69,22 @@ export function buildGraph(
     pathToId.set(f.path, f.id);
   }
 
+  // Clear outgoing edges for every file that was just re-parsed. The
+  // incremental reindexFile() path already does this before calling
+  // buildGraph (indexer.ts:451), but the full-index path didn't —
+  // upsert alone doesn't remove edges that no longer exist in the
+  // re-parsed import list. Symptom: a consumer that switches from
+  // `import type { Indexer }` to `import type { IndexFiles }` keeps
+  // its old edge to indexer.ts AND adds a new edge to index-files.ts,
+  // doubling fan-in instead of moving it. Discovered while running
+  // the indexer-coupling refactor POC.
+  for (const filePath of fileImports.keys()) {
+    const sourceId = pathToId.get(filePath);
+    if (sourceId !== undefined) {
+      graphStore.deleteBySourceFile(sourceId);
+    }
+  }
+
   // Build edges
   const edges: { source: number; target: number }[] = [];
 
