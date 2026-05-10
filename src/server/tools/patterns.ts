@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { PATTERN_TAXONOMY, PATTERN_SET } from "../../storage/pattern-store.js";
 
 // P2-17: query the pattern_edges table by pattern name. Returns symbols
@@ -24,7 +24,7 @@ export const patternsTool = {
   },
 };
 
-export function handlePatterns(indexer: Indexer, args: Record<string, unknown>): string {
+export function handlePatterns(indexer: IndexMemory, args: Record<string, unknown>): string {
   let total = 0;
   try {
     total = indexer.patternStore.count();
@@ -64,7 +64,7 @@ export function handlePatterns(indexer: Indexer, args: Record<string, unknown>):
   return parts.join("\n");
 }
 
-function formatTaxonomyOverview(indexer: Indexer): string {
+function formatTaxonomyOverview(indexer: IndexMemory): string {
   // Per-pattern counts via SQL COUNT — taxonomy is small (~30) so this is
   // 30 cheap aggregate queries instead of 30 joined-row materializations.
   const parts: string[] = ["## Pattern taxonomy", ""];

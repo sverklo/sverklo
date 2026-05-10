@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
 import { hybridSearch, formatResults } from "../../search/hybrid-search.js";
 import type { ChunkType } from "../../types/index.js";
 import { resolveBudget } from "../../utils/budget.js";
@@ -44,7 +46,7 @@ export const diffSearchTool = {
 };
 
 export async function handleDiffSearch(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   args: Record<string, unknown>
 ): Promise<string> {
   const query = args.query as string;

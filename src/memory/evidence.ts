@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexMemory } from "../indexer/index-memory.js";
 import type { Evidence, RetrievalMethod, VerifyResult, CodeChunk } from "../types/index.js";
 import { getGitState } from "./git-state.js";
 import {
@@ -37,7 +38,7 @@ export interface CreateEvidenceInput {
  * there's no filesystem read on the hot path.
  */
 export function createEvidence(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexMemory,
   input: CreateEvidenceInput
 ): Evidence {
   const sha = cachedGitSha(indexer.rootPath);
@@ -69,7 +70,7 @@ export function createEvidence(
  * the outcome. The stored content_hash is the truth; the classifier walks
  * a window around the original line range to detect a "moved" case.
  */
-export function verifyEvidence(indexer: Indexer, evidenceId: string): VerifyResult {
+export function verifyEvidence(indexer: IndexFiles & IndexMemory, evidenceId: string): VerifyResult {
   const row: StoredEvidence | null = indexer.evidenceStore.getById(evidenceId);
   if (!row) {
     return {

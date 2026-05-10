@@ -1,4 +1,5 @@
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexMemory } from "../indexer/index-memory.js";
 import type { CodeChunk, FileRecord, Evidence, RetrievalMethod } from "../types/index.js";
 import { createEvidence } from "./evidence.js";
 
@@ -21,7 +22,7 @@ export interface EvidenceHit {
 }
 
 export function emitForHits(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexMemory,
   hits: EvidenceHit[],
   method: RetrievalMethod,
   cap = 16

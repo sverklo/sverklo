@@ -11,7 +11,10 @@
 //   normal  — overview header + top 5 search hits + top 5 memories + symbol table
 //   full    — normal + dependency neighbours of top results
 
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { hybridSearch } from "../../search/hybrid-search.js";
 import { handleRecall } from "./recall.js";
 import { estimateTokens } from "../../utils/tokens.js";
@@ -61,7 +64,7 @@ export const contextTool = {
 type DetailLevel = "minimal" | "normal" | "full";
 
 export async function handleContext(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory,
   args: Record<string, unknown>
 ): Promise<string> {
   const task = (args.task as string)?.trim() || "";
@@ -241,7 +244,7 @@ const MAX_REPO_MAP_BUDGET = 32000;
 const MIN_REPO_MAP_BUDGET = 500;
 
 async function buildPrunedRepoMap(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory,
   opts: {
     budget: number;
     task: string;

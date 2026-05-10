@@ -1,6 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexCode } from "../indexer/index-code.js";
+import type { IndexGraph } from "../indexer/index-graph.js";
 import type { FileRecord, CodeChunk } from "../types/index.js";
 
 export interface WikiOptions {
@@ -26,7 +28,7 @@ interface ModuleInfo {
  * the Indexer's stores (files, chunks, graph, symbol refs, PageRank).
  */
 export async function generateWiki(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   options: WikiOptions
 ): Promise<void> {
   const { outputDir } = options;
@@ -160,7 +162,7 @@ function groupByModule(files: FileRecord[]): ModuleInfo[] {
 }
 
 function generateIndexPage(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   allFiles: FileRecord[],
   allEdges: { source_file_id: number; target_file_id: number; reference_count: number }[],
   modules: ModuleInfo[],
@@ -405,7 +407,7 @@ function generateFilePage(
   importsOf: Map<number, Set<number>>,
   importersOf: Map<number, Set<number>>,
   fileById: Map<number, FileRecord>,
-  indexer: Indexer
+  indexer: IndexFiles & IndexCode & IndexGraph
 ): string {
   const lines: string[] = [];
 

@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 
 export const pinTool = {
   name: "sverklo_pin",
@@ -41,7 +41,7 @@ export const unpinTool = {
 };
 
 export function handlePin(
-  indexer: Indexer,
+  indexer: IndexMemory,
   args: Record<string, unknown>
 ): string {
   if (typeof args.memory_id !== "number" || !Number.isInteger(args.memory_id)) {
@@ -70,7 +70,7 @@ export function handlePin(
 }
 
 export function handleUnpin(
-  indexer: Indexer,
+  indexer: IndexMemory,
   args: Record<string, unknown>
 ): string {
   if (typeof args.memory_id !== "number" || !Number.isInteger(args.memory_id)) {

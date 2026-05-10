@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { parseHandleUri } from "../../storage/handle-store.js";
 import { grepResults, headResults, splitBlocks } from "../../search/post-filter.js";
 import { getGitState } from "../../memory/git-state.js";
@@ -53,7 +53,7 @@ export const ctxStatsTool = {
   },
 };
 
-function resolveBody(indexer: Indexer, uri: string): { body: string; sha: string | null } | string {
+function resolveBody(indexer: IndexMemory, uri: string): { body: string; sha: string | null } | string {
   const parsed = parseHandleUri(uri);
   if (!parsed) return `Invalid handle URI: ${uri}. Expected format: ctx://<tool>/<id>.`;
 
@@ -68,7 +68,7 @@ function resolveBody(indexer: Indexer, uri: string): { body: string; sha: string
   return { body: handle.body, sha: handle.sha };
 }
 
-export function handleCtxSlice(indexer: Indexer, args: Record<string, unknown>): string {
+export function handleCtxSlice(indexer: IndexMemory, args: Record<string, unknown>): string {
   const uri = args.uri as string | undefined;
   if (!uri) return "ctx_slice requires `uri`.";
   const r = resolveBody(indexer, uri);
@@ -81,7 +81,7 @@ export function handleCtxSlice(indexer: Indexer, args: Record<string, unknown>):
   return `${slice}\n\n${tag}`;
 }
 
-export function handleCtxGrep(indexer: Indexer, args: Record<string, unknown>): string {
+export function handleCtxGrep(indexer: IndexMemory, args: Record<string, unknown>): string {
   const uri = args.uri as string | undefined;
   const pattern = args.pattern as string | undefined;
   if (!uri || !pattern) return "ctx_grep requires `uri` and `pattern`.";
@@ -96,7 +96,7 @@ export function handleCtxGrep(indexer: Indexer, args: Record<string, unknown>): 
   return grepped.text;
 }
 
-export function handleCtxStats(indexer: Indexer, args: Record<string, unknown>): string {
+export function handleCtxStats(indexer: IndexMemory, args: Record<string, unknown>): string {
   const uri = args.uri as string | undefined;
   if (!uri) return "ctx_stats requires `uri`.";
   const parsed = parseHandleUri(uri);

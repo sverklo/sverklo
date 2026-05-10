@@ -1,4 +1,5 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 
 export const wakeupTool = {
   name: "sverklo_wakeup",
@@ -24,7 +25,7 @@ export const wakeupTool = {
   },
 };
 
-export function handleWakeup(indexer: Indexer, args: Record<string, unknown>): string {
+export function handleWakeup(indexer: IndexFiles & IndexMemory, args: Record<string, unknown>): string {
   return generateWakeup(indexer, {
     maxTokens: (args.max_tokens as number) || 500,
     format: (args.format as "markdown" | "plain") || "markdown",
@@ -32,7 +33,7 @@ export function handleWakeup(indexer: Indexer, args: Record<string, unknown>): s
 }
 
 export function generateWakeup(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexMemory,
   options: { maxTokens?: number; format?: "markdown" | "plain" } = {}
 ): string {
   const maxTokens = options.maxTokens || 500;

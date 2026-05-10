@@ -17,7 +17,7 @@
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexMemory } from "../indexer/index-memory.js";
 import type { Memory, MemoryCategory } from "../types/index.js";
 
 export interface ExportOptions {
@@ -50,7 +50,7 @@ const CATEGORY_HEADINGS: Record<MemoryCategory, string> = {
 };
 
 export function runMemoryExport(
-  indexer: Indexer,
+  indexer: IndexMemory,
   opts: ExportOptions
 ): ExportReport {
   const rows = opts.includeInvalidated

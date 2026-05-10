@@ -1,4 +1,7 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { resolveBudget } from "../../utils/budget.js";
 import { analyzeCodebase } from "../audit-analysis.js";
 import { getAuditHistory, formatTrend } from "../../utils/audit-history.js";
@@ -27,7 +30,7 @@ interface GodNode {
   refCount: number;
 }
 
-export function handleAudit(indexer: Indexer, args: Record<string, unknown>): string {
+export function handleAudit(indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory, args: Record<string, unknown>): string {
   const tokenBudget = resolveBudget(args, "audit", null, 4000);
   const files = indexer.fileStore.getAll();
   const chunkCount = indexer.chunkStore.count();

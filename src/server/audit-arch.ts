@@ -4,7 +4,7 @@
  * dependency arrows in a clean deterministic layout.
  */
 
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexGraph } from "../indexer/index-graph.js";
 import type { AuditAnalysis } from "./audit-analysis.js";
 
 // ─── Layer detection ───
@@ -77,7 +77,7 @@ function detectArchType(layers: LayerGroup[], edges: LayerEdge[]): string {
 }
 
 export function generateAuditArch(
-  indexer: Indexer,
+  indexer: IndexGraph,
   analysis: AuditAnalysis,
   projectName: string,
 ): string {

@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { cosineSimilarity } from "../../indexer/embedder.js";
 
 export const conceptsTool = {
@@ -26,7 +26,7 @@ export const conceptsTool = {
 };
 
 export async function handleConcepts(
-  indexer: Indexer,
+  indexer: IndexMemory,
   args: Record<string, unknown>
 ): Promise<string> {
   const query = args.query;

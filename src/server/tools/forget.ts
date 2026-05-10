@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 
 export const forgetTool = {
   name: "sverklo_forget",
@@ -21,7 +21,7 @@ export const forgetTool = {
 };
 
 export function handleForget(
-  indexer: Indexer,
+  indexer: IndexMemory,
   args: Record<string, unknown>
 ): string {
   if (typeof args.id !== "number" || !Number.isInteger(args.id)) {

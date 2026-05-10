@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { getGitState } from "../../memory/git-state.js";
 import { track } from "../../telemetry/index.js";
 import type { MemoryCategory, MemoryTier, MemoryKind } from "../../types/index.js";
@@ -60,7 +60,7 @@ export const rememberTool = {
 };
 
 export async function handleRemember(
-  indexer: Indexer,
+  indexer: IndexMemory,
   args: Record<string, unknown>
 ): Promise<string> {
   const contentArg = requireString(

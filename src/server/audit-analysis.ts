@@ -1,4 +1,6 @@
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexCode } from "../indexer/index-code.js";
+import type { IndexGraph } from "../indexer/index-graph.js";
 
 // ─── Types ───
 
@@ -181,7 +183,7 @@ const ENV_EXAMPLE_FILE = /\.env\.example$/;
 const CLI_FILE =
   /(^|\/)(bin|cmd|cli)(\/|$)|\b(cli|doctor|init|wakeup|main|index)\.(c|m)?[tj]sx?$|(^|\/)__main__\.py$|(^|\/)main\.(go|rs)$/i;
 
-export function scanSecurity(indexer: Indexer): SecurityIssue[] {
+export function scanSecurity(indexer: IndexFiles & IndexCode & IndexGraph): SecurityIssue[] {
   const allChunks = indexer.chunkStore.getAllWithFile();
   const issues: SecurityIssue[] = [];
   // Track deduplicated issues by file:line:pattern
@@ -442,7 +444,7 @@ const DECORATOR_ENTRY_POINT =
 
 // ─── Dead code percentage ───
 
-function computeDeadCodePct(indexer: Indexer): {
+function computeDeadCodePct(indexer: IndexFiles & IndexCode & IndexGraph): {
   pct: number;
   orphanCount: number;
   totalCount: number;
@@ -528,7 +530,7 @@ function computeDeadCodePct(indexer: Indexer): {
 
 // ─── Main analysis function ───
 
-export function analyzeCodebase(indexer: Indexer): AuditAnalysis {
+export function analyzeCodebase(indexer: IndexFiles & IndexCode & IndexGraph): AuditAnalysis {
   const files = indexer.fileStore.getAll();
   const edges = indexer.graphStore.getAll();
 

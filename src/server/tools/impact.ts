@@ -1,4 +1,5 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
 import { findWorkspaceForProject, getWorkspaceDbPath } from "../../workspace/workspace-config.js";
 import { CrossRepoDb } from "../../workspace/cross-db.js";
 import type { InterfaceContract } from "../../workspace/cross-db.js";
@@ -38,7 +39,7 @@ export const impactTool = {
   },
 };
 
-export function handleImpact(indexer: Indexer, args: Record<string, unknown>): string {
+export function handleImpact(indexer: IndexFiles & IndexCode, args: Record<string, unknown>): string {
   const symbol = args.symbol as string;
   const limit = (args.limit as number) || 50;
 
@@ -157,7 +158,7 @@ export function handleImpact(indexer: Indexer, args: Record<string, unknown>): s
   return parts.join("\n");
 }
 
-function getCrossRepoImpact(indexer: Indexer, symbol: string): string | null {
+function getCrossRepoImpact(indexer: IndexFiles & IndexCode, symbol: string): string | null {
   try {
     const wsConfig = findWorkspaceForProject(indexer.rootPath);
     if (!wsConfig) {

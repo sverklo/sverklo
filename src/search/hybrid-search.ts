@@ -1,4 +1,5 @@
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexCode } from "../indexer/index-code.js";
 import { cosineSimilarity } from "../indexer/embedder.js";
 import type { SearchResult, CodeChunk, FileRecord, ChunkType } from "../types/index.js";
 import { log } from "../utils/logger.js";
@@ -161,7 +162,7 @@ export interface HybridSearchResult {
  * Returns the full ranked list (not token-budgeted). Callers pack.
  */
 async function rankCandidates(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode,
   options: SearchOptions
 ): Promise<SearchResult[]> {
   const { query, scope, language, type } = options;
@@ -273,7 +274,7 @@ async function rankCandidates(
  * confidence signal.
  */
 export async function hybridSearch(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode,
   options: SearchOptions
 ): Promise<SearchResult[]> {
   const ranked = await rankCandidates(indexer, options);
@@ -302,7 +303,7 @@ async function maybeRerank(
  * they can fall back to Grep without burning a second tool call.
  */
 export async function hybridSearchWithConfidence(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode,
   options: SearchOptions
 ): Promise<HybridSearchResult> {
   // Single rank pass; confidence reads the unbounded list, the output

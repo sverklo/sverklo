@@ -1,4 +1,5 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
 import type { FileRecord, SearchResult, CodeChunk } from "../../types/index.js";
 import { resolveBudget } from "../../utils/budget.js";
 import { rerank, rerankerConfigFromEnv } from "../../search/rerank.js";
@@ -55,7 +56,7 @@ function buildSymbolMatcher(symbol: string, exact: boolean): (line: string) => b
 }
 
 export async function handleFindReferences(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode,
   args: Record<string, unknown>
 ): Promise<string> {
   const symbol = args.symbol;

@@ -1,4 +1,5 @@
-import type { Indexer } from "./indexer.js";
+import type { IndexFiles } from "./index-files.js";
+import type { IndexCode } from "./index-code.js";
 import type { ConceptStore } from "../storage/concept-store.js";
 import { clusterContentHash } from "../storage/concept-store.js";
 import type { FileCluster } from "../search/cluster.js";
@@ -40,7 +41,7 @@ const SYSTEM_PROMPT =
   `If the cluster is too small or incoherent to label, use {"label":"unclear","summary":"","tags":[]}.`;
 
 export async function labelClusters(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode,
   clusters: FileCluster[],
   conceptStore: ConceptStore,
   opts: LabelingOptions = {}
@@ -129,7 +130,7 @@ function extractIdFromPath(file: { path: string }): number {
   return h;
 }
 
-function buildClusterPrompt(cluster: FileCluster, indexer: Indexer): string {
+function buildClusterPrompt(cluster: FileCluster, indexer: IndexFiles & IndexCode): string {
   const lines: string[] = [];
   lines.push(`Cluster "${cluster.name}"`);
   lines.push(`Hub file: ${cluster.hubFile}`);

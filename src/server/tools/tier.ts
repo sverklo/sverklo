@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import type { MemoryTier } from "../../types/index.js";
 
 // Issue #11: soft cap on the core tier. Core memories are injected
@@ -44,15 +44,15 @@ export const demoteTool = {
   },
 };
 
-export function handlePromote(indexer: Indexer, args: Record<string, unknown>): string {
+export function handlePromote(indexer: IndexMemory, args: Record<string, unknown>): string {
   return setTier(indexer, args, "core");
 }
 
-export function handleDemote(indexer: Indexer, args: Record<string, unknown>): string {
+export function handleDemote(indexer: IndexMemory, args: Record<string, unknown>): string {
   return setTier(indexer, args, "archive");
 }
 
-function setTier(indexer: Indexer, args: Record<string, unknown>, tier: MemoryTier): string {
+function setTier(indexer: IndexMemory, args: Record<string, unknown>, tier: MemoryTier): string {
   if (typeof args.id !== "number" || !Number.isInteger(args.id)) {
     return `Error: \`id\` must be an integer, got ${JSON.stringify(args.id)}.`;
   }

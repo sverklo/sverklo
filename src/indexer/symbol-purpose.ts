@@ -1,4 +1,4 @@
-import type { Indexer } from "./indexer.js";
+import type { IndexFiles } from "./index-files.js";
 import { ollamaChat, parseJsonResponse, type OllamaChatOptions } from "../utils/ollama.js";
 import { createHash } from "node:crypto";
 
@@ -27,7 +27,7 @@ const SYSTEM_PROMPT =
   "If the symbol is trivial (boilerplate, getter, generated), use {\"purpose\":\"\"}.";
 
 export async function enrichSymbolPurposes(
-  indexer: Indexer,
+  indexer: IndexFiles,
   opts: EnrichOptions = {}
 ): Promise<EnrichResult> {
   const topN = opts.topN ?? 200;

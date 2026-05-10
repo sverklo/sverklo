@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
 import { detectClusters, type FileCluster } from "../../search/cluster.js";
 
 export const clustersTool = {
@@ -22,7 +22,7 @@ export const clustersTool = {
 };
 
 export function handleClusters(
-  indexer: Indexer,
+  indexer: IndexGraph,
   args: Record<string, unknown>
 ): string {
   const minSize = (args.min_size as number) || 3;
@@ -97,7 +97,7 @@ function formatCluster(cluster: FileCluster): string {
 /**
  * Return clusters as structured data for the HTTP API / dashboard.
  */
-export function getClustersJSON(indexer: Indexer): FileCluster[] {
+export function getClustersJSON(indexer: IndexGraph): FileCluster[] {
   const files = indexer.fileStore.getAll();
   const allEdges = indexer.graphStore.getAll();
   const fileIdSet = new Set(files.map(f => f.id));

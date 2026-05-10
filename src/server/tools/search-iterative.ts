@@ -1,4 +1,7 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { runInvestigate, formatInvestigate } from "../../search/investigate.js";
 import { buildHandleUri } from "../../storage/handle-store.js";
 import { getGitState } from "../../memory/git-state.js";
@@ -33,7 +36,7 @@ export const searchIterativeTool = {
 };
 
 export async function handleSearchIterative(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory,
   args: Record<string, unknown>
 ): Promise<string> {
   const query = args.query;

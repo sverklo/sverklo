@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
 import { isTestPath, candidateTestNames } from "./test-paths.js";
 import { computeRiskScore, formatRiskBadge } from "./risk-score.js";
 import { validateGitRef } from "../../utils/git-validation.js";
@@ -31,7 +33,7 @@ export const testMapTool = {
 };
 
 export function handleTestMap(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   args: Record<string, unknown>
 ): string {
   const ref = (args.ref as string) || "main..HEAD";

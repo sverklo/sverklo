@@ -1,7 +1,7 @@
 import { execSync, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve as resolvePath, sep } from "node:path";
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
 
 export const astGrepTool = {
   name: "sverklo_ast_grep",
@@ -27,7 +27,7 @@ const NOT_INSTALLED_MESSAGE =
   "ast-grep not installed. Install with: brew install ast-grep / npm install -g @ast-grep/cli";
 
 export function handleAstGrep(
-  indexer: Indexer,
+  indexer: IndexFiles,
   args: Record<string, unknown>
 ): string {
   const pattern = args.pattern as string;

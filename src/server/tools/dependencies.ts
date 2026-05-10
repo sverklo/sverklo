@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
 import type { FileRecord } from "../../types/index.js";
 import { resolveBudget } from "../../utils/budget.js";
 
@@ -32,7 +32,7 @@ export const dependenciesTool = {
 };
 
 export function handleDependencies(
-  indexer: Indexer,
+  indexer: IndexGraph,
   args: Record<string, unknown>
 ): string {
   if (typeof args.path !== "string" || args.path.trim() === "") {

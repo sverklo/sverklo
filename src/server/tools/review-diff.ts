@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
 import type { CodeChunk, FileRecord } from "../../types/index.js";
 import { computeRiskScore, formatRiskBadge, type RiskScore } from "./risk-score.js";
 import { isTestPath, candidateTestNames } from "./test-paths.js";
@@ -59,7 +61,7 @@ interface SymbolChange {
 }
 
 export function handleReviewDiff(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   args: Record<string, unknown>
 ): string {
   const ref = (args.ref as string) || "main..HEAD";

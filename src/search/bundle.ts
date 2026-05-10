@@ -8,7 +8,8 @@
 // richer grounding without having to fire follow-up Read / refs calls.
 
 import type { SearchResult, CodeChunk, FileRecord } from "../types/index.js";
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexGraph } from "../indexer/index-graph.js";
 import { estimateTokens } from "../utils/tokens.js";
 
 export interface BundleOptions {
@@ -38,7 +39,7 @@ export interface BundleOutput {
  * budget is exhausted, remaining hits keep their original (empty) bundle.
  */
 export function bundleResults(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexGraph,
   results: SearchResult[],
   opts: BundleOptions
 ): BundleOutput {

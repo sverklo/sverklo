@@ -1,4 +1,7 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { runInvestigate } from "../../search/investigate.js";
 import { cosineSimilarity } from "../../indexer/embedder.js";
 import { emitForHits } from "../../memory/evidence-emit.js";
@@ -37,7 +40,7 @@ export const askTool = {
 };
 
 export async function handleAsk(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory,
   args: Record<string, unknown>
 ): Promise<string> {
   const query = args.query;
@@ -116,7 +119,7 @@ export async function handleAsk(
 }
 
 async function topConcepts(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory,
   query: string,
   n: number
 ): Promise<Array<{ label: string; summary: string | null; hub_file: string | null; score: number }>> {

@@ -1,4 +1,5 @@
-import type { Indexer } from "./indexer.js";
+import type { IndexFiles } from "./index-files.js";
+import type { IndexMemory } from "./index-memory.js";
 import { ollamaChat, parseJsonResponse, type OllamaChatOptions } from "../utils/ollama.js";
 import { PATTERN_TAXONOMY, PATTERN_SET } from "../storage/pattern-store.js";
 import { createHash } from "node:crypto";
@@ -41,7 +42,7 @@ const SYSTEM_PROMPT =
   `the code matches the named pattern — be conservative.`;
 
 export async function labelPatterns(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexMemory,
   opts: LabelPatternsOptions = {}
 ): Promise<LabelPatternsResult> {
   const topN = opts.topN ?? 200;

@@ -1,4 +1,6 @@
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexCode } from "../indexer/index-code.js";
+import type { IndexGraph } from "../indexer/index-graph.js";
 import { cosineSimilarity } from "../indexer/embedder.js";
 import type { SearchResult, CodeChunk, FileRecord } from "../types/index.js";
 import { expandTokens, expandFtsQuery } from "./synonyms.js";
@@ -78,7 +80,7 @@ export interface InvestigateOptions {
  * semantically + structurally agreed-upon or a single-signal outlier.
  */
 export async function runInvestigate(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   opts: InvestigateOptions
 ): Promise<InvestigateResult> {
   const budget = opts.budget ?? 50;
@@ -197,7 +199,7 @@ function topNFromScores(
  * neighbors are "documents". RRF treats all of these as a single ranker
  * (graph-expand), but candidates are weighted by edge type before fusion.
  */
-function expandViaTypedEdges(indexer: Indexer, seedIds: number[]): number[] {
+function expandViaTypedEdges(indexer: IndexFiles & IndexCode & IndexGraph, seedIds: number[]): number[] {
   const out: Array<{ id: number; weight: number }> = [];
   const seen = new Set<number>(seedIds);
 
@@ -284,7 +286,7 @@ function topDecileThreshold(fileCache: Map<number, FileRecord>): number {
  * the more specific feature hits that surfaced it.
  */
 function expandViaUpstreamImports(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   seedIds: number[],
   fileCache: Map<number, FileRecord>
 ): number[] {
@@ -371,7 +373,7 @@ function expandViaUpstreamImports(
 }
 
 function runFts(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   query: string,
   budget: number,
   scope: string | undefined,
@@ -388,7 +390,7 @@ function runFts(
 }
 
 async function runVectorSplit(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   query: string,
   budget: number,
   scope?: string
@@ -429,7 +431,7 @@ async function runVectorSplit(
   };
 }
 
-function runSymbols(indexer: Indexer, tokens: string[], perToken: number): number[] {
+function runSymbols(indexer: IndexFiles & IndexCode & IndexGraph, tokens: string[], perToken: number): number[] {
   const ids: number[] = [];
   const seen = new Set<number>();
   for (const t of tokens) {
@@ -453,7 +455,7 @@ function runSymbols(indexer: Indexer, tokens: string[], perToken: number): numbe
  * partitionPlan, etc).
  */
 function runDefinitionsInFtsFiles(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   ftsHitIds: number[],
   fileCache: Map<number, FileRecord>
 ): number[] {
@@ -507,7 +509,7 @@ function runDefinitionsInFtsFiles(
  * as `runDefinitionsInFtsFiles`.
  */
 function runDefinitionsByPathTokens(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   query: string,
   fileCache: Map<number, FileRecord>,
   scope?: string
@@ -621,7 +623,7 @@ function guessRepoName(fileCache: Map<number, FileRecord>): string {
   return (parts[0] ?? "").toLowerCase();
 }
 
-function runRefs(indexer: Indexer, tokens: string[], perToken: number): number[] {
+function runRefs(indexer: IndexFiles & IndexCode & IndexGraph, tokens: string[], perToken: number): number[] {
   const ids: number[] = [];
   const seen = new Set<number>();
   for (const t of tokens) {
@@ -662,7 +664,7 @@ function accumulate(
   }
 }
 
-function buildFileCache(indexer: Indexer): Map<number, FileRecord> {
+function buildFileCache(indexer: IndexFiles & IndexCode & IndexGraph): Map<number, FileRecord> {
   const cache = new Map<number, FileRecord>();
   for (const f of indexer.fileStore.getAll()) cache.set(f.id, f);
   return cache;

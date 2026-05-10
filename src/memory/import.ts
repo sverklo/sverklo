@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexMemory } from "../indexer/index-memory.js";
 import type { MemoryCategory } from "../types/index.js";
 import { embed } from "../indexer/embedder.js";
 import { log } from "../utils/logger.js";
@@ -41,7 +41,7 @@ const ADR_DIRS = [
 ];
 
 export async function importExistingMemories(
-  indexer: Indexer,
+  indexer: IndexMemory,
   projectPath: string,
   options: { mineChats?: boolean; skipPaths?: string[] } = {}
 ): Promise<{ imported: number; skipped: number; sources: string[] }> {

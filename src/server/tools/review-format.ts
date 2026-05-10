@@ -16,7 +16,9 @@
 //   }
 
 import { spawnSync } from "node:child_process";
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexGraph } from "../../indexer/index-graph.js";
 import {
   getDiffHunks,
   runAllHeuristics,
@@ -75,7 +77,7 @@ function deriveMaxRisk(summary: string, findings: HeuristicFinding[]): RiskLevel
  * GitHub Action can hand to `pulls.createReview` to post inline comments.
  */
 export function buildReviewJson(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   args: Record<string, unknown>
 ): ReviewJson | { error: string } {
   const ref = (args.ref as string) || "main..HEAD";

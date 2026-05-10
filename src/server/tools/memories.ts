@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import type { Memory, MemoryCategory } from "../../types/index.js";
 
 export const memoriesTool = {
@@ -37,7 +37,7 @@ export const memoriesTool = {
 };
 
 export function handleMemories(
-  indexer: Indexer,
+  indexer: IndexMemory,
   args: Record<string, unknown>
 ): string {
   const mode = (args.mode as "list" | "conflicts" | undefined) || "list";
@@ -78,7 +78,7 @@ export function handleMemories(
   return header + rows.join("\n\n");
 }
 
-function formatConflicts(indexer: Indexer, limit: number): string {
+function formatConflicts(indexer: IndexMemory, limit: number): string {
   const pairs = indexer.memoryStore.findConflicts(limit);
   if (pairs.length === 0) {
     return (

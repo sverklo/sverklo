@@ -38,8 +38,12 @@ import { loadSverkloConfig, type SverkloConfig } from "../utils/config-file.js";
 import { track } from "../telemetry/index.js";
 import type { ProjectConfig, ImportRef, IndexStatus } from "../types/index.js";
 import type { IndexFiles } from "./index-files.js";
+import type { IndexCode } from "./index-code.js";
+import type { IndexGraph } from "./index-graph.js";
+import type { IndexMemory } from "./index-memory.js";
+import type { IndexAdmin } from "./index-admin.js";
 
-export class Indexer implements IndexFiles {
+export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, IndexAdmin {
   private db: Database.Database;
   public fileStore: FileStore;
   public chunkStore: ChunkStore;

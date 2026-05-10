@@ -1,4 +1,6 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexCode } from "../../indexer/index-code.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { verifyEvidence } from "../../memory/evidence.js";
 import type { VerifyResult } from "../../types/index.js";
 
@@ -47,7 +49,7 @@ export const critiqueTool = {
 };
 
 export function handleCritique(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexMemory,
   args: Record<string, unknown>
 ): string {
   const evidenceIds = Array.isArray(args.evidence_ids)
@@ -132,7 +134,7 @@ export function handleCritique(
 function isSameFile(
   chunk: { file_id: number },
   verified: VerifyResult,
-  indexer: Indexer
+  indexer: IndexFiles & IndexCode & IndexMemory
 ): boolean {
   if (!verified.file) return false;
   const file = indexer.fileStore.getAll().find((f) => f.id === chunk.file_id);

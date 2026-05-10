@@ -4,11 +4,12 @@
  * Fonts link for JetBrains Mono.
  */
 
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexGraph } from "../indexer/index-graph.js";
 import type { AuditAnalysis } from "./audit-analysis.js";
 
 export function generateAuditGraph(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexGraph,
   analysis: AuditAnalysis,
   projectName: string,
 ): string {

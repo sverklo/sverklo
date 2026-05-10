@@ -3,11 +3,13 @@
  * Single file output — open in Obsidian for clickable dependency navigation.
  */
 
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexFiles } from "../indexer/index-files.js";
+import type { IndexCode } from "../indexer/index-code.js";
+import type { IndexGraph } from "../indexer/index-graph.js";
 import type { AuditAnalysis } from "./audit-analysis.js";
 
 export function generateAuditObsidian(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexCode & IndexGraph,
   analysis: AuditAnalysis,
   projectName: string,
 ): string {

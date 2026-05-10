@@ -15,7 +15,7 @@
 //      `superseded_by` set. Optional Ollama distillation; falls back
 //      to a deterministic "Consolidated note" when offline.
 
-import type { Indexer } from "../indexer/indexer.js";
+import type { IndexMemory } from "../indexer/index-memory.js";
 import type { Memory } from "../types/index.js";
 import { cosineSimilarity } from "../indexer/embedder.js";
 import { getGitState } from "./git-state.js";
@@ -61,7 +61,7 @@ const DEFAULTS: Required<Omit<PruneOptions,
 const MAX_MEMBER_CHARS = 1500;
 
 export async function runPrune(
-  indexer: Indexer,
+  indexer: IndexMemory,
   opts: PruneOptions = {}
 ): Promise<PruneReport> {
   // Field-by-field merge with `??`: spreading {...DEFAULTS, ...opts}

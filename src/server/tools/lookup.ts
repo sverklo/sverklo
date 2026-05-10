@@ -1,4 +1,4 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexCode } from "../../indexer/index-code.js";
 import { formatLookup } from "../../search/token-budget.js";
 import type { FileRecord, ChunkType, SearchResult, CodeChunk } from "../../types/index.js";
 import { resolveBudget } from "../../utils/budget.js";
@@ -43,7 +43,7 @@ export const lookupTool = {
 };
 
 export async function handleLookup(
-  indexer: Indexer,
+  indexer: IndexCode,
   args: Record<string, unknown>
 ): Promise<string> {
   // Bug A (issue #15 investigation): missing / wrong-named required

@@ -1,4 +1,5 @@
-import type { Indexer } from "../../indexer/indexer.js";
+import type { IndexFiles } from "../../indexer/index-files.js";
+import type { IndexMemory } from "../../indexer/index-memory.js";
 import { checkStaleness } from "../../memory/staleness.js";
 import { track } from "../../telemetry/index.js";
 import type { Memory, MemoryCategory, MemoryTier, MemoryKind } from "../../types/index.js";
@@ -66,7 +67,7 @@ export const recallTool = {
 };
 
 export async function handleRecall(
-  indexer: Indexer,
+  indexer: IndexFiles & IndexMemory,
   args: Record<string, unknown>
 ): Promise<string> {
   const query = (args.query as string) || "";
