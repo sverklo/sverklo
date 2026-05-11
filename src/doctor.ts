@@ -33,6 +33,15 @@ interface CheckResult {
 export function runDoctor(projectPath: string): void {
   const checks: CheckResult[] = [];
 
+  // Captured from .mcp.json so the MCP probe (step 7 below) spawns the
+  // server with the same env Claude Code would. Without this, the doctor
+  // probe inherits the user's shell env — which typically lacks
+  // SVERKLO_PROFILE — and reports "36 tools advertised" even when
+  // .mcp.json explicitly sets profile=core. That's the silent contradiction
+  // UX caught in the 2026-05-10 audit: headline v0.20.9 fix invisible in
+  // the headline v0.20.9 diagnostic.
+  let mcpEnvFromConfig: Record<string, string> | undefined;
+
   // 1. Binary on PATH
   let sverkloBin: string | null = null;
   try {
@@ -112,6 +121,9 @@ export function runDoctor(projectPath: string): void {
         };
         const cmd = entry.command;
         const profile = entry.env?.SVERKLO_PROFILE;
+        // Capture the env block so the MCP dispatch probe (check 7) can
+        // forward it to spawnSync. See note at top of runDoctor.
+        if (entry.env) mcpEnvFromConfig = entry.env;
         if (cmd === "sverklo" || cmd?.endsWith("/sverklo")) {
           // Surface the active profile in the OK message — silent 36-tool
           // configs are exactly the failure mode v0.20.9 fixed, so users
@@ -127,7 +139,7 @@ export function runDoctor(projectPath: string): void {
               name: ".mcp.json (project root)",
               status: "warn",
               message: `sverklo configured: ${cmd} — no SVERKLO_PROFILE set, Claude Code sees all 36 tools`,
-              fix: "sverklo init (will add SVERKLO_PROFILE=core for 5-tool default)",
+              fix: "sverklo init (will add SVERKLO_PROFILE=core for 6-tool default)",
             });
           }
         } else {
@@ -492,6 +504,10 @@ export function runDoctor(projectPath: string): void {
         cwd: projectPath,
         timeout: 15000,
         maxBuffer: 4 * 1024 * 1024,
+        // Forward .mcp.json's env block (incl. SVERKLO_PROFILE) so the
+        // probe sees the same tool surface Claude Code would. process.env
+        // alone is wrong: users rarely have SVERKLO_PROFILE in their shell.
+        env: { ...process.env, ...(mcpEnvFromConfig || {}) },
       });
 
       const out = result.stdout || "";

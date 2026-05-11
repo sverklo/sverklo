@@ -149,7 +149,25 @@ jobs:
           path: ${{ steps.results.outputs.dir }}
           retention-days: 14
 
+      - name: Write results to job summary
+        run: |
+          # Always-visible bench output, regardless of whether the PR-comment
+          # step succeeds. Fork-originated PRs can't post comments (GITHUB_TOKEN
+          # is read-only on the base repo by GitHub's security model — see
+          # https://github.com/sverklo/sverklo/issues/35), so the job summary is
+          # the only place fork contributors see their numbers.
+          {
+            echo "## auto-bench results"
+            echo ""
+            cat /tmp/auto-bench-comment.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Post or update PR comment
+        # Fork PRs can't post comments — the GITHUB_TOKEN is read-only on the
+        # base repo. Don't fail the whole workflow when the comment step fails
+        # for that reason; the bench results are already in the job summary +
+        # uploaded as an artifact. Tracked: #35.
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |

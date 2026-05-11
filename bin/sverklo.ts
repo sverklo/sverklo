@@ -2278,6 +2278,12 @@ if (command === "--help" || command === "-h") {
   console.log(`
 sverklo — code intelligence for AI agents
 
+Just installed? Run these two:
+  sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
+  sverklo doctor             Verify MCP dispatch end-to-end (initialize + tools/list + tools/call)
+
+Then restart your AI agent (Claude Code, Cursor, Windsurf, etc.) — sverklo tools become available automatically.
+
 Usage:
   sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
   sverklo doctor             Diagnose MCP setup issues
@@ -2294,6 +2300,7 @@ Audit / review:
   sverklo audit-prompt       Print a ready-to-paste codebase-audit prompt (hybrid workflow)
   sverklo review-prompt      Print a ready-to-paste PR/MR-review prompt (hybrid workflow)
   sverklo history            Show audit grade history and trend over time
+  sverklo receipt            Token-spend receipt for your recent AI-agent sessions
   sverklo bench              Run reproducible benchmarks on gin/nestjs/react (checkout only)
 
 Memory + offline maintenance:

@@ -475,6 +475,9 @@ export async function initProject(
   //      bleed across worktrees on commit. Idempotent — only appends if
   //      neither the directory nor a parent pattern is already covered.
   const gitignorePath = join(projectPath, ".gitignore");
+  const gitDirPath = join(projectPath, ".git");
+  const SVERKLO_GITIGNORE_BLOCK =
+    "# sverklo per-project state (memory journal, etc.)\n.sverklo/\n";
   if (existsSync(gitignorePath)) {
     const existing = readFileSync(gitignorePath, "utf-8");
     const SVERKLO_PATTERNS = [/^\.sverklo\/?$/m, /^\/\.sverklo\/?$/m];
@@ -483,15 +486,22 @@ export async function initProject(
       const trailing = existing.endsWith("\n") ? "" : "\n";
       writeFileSync(
         gitignorePath,
-        existing + trailing + "\n# sverklo per-project state (memory journal, etc.)\n.sverklo/\n"
+        existing + trailing + "\n" + SVERKLO_GITIGNORE_BLOCK
       );
       console.log("  .gitignore — added .sverklo/ entry");
     } else {
       console.log("  .gitignore — already excludes .sverklo/, skipping");
     }
+  } else if (existsSync(gitDirPath)) {
+    // Fresh `git init` users have a .git/ directory but no .gitignore yet.
+    // Without this branch the .sverklo/ journal silently gets staged on
+    // their first `git add .` — exactly the bleed-across-worktrees failure
+    // mode v0.20.14 was meant to prevent. Create a minimal .gitignore.
+    writeFileSync(gitignorePath, SVERKLO_GITIGNORE_BLOCK);
+    console.log("  .gitignore — created with .sverklo/ entry");
   }
-  // No .gitignore? Don't create one — too opinionated for projects that
-  // aren't git repos or that intentionally don't track ignore rules here.
+  // No .git/ at all? Don't create a .gitignore — the project isn't a git
+  // repo (or hasn't been initialized yet), so the file would be inert.
 
   // 2. MCP server config — Claude Code reads .mcp.json AT PROJECT ROOT for project-scoped servers.
   //    .claude/mcp.json is NOT read by Claude Code (verified Apr 2026).
