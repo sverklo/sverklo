@@ -1296,9 +1296,16 @@ function findBraceEnd(lines: string[], startIdx: number): number {
   // /* */ block comments, and / regex literals.
   let depth = 0;
   let foundOpen = false;
-  // Persistent state across lines: only block comments and template
-  // strings (backticks) cross line boundaries. ' and " strings + //
-  // line comments + regex literals are line-local.
+  // Paren depth lets us distinguish the function-body brace from braces
+  // that appear inside the parameter list (TS generic types like
+  // `Array<{...}>`, default-value object literals, decorator
+  // factories, etc.). Without this guard, `function f(x: Array<{a:
+  // number}>): void {...}` truncates the chunk at the `}>` of the
+  // type — we'd return after line 1 of a 200-line function. Issue
+  // #34 surfaced this: 21% of functions in src/search/* were
+  // mis-chunked, causing the orphan-detection in audit to flag
+  // their internal helpers as dead code.
+  let parenDepth = 0;
   let inBlockComment = false;
   let inTemplate = false;
   for (let i = startIdx; i < lines.length; i++) {
@@ -1396,12 +1403,24 @@ function findBraceEnd(lines: string[], startIdx: number): number {
         continue;
       }
       // Real code char.
-      if (ch === "{") {
-        depth++;
-        foundOpen = true;
+      if (ch === "(") {
+        parenDepth++;
+      } else if (ch === ")") {
+        if (parenDepth > 0) parenDepth--;
+      } else if (ch === "{") {
+        // Only braces OUTSIDE the parameter list belong to the
+        // function body. Braces inside parens are type-annotation
+        // objects, default-value literals, or decorator-factory
+        // arguments — they must not start the body chunk.
+        if (parenDepth === 0) {
+          depth++;
+          foundOpen = true;
+        }
       } else if (ch === "}") {
-        depth--;
-        if (foundOpen && depth === 0) return i;
+        if (parenDepth === 0) {
+          depth--;
+          if (foundOpen && depth === 0) return i;
+        }
       }
       if (!/\s/.test(ch)) prevSig = ch;
     }
