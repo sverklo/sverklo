@@ -25,6 +25,13 @@
       "repo": "https://github.com/psf/requests.git",
       "ref": "v2.32.3",
       "checkoutDir": "benchmark/.cache/requests-2.32.3"
+    },
+    {
+      "name": "flask",
+      "kind": "git",
+      "repo": "https://github.com/pallets/flask.git",
+      "ref": "3.0.3",
+      "checkoutDir": "benchmark/.cache/flask-3.0.3"
     }
   ]
 }
