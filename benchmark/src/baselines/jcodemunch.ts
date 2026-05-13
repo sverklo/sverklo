@@ -183,14 +183,27 @@ export class JcodemunchBaseline implements Baseline {
           break;
         }
         case "P5": {
-          // get_dead_code_v2 returns dead exports/functions
+          // get_dead_code_v2 returns dead exports/functions.
+          //
+          // Integration playbook from @jgravelle (sverklo-bench#3):
+          //   - max_results: 0 → unlimited (default 100 caps recall artificially
+          //     when the expected dead-code set exceeds 100, which it does on
+          //     larger datasets like lodash and requests).
+          //   - _meta.mode === "call_graph_only" → standard 3-signal analyzer
+          //     couldn't run (no inter-file imports). Confidence ceiling is 0.5;
+          //     surface so the report can distinguish 3-signal vs single-signal.
+          //   - _meta.truncated + _meta.total_matches → if truncated=true the
+          //     recall ceiling is bounded by the cap, not the tool.
           toolCalls++;
           const result = await this.callTool("get_dead_code_v2", {
             repo: this.repoId,
             format: "json",
+            max_results: 0,
           });
           payload = stringifyResult(result);
           prediction = { kind: "names", names: parseDeadCode(payload) };
+          const meta = extractMeta(result, payload);
+          if (meta) notes = mergeNotes(notes, meta);
           break;
         }
         default:
@@ -350,4 +363,36 @@ function parseDepsImporters(text: string): string[] {
   let m;
   while ((m = reJson.exec(text)) !== null) importers.add(m[1]);
   return Array.from(importers);
+}
+
+// Surface jcodemunch v1.80.9+ `_meta` diagnostics in per-task notes. The
+// MCP response may carry _meta either on the top-level result object or
+// embedded in the text payload (depending on jcodemunch version). Check
+// both. Returns a short notes-line string, or null if no diagnostics.
+function extractMeta(result: any, payload: string): string | null {
+  const parts: string[] = [];
+
+  // Top-level _meta on the MCP result
+  const topMeta = result && typeof result === "object" ? result._meta : null;
+  if (topMeta && typeof topMeta === "object") {
+    if (topMeta.mode === "call_graph_only") parts.push("mode=fallback");
+    if (topMeta.truncated === true) parts.push("truncated");
+    if (typeof topMeta.total_matches === "number")
+      parts.push(`total_matches=${topMeta.total_matches}`);
+  }
+
+  // Fallback: scan the stringified payload for the same fields when the
+  // server embeds _meta inside the text content rather than the envelope.
+  if (parts.length === 0 && payload) {
+    if (/"mode"\s*:\s*"call_graph_only"/.test(payload)) parts.push("mode=fallback");
+    if (/"truncated"\s*:\s*true/.test(payload)) parts.push("truncated");
+    const totalM = /"total_matches"\s*:\s*(\d+)/.exec(payload);
+    if (totalM) parts.push(`total_matches=${totalM[1]}`);
+  }
+
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+function mergeNotes(existing: string | undefined, addition: string): string {
+  return existing ? `${existing}; ${addition}` : addition;
 }
