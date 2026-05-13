@@ -438,9 +438,26 @@ function computeMaxFanIn(
   return { maxFanIn, file: maxFile };
 }
 
-/** Methods decorated with these are framework entry points — invoked at runtime, not via static calls. */
+/**
+ * Methods decorated with these are framework entry points — invoked at
+ * runtime, not via static calls. Three patterns covered:
+ *
+ *   1. PascalCase TS/JS framework decorators (NestJS, TypeORM, MikroORM,
+ *      Angular, GraphQL resolvers, etc.) — the original set.
+ *   2. Python attribute-access decorators: `@app.get(...)`, `@router.post(...)`,
+ *      `@bp.route(...)`, `@self.exception_handler(...)`. FastAPI/Flask/
+ *      Starlette routing is exclusively this shape — without coverage,
+ *      every route method scored as orphan. Surfaced by the 2026-05-12
+ *      bench rerun where sverklo P5 fastapi was 0.00/5.
+ *   3. Python validator/lifecycle decorators: `@validator`, `@root_validator`,
+ *      `@field_validator`, `@model_validator`, `@computed_field` (Pydantic),
+ *      `@pytest.fixture` (pytest), `@click.command` (Click CLI).
+ *
+ * Each pattern requires the decorator at start-of-line (with optional
+ * leading whitespace) to avoid matching the same identifier mid-expression.
+ */
 const DECORATOR_ENTRY_POINT =
-  /@(?:Get|Post|Put|Delete|Patch|Head|Options|All|Sse|Subscribe|OnEvent|OnMessage|MessagePattern|EventPattern|Cron|Interval|Timeout|UseGuards|UseInterceptors|UsePipes|UseFilters|Render|Header|Redirect|HttpCode|Query|Param|Body|Req|Res|Next|Session|UploadedFile|HostParam|Controller|Injectable|Module|Resolver|Mutation|Subscription|ResolveField|OnModuleInit|OnModuleDestroy|BeforeInsert|AfterInsert|BeforeUpdate|AfterUpdate|BeforeRemove|AfterRemove|EventSubscriber|Entity|Column|PrimaryColumn|PrimaryGeneratedColumn|CreateDateColumn|UpdateDateColumn|OneToMany|ManyToOne|ManyToMany|OneToOne)\s*\(/;
+  /@(?:Get|Post|Put|Delete|Patch|Head|Options|All|Sse|Subscribe|OnEvent|OnMessage|MessagePattern|EventPattern|Cron|Interval|Timeout|UseGuards|UseInterceptors|UsePipes|UseFilters|Render|Header|Redirect|HttpCode|Query|Param|Body|Req|Res|Next|Session|UploadedFile|HostParam|Controller|Injectable|Module|Resolver|Mutation|Subscription|ResolveField|OnModuleInit|OnModuleDestroy|BeforeInsert|AfterInsert|BeforeUpdate|AfterUpdate|BeforeRemove|AfterRemove|EventSubscriber|Entity|Column|PrimaryColumn|PrimaryGeneratedColumn|CreateDateColumn|UpdateDateColumn|OneToMany|ManyToOne|ManyToMany|OneToOne)\s*\(|^[ \t]*@(?:[a-z_][a-zA-Z0-9_]*)\.(?:get|post|put|delete|patch|head|options|route|middleware|exception_handler|errorhandler|before_request|after_request|teardown_request|on_event|websocket|websocket_route|include_router|task|command|listener|register|subscribe|connect|disconnect|app_template_filter|app_context_processor)\s*\(|^[ \t]*@(?:validator|root_validator|field_validator|model_validator|computed_field|model_serializer|cached_property|staticmethod|classmethod|abstractmethod|abstractproperty|asynccontextmanager|contextmanager|click\.command|click\.group|click\.option|click\.argument|pytest\.fixture|pytest\.mark\.[a-z_]+|hookimpl|hookspec)\b/m;
 
 // ─── Dead code percentage ───
 
