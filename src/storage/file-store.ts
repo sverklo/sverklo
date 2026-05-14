@@ -80,6 +80,39 @@ export class FileStore {
     return this.getByPathStmt.get(path) as FileRecord | undefined;
   }
 
+  /**
+   * Lenient lookup: try the path verbatim, then strip leading "./",
+   * then try as a suffix (handles cases where callers pass a path
+   * prefixed with the project name like "sverklo/src/foo.ts" against
+   * an index that stores "src/foo.ts"). Returns the first match.
+   * Suffix lookup requires a `/` boundary before the suffix to avoid
+   * "foo.ts" accidentally matching "barfoo.ts".
+   *
+   * Dogfood T5 (architectural review 2026-05-13): path-format
+   * inconsistency across deps / refs / impact tools made the suggested
+   * input format from one tool fail in another.
+   */
+  findByPath(path: string): FileRecord | undefined {
+    if (!path) return undefined;
+    const direct = this.getByPath(path);
+    if (direct) return direct;
+
+    const trimmed = path.replace(/^\.\/+/, "");
+    if (trimmed !== path) {
+      const hit = this.getByPath(trimmed);
+      if (hit) return hit;
+    }
+
+    // Suffix match for project-prefixed inputs. SQLite glob is faster
+    // than a JS scan over getAll(); we anchor on `*/<suffix>` so
+    // "src/foo.ts" doesn't match "barsrc/foo.ts".
+    const suffix = `*/${trimmed}`;
+    const row = this.db
+      .prepare("SELECT * FROM files WHERE path GLOB ? LIMIT 1")
+      .get(suffix) as FileRecord | undefined;
+    return row;
+  }
+
   getAll(): FileRecord[] {
     if (this.cachedAll !== null) return this.cachedAll;
     this.cachedAll = this.getAllStmt.all() as FileRecord[];

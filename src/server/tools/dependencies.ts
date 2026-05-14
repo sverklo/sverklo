@@ -46,7 +46,11 @@ export function handleDependencies(
   const depth = (args.depth as number) || 1;
   const tokenBudget = resolveBudget(args, "deps", null, 1500);
 
-  const file = indexer.fileStore.getByPath(path);
+  // Lenient path lookup: accept verbatim, "./prefixed", or
+  // "projectName/src/..." forms. Without this, the path format the
+  // sverklo_audit output prints ("sverklo/src/foo.ts" when the project
+  // is in a workspace) doesn't paste into sverklo_deps. Dogfood T5.
+  const file = indexer.fileStore.findByPath(path);
   if (!file) {
     return `File not found in index: ${path}`;
   }

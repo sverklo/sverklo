@@ -3,7 +3,7 @@ import type { IndexCode } from "../../indexer/index-code.js";
 import type { IndexGraph } from "../../indexer/index-graph.js";
 import type { IndexMemory } from "../../indexer/index-memory.js";
 import { resolveBudget } from "../../utils/budget.js";
-import { analyzeCodebase } from "../audit-analysis.js";
+import { analyzeCodebase, isVendoredPath } from "../audit-analysis.js";
 import { getAuditHistory, formatTrend } from "../../utils/audit-history.js";
 
 export const auditTool = {
@@ -28,6 +28,7 @@ export const auditTool = {
 interface GodNode {
   name: string;
   refCount: number;
+  distinctFiles: number;
 }
 
 export function handleAudit(indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory, args: Record<string, unknown>): string {
@@ -39,26 +40,65 @@ export function handleAudit(indexer: IndexFiles & IndexCode & IndexGraph & Index
   // Get all named chunks once (used by god nodes + orphans)
   const allChunks = indexer.chunkStore.getAllWithFile();
 
-  // ─── God nodes: symbols referenced most often ───
-  // Aggregate refs by target_name, but only count symbols that have a
-  // definition in the codebase (filters out stdlib noise like trim, get, push)
-  const allRefs = indexer.symbolRefStore.getAll();
-  const refsByName = new Map<string, number>();
-  for (const r of allRefs) {
-    refsByName.set(r.target_name, (refsByName.get(r.target_name) || 0) + 1);
-  }
+  // ─── God nodes: symbols with the highest structural blast radius ───
+  //
+  // Prior version ranked by raw ref-count. Result: method names like
+  // `get`, `json`, `set`, `value`, `request` dominated the top 10 because
+  // they're referenced many times from one or two source files. Those are
+  // not god nodes; they're common method names. (Dogfood T2 review
+  // 2026-05-13.)
+  //
+  // New ranking signal: refs × sqrt(distinct importing files). A name
+  // referenced 30 times across 30 different files outranks one referenced
+  // 200 times from one file. sqrt damps the per-file dimension so a
+  // genuinely-hot name in 2-3 files (e.g. a frequently-called util)
+  // can still surface.
+  //
+  // Plus we restrict to symbols whose definitions are in NON-vendored
+  // project files. Without that, methods on Express's HTTP verb
+  // primitives would top the chart on any repo that depended on Express.
+  const godStats = indexer.symbolRefStore.getGodNodeStats();
 
-  // Build set of symbol names that are actually defined in this codebase
-  const definedNames = new Set<string>();
+  // For each name, find a non-vendored definition. If a name is ONLY
+  // defined in vendored paths (e.g. benchmark/.cache/express/lib/router.js),
+  // it doesn't represent the user's own codebase and shouldn't rank.
+  const nameToProjectDef = new Map<string, { type: string }>();
   for (const c of allChunks) {
-    if (c.name) definedNames.add(c.name);
+    if (!c.name) continue;
+    if (isVendoredPath(c.filePath)) continue;
+    const existing = nameToProjectDef.get(c.name);
+    // Prefer concrete defs (class/interface/function) over methods —
+    // when a name has multiple defs, the more architectural one wins.
+    const typeRank = (t: string): number => {
+      if (t === "class" || t === "interface") return 4;
+      if (t === "function" || t === "type") return 3;
+      if (t === "method") return 2;
+      return 1;
+    };
+    if (!existing || typeRank(c.type) > typeRank(existing.type)) {
+      nameToProjectDef.set(c.name, { type: c.type });
+    }
   }
 
-  const godNodes: GodNode[] = Array.from(refsByName.entries())
-    .filter(([name]) => definedNames.has(name))
-    .map(([name, refCount]) => ({ name, refCount }))
-    .sort((a, b) => b.refCount - a.refCount)
+  const godNodes: GodNode[] = godStats
+    .filter((s) => nameToProjectDef.has(s.target_name))
+    .map((s) => ({
+      name: s.target_name,
+      refCount: s.ref_count,
+      distinctFiles: s.distinct_source_files,
+    }))
+    .sort((a, b) => {
+      const scoreA = a.refCount * Math.sqrt(a.distinctFiles);
+      const scoreB = b.refCount * Math.sqrt(b.distinctFiles);
+      return scoreB - scoreA;
+    })
     .slice(0, 10);
+
+  // Refs lookup used by the orphan-detection loop below. Re-derived from
+  // the same godStats query so we don't pay for symbolRefStore.getAll()
+  // separately. Same shape as the prior Map<name, count>.
+  const refsByName = new Map<string, number>();
+  for (const s of godStats) refsByName.set(s.target_name, s.ref_count);
 
   // ─── Hub files by PageRank ───
   const hubFiles = files.slice(0, 10).map((f) => ({
@@ -194,7 +234,9 @@ export function handleAudit(indexer: IndexFiles & IndexCode & IndexGraph & Index
     godLines.push(`These are the symbols your codebase depends on most. Changes here have the largest blast radius.`);
     godLines.push("");
     for (const g of godNodes.slice(0, 10)) {
-      godLines.push(`- **${g.name}** — ${g.refCount} references`);
+      godLines.push(
+        `- **${g.name}** — ${g.refCount} references across ${g.distinctFiles} file${g.distinctFiles === 1 ? "" : "s"}`,
+      );
     }
     godLines.push("");
     if (!addSection(godLines.join("\n"))) return sections.join("\n");

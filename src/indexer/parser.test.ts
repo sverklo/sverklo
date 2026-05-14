@@ -145,3 +145,48 @@ describe("parseFile — TSJS multi-top-level regression (issue #16)", () => {
     expect(names).toContain("beta");
   });
 });
+
+describe("parseFile — re-export tracking (Dogfood T3)", () => {
+  it("tracks `export { X } from './foo'` as a dependency", () => {
+    const code = `export { Indexer } from "./indexer/indexer.js";\n`;
+    const result = parseFile(code, "typescript");
+    const sources = result.imports.map((i) => i.source);
+    expect(sources).toContain("./indexer/indexer.js");
+  });
+
+  it("tracks `export * from './foo'` as a dependency", () => {
+    const code = `export * from "./types/index.js";\n`;
+    const result = parseFile(code, "typescript");
+    const sources = result.imports.map((i) => i.source);
+    expect(sources).toContain("./types/index.js");
+  });
+
+  it("tracks `export * as Name from './foo'` as a dependency", () => {
+    const code = `export * as Helpers from "./helpers.js";\n`;
+    const result = parseFile(code, "typescript");
+    const sources = result.imports.map((i) => i.source);
+    expect(sources).toContain("./helpers.js");
+  });
+
+  it("records re-export local-binding names (export { A as B })", () => {
+    const code = `export { foo as bar } from "./mod.js";\n`;
+    const result = parseFile(code, "typescript");
+    const imp = result.imports.find((i) => i.source === "./mod.js");
+    expect(imp).toBeDefined();
+    // Local binding name in the barrel should be the renamed form.
+    expect(imp!.names).toContain("bar");
+  });
+
+  it("captures both imports AND re-exports in the same file", () => {
+    const code = `
+import { foo } from "./a.js";
+export { bar } from "./b.js";
+export * from "./c.js";
+    `.trim();
+    const result = parseFile(code, "typescript");
+    const sources = result.imports.map((i) => i.source);
+    expect(sources).toContain("./a.js");
+    expect(sources).toContain("./b.js");
+    expect(sources).toContain("./c.js");
+  });
+});

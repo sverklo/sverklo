@@ -79,7 +79,10 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
       } else if (url.pathname === "/api/file") {
         const path = url.searchParams.get("path");
         if (!path) { json(res, { error: "path required" }); return; }
-        const file = indexer.fileStore.getByPath(path);
+        // Lenient lookup: accept "./prefixed" or "project/src/..." paths
+        // in addition to the canonical repo-relative form. Same fix as
+        // sverklo_deps (Dogfood T5).
+        const file = indexer.fileStore.findByPath(path);
         if (!file) { json(res, { error: "not found" }); return; }
         const chunks = indexer.chunkStore.getByFile(file.id);
         const imports = indexer.graphStore.getImports(file.id);

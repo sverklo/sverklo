@@ -6,7 +6,7 @@
 import type { IndexFiles } from "../indexer/index-files.js";
 import type { IndexCode } from "../indexer/index-code.js";
 import type { IndexGraph } from "../indexer/index-graph.js";
-import type { AuditAnalysis } from "./audit-analysis.js";
+import { type AuditAnalysis, isVendoredPath } from "./audit-analysis.js";
 
 export function generateAuditObsidian(
   indexer: IndexFiles & IndexCode & IndexGraph,
@@ -78,28 +78,38 @@ export function generateAuditObsidian(
   }
 
   // ─── 4. God Nodes ───
+  // Same ranking signal as sverklo_audit (refs × √distinct-files,
+  // restricted to non-vendored project definitions). Dogfood T2.
   const allChunks = indexer.chunkStore.getAllWithFile();
-  const allRefs = indexer.symbolRefStore.getAll();
-  const refsByName = new Map<string, number>();
-  for (const r of allRefs) {
-    refsByName.set(r.target_name, (refsByName.get(r.target_name) || 0) + 1);
-  }
-  const definedNames = new Map<string, string>(); // name -> filePath
+  const godStats = indexer.symbolRefStore.getGodNodeStats();
+  const definedFile = new Map<string, string>();
   for (const c of allChunks) {
-    if (c.name) definedNames.set(c.name, c.filePath);
+    if (!c.name) continue;
+    if (isVendoredPath(c.filePath)) continue;
+    if (!definedFile.has(c.name)) definedFile.set(c.name, c.filePath);
   }
 
-  const godNodes = Array.from(refsByName.entries())
-    .filter(([name]) => definedNames.has(name))
-    .map(([name, count]) => ({ name, count, file: definedNames.get(name)! }))
-    .sort((a, b) => b.count - a.count)
+  const godNodes = godStats
+    .filter((s) => definedFile.has(s.target_name))
+    .map((s) => ({
+      name: s.target_name,
+      count: s.ref_count,
+      files: s.distinct_source_files,
+      file: definedFile.get(s.target_name)!,
+    }))
+    .sort(
+      (a, b) =>
+        b.count * Math.sqrt(b.files) - a.count * Math.sqrt(a.files),
+    )
     .slice(0, 10);
 
   if (godNodes.length > 0) {
     lines.push("## God Nodes");
     lines.push("");
     for (const g of godNodes) {
-      lines.push(`- **${g.name}** — ${g.count} refs — [[${g.file}]]`);
+      lines.push(
+        `- **${g.name}** — ${g.count} refs across ${g.files} file${g.files === 1 ? "" : "s"} — [[${g.file}]]`,
+      );
     }
     lines.push("");
   }

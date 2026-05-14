@@ -74,6 +74,27 @@ export class SymbolRefStore {
     return (this.getCallersStmt.get(targetName) as { c: number }).c;
   }
 
+  /**
+   * Aggregated god-node stats: per target_name, total refs and the
+   * number of DISTINCT source files that contain those refs. Used by
+   * sverklo_audit to rank "god nodes" — a name referenced 200 times
+   * from one file is less interesting structurally than one referenced
+   * 30 times across 30 different files. Dogfood T2 from the 2026-05-13
+   * architectural review.
+   */
+  getGodNodeStats(): { target_name: string; ref_count: number; distinct_source_files: number }[] {
+    return this.db
+      .prepare(
+        `SELECT sr.target_name,
+                COUNT(*)                       AS ref_count,
+                COUNT(DISTINCT c.file_id)      AS distinct_source_files
+         FROM symbol_refs sr
+         JOIN chunks c ON c.id = sr.source_chunk_id
+         GROUP BY sr.target_name`,
+      )
+      .all() as { target_name: string; ref_count: number; distinct_source_files: number }[];
+  }
+
   getAll(): SymbolRef[] {
     return this.getAllStmt.all() as SymbolRef[];
   }

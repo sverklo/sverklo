@@ -305,6 +305,40 @@ export function parseTSJS(content: string, lines: string[]): ParseResult {
     });
   }
 
+  // Re-export forms: `export * from "./foo"`, `export { X } from "./foo"`,
+  // `export * as Bar from "./foo"`, `export { X as Y } from "./foo"`.
+  // These create real dependency edges that the import regex above
+  // misses. Without them, barrel files (src/index.ts re-exporting
+  // everything) and central composition roots reached via barrels
+  // (e.g. mcp-server.ts) have NO importers visible in sverklo_deps.
+  // Architectural review 2026-05-13 (Dogfood T3) flagged this as a
+  // graph-builder gap that hid the most-central files in the audit.
+  const reexportRe =
+    /^[ \t]*export\s+(?:\*\s+(?:as\s+\w+\s+)?from\s+['"]([^'"]+)['"]|\{([^}]+)\}\s+from\s+['"]([^'"]+)['"])/gm;
+  while ((m = reexportRe.exec(content)) !== null) {
+    const source = m[1] || m[3] || "";
+    if (!source) continue;
+    const names: string[] = [];
+    if (m[2]) {
+      for (const n of m[2].split(",")) {
+        // `{ A as B }` → record the LOCAL binding name (B) so symbol
+        // lookups via the barrel still resolve.
+        const cleaned = n
+          .trim()
+          .replace(/^type\s+/, "")
+          .split(/\s+as\s+/)
+          .pop()!
+          .trim();
+        if (cleaned) names.push(cleaned);
+      }
+    }
+    imports.push({
+      source,
+      names,
+      isRelative: source.startsWith("."),
+    });
+  }
+
   // require() imports — same leading-whitespace tolerance.
   const requireRe = /^[ \t]*(?:const|let|var)\s+(?:{([^}]+)}|(\w+))\s*=\s*require\(['"]([^'"]+)['"]\)/gm;
   while ((m = requireRe.exec(content)) !== null) {
