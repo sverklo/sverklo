@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import Database from "better-sqlite3";
+import type { Database } from "./database.js";
 import { createDatabase } from "./database.js";
 import { EvidenceStore, hashSpan, spanSimilarity } from "./evidence-store.js";
 

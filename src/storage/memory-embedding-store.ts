@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 
 function rowToVector(buf: Buffer): Float32Array {
   // Copy into a fresh Float32Array so the caller doesn't hold a view
@@ -26,12 +26,12 @@ function cosine(a: Float32Array, b: Float32Array): number {
 }
 
 export class MemoryEmbeddingStore {
-  private insertStmt: Database.Statement;
-  private getStmt: Database.Statement;
-  private getAllStmt: Database.Statement;
-  private deleteStmt: Database.Statement;
+  private insertStmt: Statement;
+  private getStmt: Statement;
+  private getAllStmt: Statement;
+  private deleteStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.insertStmt = db.prepare(
       "INSERT OR REPLACE INTO memory_embeddings (memory_id, vector) VALUES (?, ?)"
     );
@@ -85,7 +85,7 @@ export class MemoryEmbeddingStore {
     if (k <= 0) return [];
     const heap: Array<{ memoryId: number; score: number }> = [];
     let worstIdx = -1;
-    const iter = this.getAllStmt.iterate() as IterableIterator<{
+    const iter = this.getAllStmt.iterate() as unknown as IterableIterator<{
       memory_id: number;
       vector: Buffer;
     }>;

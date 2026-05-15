@@ -1,13 +1,13 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 import type { FileRecord } from "../types/index.js";
 
 export class FileStore {
-  private insertStmt: Database.Statement;
-  private getByPathStmt: Database.Statement;
-  private getAllStmt: Database.Statement;
-  private deleteStmt: Database.Statement;
-  private updatePagerankStmt: Database.Statement;
-  private getLanguagesStmt: Database.Statement;
+  private insertStmt: Statement;
+  private getByPathStmt: Statement;
+  private getAllStmt: Statement;
+  private deleteStmt: Statement;
+  private updatePagerankStmt: Statement;
+  private getLanguagesStmt: Statement;
 
   // In-memory snapshot of every getAll() result. The file set turns over
   // rarely (only on indexer writes), but is read 20+ times per tool
@@ -27,7 +27,7 @@ export class FileStore {
   private cacheHits = 0;
   private cacheMisses = 0;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     // INSERT OR REPLACE used to be the implementation here, and it had a
     // silent data-corruption bug: REPLACE deletes the old row before
     // inserting the new one, which fires ON DELETE CASCADE on every
@@ -83,7 +83,7 @@ export class FileStore {
   }
 
   getByPath(path: string): FileRecord | undefined {
-    return this.getByPathStmt.get(path) as FileRecord | undefined;
+    return this.getByPathStmt.get(path) as unknown as FileRecord | undefined;
   }
 
   /**
@@ -129,7 +129,7 @@ export class FileStore {
     const pattern = `%/${escapedSuffix}`;
     const row = this.db
       .prepare("SELECT * FROM files WHERE path LIKE ? ESCAPE '\\' LIMIT 1")
-      .get(pattern) as FileRecord | undefined;
+      .get(pattern) as unknown as FileRecord | undefined;
     return row;
   }
 
@@ -139,7 +139,7 @@ export class FileStore {
       return this.cachedAll;
     }
     this.cacheMisses++;
-    this.cachedAll = this.getAllStmt.all() as FileRecord[];
+    this.cachedAll = this.getAllStmt.all() as unknown as FileRecord[];
     return this.cachedAll;
   }
 

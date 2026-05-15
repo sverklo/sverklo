@@ -1,4 +1,5 @@
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
+import type { Database } from "../storage/database.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -77,15 +78,15 @@ CREATE INDEX IF NOT EXISTS idx_cross_edges_consumer ON cross_edges(consumer_proj
 `;
 
 export class CrossRepoDb {
-  private db: Database.Database;
+  private db: Database;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
 
-    this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.db.pragma("synchronous = NORMAL");
+    this.db = new DatabaseSync(dbPath);
+    this.db.exec("PRAGMA journal_mode = WAL");
+    this.db.exec("PRAGMA foreign_keys = ON");
+    this.db.exec("PRAGMA synchronous = NORMAL");
 
     this.db.exec(SCHEMA);
   }

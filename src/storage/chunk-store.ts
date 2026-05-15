@@ -1,15 +1,15 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 import type { CodeChunk, ChunkType } from "../types/index.js";
 
 export class ChunkStore {
-  private insertStmt: Database.Statement;
-  private getByFileStmt: Database.Statement;
-  private deleteByFileStmt: Database.Statement;
-  private searchFtsStmt: Database.Statement;
-  private getByIdStmt: Database.Statement;
-  private getByNameStmt: Database.Statement;
+  private insertStmt: Statement;
+  private getByFileStmt: Statement;
+  private deleteByFileStmt: Statement;
+  private searchFtsStmt: Statement;
+  private getByIdStmt: Statement;
+  private getByNameStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.insertStmt = db.prepare(`
       INSERT INTO chunks (file_id, type, name, signature, start_line, end_line, content, description, token_count)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -58,7 +58,7 @@ export class ChunkStore {
   }
 
   getByFile(fileId: number): CodeChunk[] {
-    return this.getByFileStmt.all(fileId) as CodeChunk[];
+    return this.getByFileStmt.all(fileId) as unknown as CodeChunk[];
   }
 
   deleteByFile(fileId: number): void {
@@ -75,7 +75,7 @@ export class ChunkStore {
         .map((w) => `"${w}"`)
         .join(" OR ");
       if (!safeQuery) return [];
-      return this.searchFtsStmt.all(safeQuery, limit) as (CodeChunk & {
+      return this.searchFtsStmt.all(safeQuery, limit) as unknown as (CodeChunk & {
         rank: number;
       })[];
     } catch {
@@ -84,7 +84,7 @@ export class ChunkStore {
   }
 
   getById(id: number): CodeChunk | undefined {
-    return this.getByIdStmt.get(id) as CodeChunk | undefined;
+    return this.getByIdStmt.get(id) as unknown as CodeChunk | undefined;
   }
 
   /**
@@ -101,11 +101,11 @@ export class ChunkStore {
     const placeholders = ids.map(() => "?").join(",");
     return this.db
       .prepare(`SELECT * FROM chunks WHERE id IN (${placeholders})`)
-      .all(...ids) as CodeChunk[];
+      .all(...ids) as unknown as CodeChunk[];
   }
 
   getByName(namePattern: string, limit: number = 20): CodeChunk[] {
-    return this.getByNameStmt.all(`%${namePattern}%`, limit) as CodeChunk[];
+    return this.getByNameStmt.all(`%${namePattern}%`, limit) as unknown as CodeChunk[];
   }
 
   /**
@@ -138,7 +138,7 @@ export class ChunkStore {
          ORDER BY match_quality ASC, f.pagerank DESC
          LIMIT ?`
       )
-      .all(namePattern, `${namePattern}%`, `%${namePattern}%`, limit) as (CodeChunk & {
+      .all(namePattern, `${namePattern}%`, `%${namePattern}%`, limit) as unknown as (CodeChunk & {
       filePath: string;
       pagerank: number;
       fileLanguage: string;
@@ -172,6 +172,6 @@ export class ChunkStore {
          FROM chunks c JOIN files f ON c.file_id = f.id
          ORDER BY f.pagerank DESC, c.start_line`
       )
-      .all() as (CodeChunk & { filePath: string; pagerank: number })[];
+      .all() as unknown as (CodeChunk & { filePath: string; pagerank: number })[];
   }
 }

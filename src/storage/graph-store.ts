@@ -1,14 +1,14 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 import type { DependencyEdge } from "../types/index.js";
 
 export class GraphStore {
-  private upsertStmt: Database.Statement;
-  private getImportsStmt: Database.Statement;
-  private getImportersStmt: Database.Statement;
-  private deleteByFileStmt: Database.Statement;
-  private getAllStmt: Database.Statement;
+  private upsertStmt: Statement;
+  private getImportsStmt: Statement;
+  private getImportersStmt: Statement;
+  private deleteByFileStmt: Statement;
+  private getAllStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.upsertStmt = db.prepare(`
       INSERT INTO dependencies (source_file_id, target_file_id, reference_count)
       VALUES (?, ?, ?)
@@ -32,11 +32,11 @@ export class GraphStore {
   }
 
   getImports(fileId: number): DependencyEdge[] {
-    return this.getImportsStmt.all(fileId) as DependencyEdge[];
+    return this.getImportsStmt.all(fileId) as unknown as DependencyEdge[];
   }
 
   getImporters(fileId: number): DependencyEdge[] {
-    return this.getImportersStmt.all(fileId) as DependencyEdge[];
+    return this.getImportersStmt.all(fileId) as unknown as DependencyEdge[];
   }
 
   deleteBySourceFile(fileId: number): void {
@@ -44,6 +44,6 @@ export class GraphStore {
   }
 
   getAll(): DependencyEdge[] {
-    return this.getAllStmt.all() as DependencyEdge[];
+    return this.getAllStmt.all() as unknown as DependencyEdge[];
   }
 }

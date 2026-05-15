@@ -1,10 +1,11 @@
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
-import type Database from "better-sqlite3";
+import type { Database } from "../storage/database.js";
 import {
   createDatabase,
   getDataVersion,
   setDataVersion,
+  transaction,
   CURRENT_DATA_VERSION,
 } from "../storage/database.js";
 import { FileStore } from "../storage/file-store.js";
@@ -44,7 +45,7 @@ import type { IndexMemory } from "./index-memory.js";
 import type { IndexAdmin } from "./index-admin.js";
 
 export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, IndexAdmin {
-  private db: Database.Database;
+  private db: Database;
   public fileStore: FileStore;
   public chunkStore: ChunkStore;
   public embeddingStore: EmbeddingStore;
@@ -148,7 +149,7 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
         .all() as { id: number; name: string | null; start_line: number; content: string }[];
 
       let totalRefs = 0;
-      const insertTxn = this.db.transaction(() => {
+      transaction(this.db, () => {
         for (const row of rows) {
           const refs = extractReferences(row.content, row.name);
           for (const ref of refs) {
@@ -161,7 +162,6 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
           }
         }
       });
-      insertTxn();
 
       log(
         `[migration] extracted ${totalRefs} symbol refs in ${Date.now() - t0}ms`
@@ -379,7 +379,7 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
       const embeddingBatch: { chunkId: number; text: string }[] = [];
 
       // Use a transaction for bulk inserts
-      const transaction = this.db.transaction(() => {
+      transaction(this.db, () => {
         for (const file of toIndex) {
           try {
             const content = readFileSync(file.absolutePath, "utf-8");
@@ -445,8 +445,6 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
           }
         }
       });
-
-      transaction();
       phaseEnd("parse_chunk_insert", tParseInsert);
 
       // 5. Generate embeddings in batches

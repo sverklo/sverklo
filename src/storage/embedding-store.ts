@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 
 export interface EmbeddingWithMeta {
   chunk_id: number;
@@ -8,13 +8,13 @@ export interface EmbeddingWithMeta {
 }
 
 export class EmbeddingStore {
-  private insertStmt: Database.Statement;
-  private getStmt: Database.Statement;
-  private getAllStmt: Database.Statement;
-  private getAllWithMetaStmt: Database.Statement;
-  private deleteByChunkStmt: Database.Statement;
+  private insertStmt: Statement;
+  private getStmt: Statement;
+  private getAllStmt: Statement;
+  private getAllWithMetaStmt: Statement;
+  private deleteByChunkStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.insertStmt = db.prepare(
       "INSERT OR REPLACE INTO embeddings (chunk_id, vector) VALUES (?, ?)"
     );

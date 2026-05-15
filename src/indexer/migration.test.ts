@@ -64,7 +64,7 @@ describe("data-version migration", () => {
     const indexer = new Indexer(cfg);
     try {
       await indexer.index();
-      const v = getDataVersion((indexer as unknown as { db: import("better-sqlite3").Database }).db);
+      const v = getDataVersion((indexer as unknown as { db: import("../storage/database.js").Database }).db);
       expect(v).toBe(CURRENT_DATA_VERSION);
     } finally {
       indexer.close();
@@ -107,7 +107,7 @@ describe("data-version migration", () => {
     // should run and re-extract all references.
     const indexer2 = new Indexer(cfg);
     try {
-      const db = (indexer2 as unknown as { db: import("better-sqlite3").Database }).db;
+      const db = (indexer2 as unknown as { db: import("../storage/database.js").Database }).db;
 
       // data_version should now be CURRENT
       expect(getDataVersion(db)).toBe(CURRENT_DATA_VERSION);
@@ -143,7 +143,7 @@ describe("data-version migration", () => {
     // Construct again — migration should skip
     const indexer2 = new Indexer(cfg);
     try {
-      const db2 = (indexer2 as unknown as { db: import("better-sqlite3").Database }).db;
+      const db2 = (indexer2 as unknown as { db: import("../storage/database.js").Database }).db;
       const after = (
         db2.prepare("SELECT COUNT(*) as c FROM symbol_refs").get() as { c: number }
       ).c;
@@ -161,7 +161,7 @@ describe("data-version migration", () => {
     const cfg = getProjectConfig(tmpRoot);
     const emptyIndexer = new Indexer(cfg);
     try {
-      const db = (emptyIndexer as unknown as { db: import("better-sqlite3").Database }).db;
+      const db = (emptyIndexer as unknown as { db: import("../storage/database.js").Database }).db;
       expect(getDataVersion(db)).toBe(CURRENT_DATA_VERSION);
     } finally {
       emptyIndexer.close();
@@ -211,7 +211,7 @@ describe("data-version migration", () => {
     // so the backfill UPDATEs should fire and version should advance.
     const indexer2 = new Indexer(cfg);
     try {
-      const db = (indexer2 as unknown as { db: import("better-sqlite3").Database }).db;
+      const db = (indexer2 as unknown as { db: import("../storage/database.js").Database }).db;
       expect(getDataVersion(db)).toBe(CURRENT_DATA_VERSION);
 
       const nullKinds = db

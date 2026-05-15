@@ -1,4 +1,5 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
+import { transaction } from "./database.js";
 import type { Memory, MemoryCategory, MemoryTier, MemoryKind } from "../types/index.js";
 
 // Parse the pins JSON column into a Set for O(1) overlap checks.
@@ -34,24 +35,24 @@ function defaultKindFor(category: MemoryCategory): MemoryKind {
 }
 
 export class MemoryStore {
-  private insertStmt: Database.Statement;
-  private getByIdStmt: Database.Statement;
-  private getAllStmt: Database.Statement;
-  private getByCategoryStmt: Database.Statement;
-  private deleteStmt: Database.Statement;
-  private updateStmt: Database.Statement;
-  private searchFtsStmt: Database.Statement;
-  private touchAccessStmt: Database.Statement;
-  private markStaleStmt: Database.Statement;
-  private getStaleStmt: Database.Statement;
-  private invalidateStmt: Database.Statement;
-  private getCoreStmt: Database.Statement;
-  private setTierStmt: Database.Statement;
-  private getActiveStmt: Database.Statement;
-  private setPinsStmt: Database.Statement;
-  private setTrajectoryStmt: Database.Statement;
+  private insertStmt: Statement;
+  private getByIdStmt: Statement;
+  private getAllStmt: Statement;
+  private getByCategoryStmt: Statement;
+  private deleteStmt: Statement;
+  private updateStmt: Statement;
+  private searchFtsStmt: Statement;
+  private touchAccessStmt: Statement;
+  private markStaleStmt: Statement;
+  private getStaleStmt: Statement;
+  private invalidateStmt: Statement;
+  private getCoreStmt: Statement;
+  private setTierStmt: Statement;
+  private getActiveStmt: Statement;
+  private setPinsStmt: Statement;
+  private setTrajectoryStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.insertStmt = db.prepare(`
       INSERT INTO memories (category, content, tags, confidence, git_sha, git_branch, related_files, created_at, updated_at, last_accessed, tier, valid_from_sha, kind)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -155,7 +156,7 @@ export class MemoryStore {
       .prepare(
         "SELECT * FROM memories WHERE kind = ? AND valid_until_sha IS NULL ORDER BY created_at DESC LIMIT ?"
       )
-      .all(kind, limit) as Memory[];
+      .all(kind, limit) as unknown as Memory[];
   }
 
   /** Update a memory's kind in place. */
@@ -170,19 +171,19 @@ export class MemoryStore {
    * can't half-commit a new memory without invalidating its originals.
    */
   transact<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
+    return transaction(this.db, fn);
   }
 
   getById(id: number): Memory | undefined {
-    return this.getByIdStmt.get(id) as Memory | undefined;
+    return this.getByIdStmt.get(id) as unknown as Memory | undefined;
   }
 
   getAll(limit: number = 50): Memory[] {
-    return this.getAllStmt.all(limit) as Memory[];
+    return this.getAllStmt.all(limit) as unknown as Memory[];
   }
 
   getByCategory(category: MemoryCategory, limit: number = 50): Memory[] {
-    return this.getByCategoryStmt.all(category, limit) as Memory[];
+    return this.getByCategoryStmt.all(category, limit) as unknown as Memory[];
   }
 
   /**
@@ -225,7 +226,7 @@ export class MemoryStore {
         ORDER BY created_at DESC
         `
       )
-      .all() as Memory[];
+      .all() as unknown as Memory[];
 
     const pairs: Array<{ a: Memory; b: Memory; sharedPins: string[] }> = [];
     for (let i = 0; i < candidates.length; i++) {
@@ -272,7 +273,7 @@ export class MemoryStore {
   }
 
   getCore(limit: number = 10): Memory[] {
-    return this.getCoreStmt.all(limit) as Memory[];
+    return this.getCoreStmt.all(limit) as unknown as Memory[];
   }
 
   setTier(id: number, tier: MemoryTier): void {
@@ -297,7 +298,7 @@ export class MemoryStore {
         .map((w) => `"${w}"`)
         .join(" OR ");
       if (!safeQuery) return [];
-      return this.searchFtsStmt.all(safeQuery, limit) as (Memory & { rank: number })[];
+      return this.searchFtsStmt.all(safeQuery, limit) as unknown as (Memory & { rank: number })[];
     } catch {
       return [];
     }
@@ -312,7 +313,7 @@ export class MemoryStore {
   }
 
   getStale(): Memory[] {
-    return this.getStaleStmt.all() as Memory[];
+    return this.getStaleStmt.all() as unknown as Memory[];
   }
 
   setPins(id: number, pins: string[]): void {
@@ -333,7 +334,7 @@ export class MemoryStore {
          ORDER BY confidence DESC, created_at DESC
          LIMIT ?`
       )
-      .all(`%"${target.replace(/[%_"]/g, "")}"%`, limit) as Memory[];
+      .all(`%"${target.replace(/[%_"]/g, "")}"%`, limit) as unknown as Memory[];
   }
 
   count(): number {
@@ -348,6 +349,6 @@ export class MemoryStore {
   getTimeline(limit: number = 500): Memory[] {
     return this.db
       .prepare("SELECT * FROM memories ORDER BY created_at DESC LIMIT ?")
-      .all(limit) as Memory[];
+      .all(limit) as unknown as Memory[];
   }
 }

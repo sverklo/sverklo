@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 
 export interface SymbolRef {
   id: number;
@@ -18,14 +18,14 @@ export interface ImpactResult {
 }
 
 export class SymbolRefStore {
-  private insertStmt: Database.Statement;
-  private deleteByChunkStmt: Database.Statement;
-  private getImpactStmt: Database.Statement;
-  private getCallersStmt: Database.Statement;
-  private getAllStmt: Database.Statement;
-  private countStmt: Database.Statement;
+  private insertStmt: Statement;
+  private deleteByChunkStmt: Statement;
+  private getImpactStmt: Statement;
+  private getCallersStmt: Statement;
+  private getAllStmt: Statement;
+  private countStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.insertStmt = db.prepare(`
       INSERT OR IGNORE INTO symbol_refs (source_chunk_id, target_name, line)
       VALUES (?, ?, ?)
@@ -67,7 +67,7 @@ export class SymbolRefStore {
   }
 
   getImpact(targetName: string, limit: number = 50): ImpactResult[] {
-    return this.getImpactStmt.all(targetName, limit) as ImpactResult[];
+    return this.getImpactStmt.all(targetName, limit) as unknown as ImpactResult[];
   }
 
   getCallerCount(targetName: string): number {
@@ -121,7 +121,7 @@ export class SymbolRefStore {
   }
 
   getAll(): SymbolRef[] {
-    return this.getAllStmt.all() as SymbolRef[];
+    return this.getAllStmt.all() as unknown as SymbolRef[];
   }
 
   count(): number {

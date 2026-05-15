@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 
 export interface ConceptRecord {
   cluster_id: number;
@@ -22,16 +22,16 @@ export interface ConceptInsert {
 }
 
 export class ConceptStore {
-  private upsertStmt: Database.Statement;
-  private getStmt: Database.Statement;
-  private getAllStmt: Database.Statement;
-  private deleteStmt: Database.Statement;
-  private upsertEmbeddingStmt: Database.Statement;
-  private getEmbeddingStmt: Database.Statement;
-  private getAllEmbeddingsStmt: Database.Statement;
-  private countStmt: Database.Statement;
+  private upsertStmt: Statement;
+  private getStmt: Statement;
+  private getAllStmt: Statement;
+  private deleteStmt: Statement;
+  private upsertEmbeddingStmt: Statement;
+  private getEmbeddingStmt: Statement;
+  private getAllEmbeddingsStmt: Statement;
+  private countStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.upsertStmt = db.prepare(`
       INSERT INTO concepts
         (cluster_id, label, summary, tags, hub_file, member_count, content_hash, labeled_at)
@@ -74,11 +74,11 @@ export class ConceptStore {
   }
 
   get(clusterId: number): ConceptRecord | null {
-    return (this.getStmt.get(clusterId) as ConceptRecord | undefined) ?? null;
+    return (this.getStmt.get(clusterId) as unknown as ConceptRecord | undefined) ?? null;
   }
 
   getAll(): ConceptRecord[] {
-    return this.getAllStmt.all() as ConceptRecord[];
+    return this.getAllStmt.all() as unknown as ConceptRecord[];
   }
 
   delete(clusterId: number): void {

@@ -1,4 +1,5 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
+import { transaction } from "./database.js";
 
 // Closed taxonomy. Keep small so the LLM can't invent labels and the
 // retrieval surface stays predictable. Anything outside this list is
@@ -73,14 +74,14 @@ export interface PatternEdgeWithLocation extends PatternEdge {
 }
 
 export class PatternStore {
-  private upsertStmt: Database.Statement;
-  private deleteByChunkStmt: Database.Statement;
-  private getByChunkStmt: Database.Statement;
-  private getByPatternStmt: Database.Statement;
-  private countStmt: Database.Statement;
-  private countByPatternStmt: Database.Statement;
+  private upsertStmt: Statement;
+  private deleteByChunkStmt: Statement;
+  private getByChunkStmt: Statement;
+  private getByPatternStmt: Statement;
+  private countStmt: Statement;
+  private countByPatternStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.upsertStmt = db.prepare(`
       INSERT INTO pattern_edges
         (chunk_id, pattern, role, confidence, content_hash, labeled_at)
@@ -126,11 +127,10 @@ export class PatternStore {
   }
 
   upsertMany(rows: PatternEdgeInput[]): void {
-    const tx = this.db.transaction((batch: PatternEdgeInput[]) => {
+    transaction(this.db, () => {
       const t = Date.now();
-      for (const r of batch) this.upsert(r, t);
+      for (const r of rows) this.upsert(r, t);
     });
-    tx(rows);
   }
 
   deleteForChunk(chunkId: number): void {
@@ -138,12 +138,12 @@ export class PatternStore {
   }
 
   getByChunk(chunkId: number): PatternEdge[] {
-    return this.getByChunkStmt.all(chunkId) as PatternEdge[];
+    return this.getByChunkStmt.all(chunkId) as unknown as PatternEdge[];
   }
 
   getByPattern(pattern: string, limit = 50): PatternEdgeWithLocation[] {
     if (!PATTERN_SET.has(pattern)) return [];
-    return this.getByPatternStmt.all(pattern, limit) as PatternEdgeWithLocation[];
+    return this.getByPatternStmt.all(pattern, limit) as unknown as PatternEdgeWithLocation[];
   }
 
   count(): number {

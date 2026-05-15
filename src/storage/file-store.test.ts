@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import Database from "better-sqlite3";
+import type { Database } from "./database.js";
 import { FileStore } from "./file-store.js";
 import { GraphStore } from "./graph-store.js";
 import { createDatabase } from "./database.js";
@@ -24,7 +24,7 @@ import { createDatabase } from "./database.js";
 // the row in place. The row's id is preserved, no cascade fires, edges live.
 
 describe("FileStore.upsert preserves dependency edges across re-index", () => {
-  let db: Database.Database;
+  let db: Database;
   let fileStore: FileStore;
   let graphStore: GraphStore;
 
@@ -86,7 +86,7 @@ describe("FileStore.upsert preserves dependency edges across re-index", () => {
 // /api/file route + every sverklo MCP tool that flows user-supplied
 // path into findByPath (deps, refs, impact).
 describe("FileStore.findByPath wildcard-injection hardening", () => {
-  let db: Database.Database;
+  let db: Database;
   let fileStore: FileStore;
 
   beforeEach(() => {

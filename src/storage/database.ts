@@ -1,4 +1,17 @@
-import Database from "better-sqlite3";
+// node:sqlite is Node 22.5+'s built-in SQLite binding. Switched off
+// better-sqlite3 in v0.21.0 to eliminate the prebuild-install
+// deprecation warning users saw on every install, drop the native
+// compilation surface (no more node-gyp failures on weird
+// toolchains), and remove the platform-specific binary downloads.
+// Same sync API, similar performance.
+import { DatabaseSync, type StatementSync } from "node:sqlite";
+
+// Type re-exports so the rest of the codebase imports from a single
+// place. Previously every store imported `type Database from
+// "better-sqlite3"` and used `Database.Database` / `Database.Statement`;
+// now they import `Database` / `Statement` from here.
+export type Database = DatabaseSync;
+export type Statement = StatementSync;
 
 // Current data-layer version. Bump this when existing stored data
 // (not just schema shape) has become incompatible with the new code.
@@ -341,13 +354,15 @@ const MIGRATIONS = [
   "CREATE INDEX IF NOT EXISTS idx_docmentions_edge_kind ON doc_mentions(edge_kind)",
 ];
 
-export function createDatabase(dbPath: string): Database.Database {
-  const db = new Database(dbPath);
+export function createDatabase(dbPath: string): Database {
+  const db = new DatabaseSync(dbPath);
 
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma("synchronous = NORMAL");
-  db.pragma("cache_size = -64000"); // 64MB cache
+  // node:sqlite doesn't expose `db.pragma()` — use exec() directly.
+  // Same effect, slightly different ergonomics.
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec("PRAGMA synchronous = NORMAL");
+  db.exec("PRAGMA cache_size = -64000"); // 64MB cache
 
   db.exec(SCHEMA);
 
@@ -369,7 +384,7 @@ export function createDatabase(dbPath: string): Database.Database {
  * have never been tagged, so callers can treat any version < current
  * as "migrate me".
  */
-export function getDataVersion(db: Database.Database): number {
+export function getDataVersion(db: Database): number {
   try {
     const row = db
       .prepare("SELECT value FROM meta WHERE key = 'data_version'")
@@ -385,9 +400,30 @@ export function getDataVersion(db: Database.Database): number {
  * migration completes (or on a fresh database after the first full
  * index, so subsequent runs don't waste time re-migrating).
  */
-export function setDataVersion(db: Database.Database, version: number): void {
+export function setDataVersion(db: Database, version: number): void {
   db.prepare(
     "INSERT INTO meta (key, value) VALUES ('data_version', ?) " +
       "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   ).run(String(version));
+}
+
+/**
+ * BEGIN / COMMIT / ROLLBACK helper. better-sqlite3 had `db.transaction(fn)`
+ * built in; node:sqlite doesn't, so we wrap the pattern explicitly.
+ * Used by Indexer.index() for the bulk-insert path.
+ */
+export function transaction<T>(db: Database, fn: () => T): T {
+  db.exec("BEGIN");
+  try {
+    const result = fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // best-effort rollback; surface the original error
+    }
+    throw err;
+  }
 }

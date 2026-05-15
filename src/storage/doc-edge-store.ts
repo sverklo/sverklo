@@ -1,4 +1,5 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
+import { transaction } from "./database.js";
 
 export type DocMatchKind = "backtick" | "fenced_code" | "bare";
 // Sprint 9 inclusion-vs-pointer split (iwe-org/iwe). The two kinds are:
@@ -42,13 +43,13 @@ export function defaultEdgeKindFor(match: DocMatchKind): DocEdgeKind {
 }
 
 export class DocEdgeStore {
-  private insertStmt: Database.Statement;
-  private deleteByDocStmt: Database.Statement;
-  private getBySymbolStmt: Database.Statement;
-  private getByChunkStmt: Database.Statement;
-  private countStmt: Database.Statement;
+  private insertStmt: Statement;
+  private deleteByDocStmt: Statement;
+  private getBySymbolStmt: Statement;
+  private getByChunkStmt: Statement;
+  private countStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.insertStmt = db.prepare(`
       INSERT OR REPLACE INTO doc_mentions
         (doc_chunk_id, target_symbol, target_chunk_id, match_kind, edge_kind, confidence)
@@ -127,15 +128,14 @@ export class DocEdgeStore {
         ORDER BY dm.confidence DESC
         LIMIT ?
       `)
-      .all(symbol, edgeKind, limit) as DocMentionWithDoc[];
+      .all(symbol, edgeKind, limit) as unknown as DocMentionWithDoc[];
   }
 
   insertMany(inputs: DocMentionInput[]): void {
     if (inputs.length === 0) return;
-    const tx = this.db.transaction((rows: DocMentionInput[]) => {
-      for (const r of rows) this.insert(r);
+    transaction(this.db, () => {
+      for (const r of inputs) this.insert(r);
     });
-    tx(inputs);
   }
 
   deleteForDocChunk(docChunkId: number): void {
@@ -147,14 +147,14 @@ export class DocEdgeStore {
    * rows, highest-confidence first.
    */
   getBySymbol(symbol: string, limit = 20): DocMentionWithDoc[] {
-    return this.getBySymbolStmt.all(symbol, limit) as DocMentionWithDoc[];
+    return this.getBySymbolStmt.all(symbol, limit) as unknown as DocMentionWithDoc[];
   }
 
   /**
    * All doc mentions that resolved to a specific chunk id.
    */
   getByChunkId(chunkId: number): DocMention[] {
-    return this.getByChunkStmt.all(chunkId) as DocMention[];
+    return this.getByChunkStmt.all(chunkId) as unknown as DocMention[];
   }
 
   count(): number {

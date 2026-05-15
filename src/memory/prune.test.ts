@@ -43,7 +43,7 @@ describe("runPrune", () => {
     // Backdate created_at AND last_accessed so decay + age filters fire.
     const ts = Date.now() - daysAgo * 86_400_000;
     indexer.memoryStore["db" as keyof typeof indexer.memoryStore]; // touch to satisfy ts
-    const db = (indexer as unknown as { db: import("better-sqlite3").Database }).db;
+    const db = (indexer as unknown as { db: import("../storage/database.js").Database }).db;
     db.prepare(
       "UPDATE memories SET created_at = ?, last_accessed = ?, access_count = 0 WHERE id = ?"
     ).run(ts, ts, id);
@@ -90,7 +90,7 @@ describe("runPrune", () => {
       null,
       "core"
     );
-    const db = (indexer as unknown as { db: import("better-sqlite3").Database }).db;
+    const db = (indexer as unknown as { db: import("../storage/database.js").Database }).db;
     const ts = Date.now() - 365 * 86_400_000;
     db.prepare(
       "UPDATE memories SET created_at = ?, last_accessed = ?, access_count = 0 WHERE id = ?"

@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 import { randomBytes } from "node:crypto";
 
 // Persistent context handles (v0.15, P1-8). Search-family tools register
@@ -25,12 +25,12 @@ export interface HandleRecord {
 }
 
 export class HandleStore {
-  private upsertStmt: Database.Statement;
-  private getStmt: Database.Statement;
-  private deleteExpiredStmt: Database.Statement;
-  private countStmt: Database.Statement;
+  private upsertStmt: Statement;
+  private getStmt: Statement;
+  private deleteExpiredStmt: Statement;
+  private countStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.upsertStmt = db.prepare(`
       INSERT INTO context_handles
         (id, tool, sha, created_at, expires_at, body, preview)
@@ -57,7 +57,7 @@ export class HandleStore {
   }
 
   get(id: string): HandleRecord | null {
-    return (this.getStmt.get(id) as HandleRecord | undefined) ?? null;
+    return (this.getStmt.get(id) as unknown as HandleRecord | undefined) ?? null;
   }
 
   /**
@@ -73,7 +73,7 @@ export class HandleStore {
   }
 
   purgeExpired(now = Date.now()): number {
-    return this.deleteExpiredStmt.run(now).changes;
+    return Number(this.deleteExpiredStmt.run(now).changes);
   }
 
   count(): number {

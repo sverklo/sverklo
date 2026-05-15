@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import Database from "better-sqlite3";
+import type { Database } from "./database.js";
 import { ChunkStore } from "./chunk-store.js";
 import { FileStore } from "./file-store.js";
 import { createDatabase } from "./database.js";
@@ -11,7 +11,7 @@ import { createDatabase } from "./database.js";
 // pagerank DESC with the file path and language attached.
 
 describe("ChunkStore.getByNameWithFile", () => {
-  let db: Database.Database;
+  let db: Database;
   let chunkStore: ChunkStore;
   let fileStore: FileStore;
 

@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database, Statement } from "./database.js";
 import { createHash, randomBytes } from "node:crypto";
 import type { Evidence, RetrievalMethod, VerifyResult } from "../types/index.js";
 
@@ -25,13 +25,13 @@ export interface StoredEvidence extends EvidenceInput {
 }
 
 export class EvidenceStore {
-  private insertStmt: Database.Statement;
-  private getByIdStmt: Database.Statement;
-  private countStmt: Database.Statement;
-  private deleteOldStmt: Database.Statement;
-  private deleteOverflowStmt: Database.Statement;
+  private insertStmt: Statement;
+  private getByIdStmt: Statement;
+  private countStmt: Statement;
+  private deleteOldStmt: Statement;
+  private deleteOverflowStmt: Statement;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database) {
     this.insertStmt = db.prepare(`
       INSERT INTO evidence
         (id, file_path, start_line, end_line, commit_sha, chunk_id,
@@ -55,7 +55,9 @@ export class EvidenceStore {
   }
 
   purge(now = Date.now()): number {
-    const deleted = this.deleteOldStmt.run(now - TTL_MS).changes;
+    // node:sqlite's RunResult.changes is `number | bigint`. SQLite
+    // change counts fit in a number for any sane batch, so coerce.
+    const deleted = Number(this.deleteOldStmt.run(now - TTL_MS).changes);
     const count = (this.countStmt.get() as { c: number }).c;
     if (count > MAX_ROWS) {
       this.deleteOverflowStmt.run(count - MAX_ROWS);
