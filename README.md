@@ -166,6 +166,38 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 
 [See all 37 tools below.](#full-tool-reference)
 
+## Pre-commit gate — block architectural regressions before they ship
+
+`sverklo audit-diff` is a local-first incremental quality gate. It reads `git diff`, runs Tarjan SCC over the modified files' boundary subgraph, and exits non-zero if your diff introduces a new circular dependency or pushes a file's fan-in past the threshold. Designed to run as a `.git/hooks/pre-commit` step — typical run completes well under 200 ms.
+
+```bash
+# manual
+sverklo audit-diff
+echo $?   # 0 = clean, 1 = gate failure, 2 = config error
+
+# CI variant
+sverklo audit-diff --format json | jq .pass
+```
+
+Wire it as a pre-commit hook (plain git):
+
+```bash
+cat > .git/hooks/pre-commit <<'EOF'
+#!/usr/bin/env bash
+set -e
+sverklo audit-diff
+EOF
+chmod +x .git/hooks/pre-commit
+```
+
+Husky variant:
+
+```bash
+npx husky add .husky/pre-commit "sverklo audit-diff"
+```
+
+Pre-existing cycles and fan-in spikes don't trip the gate — only violations *introduced by your diff*. To inspect legacy debt: `sverklo audit-diff --show-existing` (exit code is unchanged).
+
 <details>
 <summary><h2>Full tool reference</h2></summary>
 
