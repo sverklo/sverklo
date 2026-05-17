@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ["22.5.0", "24"]
+        node: ["24"]
     steps:
       - uses: actions/checkout@v4
 
@@ -30,15 +30,7 @@ jobs:
 
       - run: npm ci
       - run: npm run build
-
-      # node:sqlite is flagged on Node 22 LTS and 23.x; unflagged from
-      # Node 24. The published binary auto-relaunches with the flag, but
-      # vitest runs Node directly so we pass NODE_OPTIONS here for the
-      # flagged versions only.
-      - name: Run tests
-        run: npm test
-        env:
-          NODE_OPTIONS: ${{ (startsWith(matrix.node, '22') || startsWith(matrix.node, '23')) && '--experimental-sqlite' || '' }}
+      - run: npm test
 
   install-smoke:
     name: install smoke (${{ matrix.os }}, node ${{ matrix.node }})
@@ -48,7 +40,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ["22.5.0", "24"]
+        node: ["24"]
     steps:
       - uses: actions/checkout@v4
 
@@ -89,7 +81,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: ["22.5.0", "24"]
+        node: ["24"]
     steps:
       - uses: actions/setup-node@v4
         with:

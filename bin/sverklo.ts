@@ -1,29 +1,22 @@
 #!/usr/bin/env node
 
 import { resolve, basename } from "node:path";
-import { spawnSync } from "node:child_process";
 
-// node:sqlite was added in Node 22.5.0 behind --experimental-sqlite and
-// stays flagged for the entire Node 22 LTS line. It's unflagged starting
-// Node 24. Re-exec ourselves with the flag if we're on a flagged Node
-// version so users on Node 22-23 don't need to know about this.
+// sverklo requires Node 24+. Node 22 LTS has node:sqlite behind the
+// --experimental-sqlite flag and ships SQLite without FTS5 (which we
+// use for code search). Node 24 unflagged node:sqlite and includes
+// FTS5 in the bundled SQLite. npm enforces `engines.node` at install
+// time too, but this guard gives a clearer message at runtime in case
+// the package was installed without engine-strict.
 {
   const major = Number(process.versions.node.split(".")[0]);
-  const flagged =
-    process.execArgv.includes("--experimental-sqlite") ||
-    (process.env.NODE_OPTIONS ?? "").includes("--experimental-sqlite");
-  if (major < 24 && !flagged) {
-    const result = spawnSync(
-      process.execPath,
-      [
-        "--experimental-sqlite",
-        ...process.execArgv,
-        process.argv[1] ?? "",
-        ...process.argv.slice(2),
-      ],
-      { stdio: "inherit" },
+  if (major < 24) {
+    console.error(
+      `sverklo requires Node 24 or newer (you're on ${process.versions.node}).\n` +
+        `node:sqlite is flagged on Node 22 LTS and ships without FTS5.\n` +
+        `Run: nvm install 24 && nvm use 24`,
     );
-    process.exit(result.status ?? 0);
+    process.exit(1);
   }
 }
 
