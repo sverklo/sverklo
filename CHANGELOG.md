@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.22.0] — 2026-05-17
+
+### Added
+
+- `sverklo audit-diff` — incremental architectural quality gate. Reads `git diff`, runs Tarjan SCC over the modified files' boundary subgraph plus their 1-hop neighbors, and exits non-zero if your diff introduces a new circular dependency or pushes a file's fan-in across the threshold. Designed as a `.git/hooks/pre-commit` step.
+- Bench reproducer at `benchmark/audit-diff/bench.ts`. Reference run on sverklo's own repo: median 175 ms across 20 invocations (SC-001 target was 200 ms).
+- README section showing how to wire the gate as a plain-git hook or via Husky.
+
+### Notes
+
+- Pre-existing cycles and fan-in spikes don't trip the gate; only violations *introduced by the current diff*. Use `--show-existing` to also report the legacy debt without changing exit code.
+- Default fan-in threshold matches `sverklo audit`'s D-grade ceiling (50). Override via `--fan-in-threshold N`.
+- JSON output (`--format json`) is versioned at `schema_version: "1"`. See `specs/001-audit-diff/contracts/json-output.md` for the schema contract.
+
+---
+
 ## [0.17.1] — 2026-04-26
 
 Republish of v0.17.0 — same payload, lockfile re-synced for the

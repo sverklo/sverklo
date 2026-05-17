@@ -60,6 +60,7 @@ if (command && command !== "--help" && command !== "-h") {
       init: "Set up sverklo in your project (.mcp.json + CLAUDE.md, auto-detects Claude Code/Cursor/Windsurf/Antigravity).",
       doctor: "Diagnose MCP setup issues. Run after `init` to verify the agent can reach sverklo.",
       audit: "Run codebase audit and emit a graded report. Flags: --format markdown|html|json|graph|arch|obsidian, --output PATH, --open, --badge, --publish.",
+      "audit-diff": "Incremental architectural quality gate. Audits `git diff` for new cycles + fan-in spikes. Flags: --against REF, --fan-in-threshold N, --format human|json, --show-existing, --verbose. Exits 1 on regression.",
       review: "Risk-scored diff review (CI-friendly). Flags: --ref REF, --ci, --format markdown|json, --max-files N, --fail-on low|medium|high.",
       wiki: "Generate a markdown wiki from the indexed codebase. Flags: --output DIR (default ./sverklo-wiki), --format markdown|html.",
       "concept-index": "Label clusters with an LLM (requires Ollama). Flags: --model NAME, --base-url URL, --force, --max N.",
@@ -360,6 +361,15 @@ if (command === "bench" || command === "benchmark") {
   child.on("exit", (code) => process.exit(code ?? 0));
   // Keep alive until spawn exit
   await new Promise(() => {});
+}
+
+if (command === "audit-diff") {
+  // Incremental architectural quality gate. Runs Tarjan SCC + fan-in
+  // spike detection over the boundary subgraph derived from `git diff
+  // --name-only`. Exit 1 on new violations, 0 on pass, 2 on config error.
+  const { handleAuditDiff } = await import("../src/audit-diff/index.js");
+  const exitCode = await handleAuditDiff(args.slice(1));
+  process.exit(exitCode);
 }
 
 if (command === "audit-prompt" || command === "review-prompt") {
