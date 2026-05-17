@@ -16,7 +16,7 @@
     "models.lock.json"
   ],
   "scripts": {
-    "build": "tsc && mkdir -p dist/src/server/assets && cp src/server/assets/* dist/src/server/assets/ && chmod +x dist/bin/sverklo.js",
+    "build": "tsc && node scripts/post-build.mjs",
     "dev": "tsc --watch",
     "start": "node dist/bin/sverklo.js",
     "test": "vitest run",

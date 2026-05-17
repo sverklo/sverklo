@@ -5,22 +5,96 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Mondays 06:00 UTC — catches transitive dep prebuild drift
+    # after publish (e.g. a dep ships a new major that breaks Windows
+    # without us touching the codebase).
+    - cron: "0 6 * * 1"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [20, 22]
-
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ["22.5.0", "24"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - run: npm ci
       - run: npm run build
+      - run: npm test
+
+  install-smoke:
+    name: install smoke (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ["22.5.0", "24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm pack
+
+      - name: Install from tarball and run --version (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -e
+          TARBALL=$(ls sverklo-*.tgz)
+          npm install -g "./${TARBALL}"
+          sverklo --version
+
+      - name: Install from tarball and run --version (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tarball = Get-ChildItem sverklo-*.tgz | Select-Object -First 1
+          npm install -g "$($tarball.FullName)"
+          sverklo --version
+
+  install-published:
+    # Schedule-only. Installs the published sverklo@latest from npm to catch
+    # regressions where a transitive dep changes prebuild availability without
+    # our package.json moving. This is the regression test for issue #40.
+    name: install published (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ["22.5.0", "24"]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: npm install -g sverklo@latest
+
+      - name: Verify sverklo runs (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sverklo --version
+
+      - name: Verify sverklo runs (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: sverklo --version
