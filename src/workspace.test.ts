@@ -45,7 +45,9 @@ describe("workspace — name validation (security)", () => {
     // realpath-checked repos; pass an empty list.
     const fakeHome = mkdtempSync(join(tmpdir(), "sverklo-ws-test-"));
     const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
     process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
     try {
       const ok = ["valid", "valid-name", "valid_name", "Valid123", "a", "a-b_c-1"];
       for (const name of ok) {
@@ -53,6 +55,7 @@ describe("workspace — name validation (security)", () => {
       }
     } finally {
       process.env.HOME = origHome;
+      process.env.USERPROFILE = origUserProfile;
       rmSync(fakeHome, { recursive: true, force: true });
     }
   });
@@ -61,17 +64,23 @@ describe("workspace — name validation (security)", () => {
 describe("workspace — repoPath validation (security)", () => {
   let fakeHome: string;
   let origHome: string | undefined;
+  let origUserProfile: string | undefined;
   let safeRepo: string;
 
   beforeEach(() => {
     fakeHome = mkdtempSync(join(tmpdir(), "sverklo-ws-test-"));
     origHome = process.env.HOME;
+    origUserProfile = process.env.USERPROFILE;
+    // node:os homedir() resolves HOME on POSIX and USERPROFILE on Windows.
+    // Override both so the sensitive-prefix check sees our fake home.
     process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
     safeRepo = mkdtempSync(join(tmpdir(), "sverklo-ws-repo-"));
   });
 
   afterEach(() => {
     process.env.HOME = origHome;
+    process.env.USERPROFILE = origUserProfile;
     rmSync(fakeHome, { recursive: true, force: true });
     rmSync(safeRepo, { recursive: true, force: true });
   });

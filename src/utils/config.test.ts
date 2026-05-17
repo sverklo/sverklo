@@ -48,9 +48,10 @@ describe("getProjectConfig — issue #20 (Windows pathing)", () => {
     const root = mkdtempSync(join(tmpdir(), "sverklo-test-"));
     cleanup.push(root);
     const cfg = getProjectConfig(root);
-    // dataDir should not contain a nested absolute-path fragment.
-    // On Unix that means no `:`, on Windows that means basename only.
-    expect(cfg.dataDir).not.toMatch(/[A-Z]:[\/\\]/i);
+    // The basename (last segment) should never contain a drive-letter
+    // fragment — that's what issue #20 was about. The full path can
+    // legitimately start with C:\ on Windows; only the leaf matters.
+    expect(basename(cfg.dataDir)).not.toMatch(/[A-Z]:/i);
     // dataDir must be creatable (mkdirSync is called inside getProjectConfig).
     expect(existsSync(cfg.dataDir)).toBe(true);
   });
