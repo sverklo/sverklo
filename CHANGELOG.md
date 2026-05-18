@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.22.1] — 2026-05-18
+
+### Fixed
+
+- **#43 — Windows: `sverklo doctor` / `sverklo init` falsely reported "binary not found on PATH"**. Three call sites were shelling out to `command -v sverklo`, which is POSIX-only. On Windows cmd.exe printed `'command' is not recognized as an internal or external command` twice and we surfaced a misleading "not found" status even though `sverklo --version` worked from the same shell. Replaced with a cross-platform `findOnPath` helper that walks `PATH` directly with no shell dependency.
+- **#44 — broken `https://sverklo.com/docs/config` link** in `sverklo init`'s footer tip. The page now exists with the full `.sverklo.yaml` schema, including the most-asked-for recipe: how to exclude directories in a monorepo.
+
+### CI
+
+- New regression guard in `install-smoke`: every PR now runs `sverklo doctor` on Windows + macOS + Linux and asserts the output doesn't contain the issue-#43 strings. The original v0.22.0 ship would have been blocked by this gate.
+
+---
+
 ## [0.22.0] — 2026-05-17
 
 ### Added

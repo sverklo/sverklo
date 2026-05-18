@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { execSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { track } from "./telemetry/index.js";
+import { findOnPath } from "./utils/find-on-path.js";
 
 /**
  * Read the version from the package.json bundled with the running
@@ -43,15 +44,18 @@ export function runDoctor(projectPath: string): void {
   let mcpEnvFromConfig: Record<string, string> | undefined;
 
   // 1. Binary on PATH
-  let sverkloBin: string | null = null;
-  try {
-    sverkloBin = execSync("command -v sverklo", { encoding: "utf-8" }).trim();
+  // Cross-platform PATH lookup. Earlier versions shelled out to
+  // `command -v sverklo`, which is POSIX-only — on Windows cmd.exe
+  // printed "'command' is not recognized" and we surfaced a misleading
+  // "binary not found" (issue #43).
+  let sverkloBin: string | null = findOnPath("sverklo");
+  if (sverkloBin) {
     checks.push({
       name: "sverklo binary",
       status: "ok",
       message: sverkloBin,
     });
-  } catch {
+  } else {
     // Before recommending a global install, check whether sverklo is
     // already present locally (in node_modules/.bin). Telling someone
     // who just ran `npm install sverklo` to also run `npm install -g`

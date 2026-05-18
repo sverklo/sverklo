@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { track, hasBeenNudged, markNudged } from "./telemetry/index.js";
+import { findOnPath } from "./utils/find-on-path.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -262,13 +262,14 @@ export function detectCopilotExtension(): boolean {
  * Resolve the absolute path to the sverklo binary.
  * Using a full path is more reliable than relying on PATH inheritance
  * when Claude Code spawns the subprocess.
+ *
+ * Issue #43: earlier versions used `command -v` here, which is
+ * POSIX-only. On Windows cmd.exe surfaced "'command' is not
+ * recognized" and we fell back to a bare "sverklo" string that the
+ * host couldn't resolve. We now walk PATH ourselves cross-platform.
  */
 function resolveSverkloBinary(): string {
-  try {
-    return execSync("command -v sverklo", { encoding: "utf-8" }).trim() || "sverklo";
-  } catch {
-    return "sverklo";
-  }
+  return findOnPath("sverklo") ?? "sverklo";
 }
 
 function buildAutoCaptureHook() {

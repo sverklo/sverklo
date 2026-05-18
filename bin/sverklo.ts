@@ -728,12 +728,11 @@ if (command === "setup" || command === "install") {
     const { existsSync, readFileSync, writeFileSync, mkdirSync } = await import("node:fs");
     const { join } = await import("node:path");
     const { homedir } = await import("node:os");
-    const { execSync } = await import("node:child_process");
+    const { findOnPath } = await import("../src/utils/find-on-path.js");
 
-    let sverkloBin = "sverklo";
-    try {
-      sverkloBin = execSync("command -v sverklo", { encoding: "utf-8" }).trim() || "sverklo";
-    } catch {}
+    // Issue #43: `command -v` is POSIX-only and printed misleading
+    // errors on Windows. Walk PATH cross-platform instead.
+    const sverkloBin = findOnPath("sverklo") ?? "sverklo";
 
     // Claude Code global settings: ~/.claude/settings.json
     const claudeSettingsDir = join(homedir(), ".claude");

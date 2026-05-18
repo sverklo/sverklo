@@ -70,6 +70,44 @@ jobs:
           npm install -g "$($tarball.FullName)"
           sverklo --version
 
+      # Regression test for issue #43: `sverklo doctor` must find the
+      # binary on PATH cross-platform. The previous `command -v` approach
+      # broke on Windows because cmd.exe has no `command` builtin.
+      # We assert the output does NOT contain the regression strings.
+      - name: sverklo doctor regression check (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p /tmp/sverklo-doctor-test && cd /tmp/sverklo-doctor-test
+          set +e
+          out=$(sverklo doctor 2>&1)
+          echo "$out"
+          if echo "$out" | grep -qi "sverklo binary not found on PATH"; then
+            echo "::error::issue #43 regression: doctor reports binary not on PATH"
+            exit 1
+          fi
+          if echo "$out" | grep -qi "is not recognized as an internal"; then
+            echo "::error::issue #43 regression: shell error leaked from doctor"
+            exit 1
+          fi
+
+      - name: sverklo doctor regression check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\sverklo-doctor-test | Out-Null
+          Set-Location C:\sverklo-doctor-test
+          $out = sverklo doctor 2>&1 | Out-String
+          Write-Host $out
+          if ($out -match "sverklo binary not found on PATH") {
+            Write-Host "::error::issue #43 regression: doctor reports binary not on PATH"
+            exit 1
+          }
+          if ($out -match "is not recognized as an internal") {
+            Write-Host "::error::issue #43 regression: shell error leaked from doctor"
+            exit 1
+          }
+
   install-published:
     # Schedule-only. Installs the published sverklo@latest from npm to catch
     # regressions where a transitive dep changes prebuild availability without
