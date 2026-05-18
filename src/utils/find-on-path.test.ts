@@ -64,9 +64,10 @@ describe("findOnPath", () => {
   });
 
   it("ignores empty PATH segments", () => {
-    process.env.PATH = `::${tmp}`;
-    const bin = join(tmp, "tooly");
-    writeFileSync(bin, "#!/bin/sh\n");
+    const sep = process.platform === "win32" ? ";" : ":";
+    process.env.PATH = `${sep}${sep}${tmp}`;
+    const bin = join(tmp, process.platform === "win32" ? "tooly.cmd" : "tooly");
+    writeFileSync(bin, process.platform === "win32" ? "" : "#!/bin/sh\n");
     if (process.platform !== "win32") chmodSync(bin, 0o755);
     expect(findOnPath("tooly")).toBe(bin);
   });
