@@ -8,6 +8,7 @@ import { NaiveGrepBaseline } from "../baselines/naive-grep.ts";
 import { SmartGrepBaseline } from "../baselines/smart-grep.ts";
 import { SverkloBaseline } from "../baselines/sverklo.ts";
 import { JcodemunchBaseline } from "../baselines/jcodemunch.ts";
+import { BifrostBaseline } from "../baselines/gateway/bifrost.ts"
 import { GitNexusBaseline } from "../baselines/gitnexus.ts";
 import { SverkloRerankBaseline } from "../baselines/sverklo-rerank.ts";
 import { loadJsonl } from "../ground-truth/schema.ts";
@@ -78,6 +79,7 @@ export async function runAll(): Promise<void> {
     new SverkloBaseline(),
     new JcodemunchBaseline(),
     new GitNexusBaseline(),
+    new BifrostBaseline(),
     // Issue #29: A/B test against ColBERT-style rerank. Off by default
     // in the standard run (so npm run bench:quick output stays comparable
     // across releases) — opt in with BASELINES=sverklo-rerank.
