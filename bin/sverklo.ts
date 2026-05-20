@@ -238,9 +238,26 @@ if (command === "list") {
   } else {
     console.log(`Registered repositories (${entries.length}):`);
     console.log("");
+    const { statSync, existsSync } = await import("node:fs");
+    const { getProjectConfig } = await import("../src/utils/config.js");
     const now = Date.now();
     for (const [name, entry] of entries) {
-      const age = now - new Date(entry.lastIndexed).getTime();
+      // Issue #49: the registry's `lastIndexed` is set on `register`
+      // but never updated after subsequent reindexes, so it was
+      // showing a stale time. The actual index db's mtime is the
+      // correct source of truth — derive from there if it exists,
+      // otherwise fall back to the registry stamp.
+      let timestamp = new Date(entry.lastIndexed).getTime();
+      try {
+        const cfg = getProjectConfig(entry.path);
+        if (existsSync(cfg.dbPath)) {
+          timestamp = statSync(cfg.dbPath).mtimeMs;
+        }
+      } catch {
+        // Project path may not be accessible from here — keep the
+        // registry stamp as the fallback.
+      }
+      const age = now - timestamp;
       const ageStr = age < 60_000 ? `${Math.floor(age / 1000)}s ago`
         : age < 3_600_000 ? `${Math.floor(age / 60_000)} min ago`
         : age < 86_400_000 ? `${Math.floor(age / 3_600_000)} hours ago`

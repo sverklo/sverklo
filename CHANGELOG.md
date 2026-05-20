@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.22.2] — 2026-05-19
+
+### Fixed
+
+- **#47 — Windows: `sverklo doctor` MCP probe reported false-negative even though Claude Code could connect.** The probe spawned `sverklo` directly via `spawnSync` with stdio piping, which broke on Windows when the resolved path was an npm `.cmd` shim — Node CVE-2024-27980's argument-escape tightening (Aug 2024) makes that fail with `EINVAL`. Fix: detect Windows `.cmd`/`.bat` shims and launch via shell. POSIX path unchanged.
+- **#49 — `sverklo list` showed stale "last indexed" time.** The registry's `lastIndexed` field was set on `register` but `updateLastIndexed` was never called outside tests, so subsequent reindexes didn't update it. `sverklo list` now derives the timestamp from the actual `.sverklo/*.db` mtime per registered repo (falling back to the registry stamp if the project isn't accessible).
+- **#48 — `/docs/config` clarification** (sverklo-site): documented that <em>last match wins</em> when multiple `weights` globs match a file. Example shows ordering's impact.
+
+---
+
 ## [0.22.1] — 2026-05-18
 
 ### Fixed

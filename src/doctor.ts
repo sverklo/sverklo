@@ -502,12 +502,21 @@ export function runDoctor(projectPath: string): void {
         .join("\n") + "\n";
 
     try {
+      // Windows: npm installs sverklo as a `.cmd` shim. Spawning a .cmd
+      // file directly with stdio piping throws "spawn EINVAL" since
+      // Node CVE-2024-27980 tightened argument escaping (Aug 2024).
+      // The fix is to launch via the platform shell. On POSIX the
+      // resolved path is the JS file with a #! shebang — no shell
+      // wrapper needed. Issue #47.
+      const isWinShim =
+        process.platform === "win32" && /\.(cmd|bat)$/i.test(sverkloBin);
       const result = spawnSync(sverkloBin, ["."], {
         input,
         encoding: "utf-8",
         cwd: projectPath,
         timeout: 15000,
         maxBuffer: 4 * 1024 * 1024,
+        shell: isWinShim,
         // Forward .mcp.json's env block (incl. SVERKLO_PROFILE) so the
         // probe sees the same tool surface Claude Code would. process.env
         // alone is wrong: users rarely have SVERKLO_PROFILE in their shell.
