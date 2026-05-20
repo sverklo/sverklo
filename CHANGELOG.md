@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.23.0] — 2026-05-20
+
+### Added
+
+- **#50 — `sverklo init` now auto-configures the OpenAI Codex CLI and the GitHub Copilot CLI** alongside the existing Claude Code / Cursor / Windsurf / Zed / Antigravity flow. If `~/.codex/` exists, init writes the `[mcp_servers.sverklo]` block in `~/.codex/config.toml`. If `~/.copilot/` exists, init writes the matching `mcpServers` entry in `~/.copilot/mcp-config.json`. Both follow the same per-machine, point-at-current-project pattern as Antigravity. Re-running init in a different project rewires the entry to that project.
+- The merge logic is implemented as two pure helpers (`mergeCodexToml`, `mergeCopilotJson`) exported from `src/init.ts` so the regex-based TOML edit and the JSON merge are testable in isolation. 11 new tests.
+- README updated: Codex CLI + GitHub Copilot CLI now appear in the "Works with every MCP editor" table with `sverklo init` auto-setup.
+
+### Notes
+
+- Both clients are detected by the *presence of the config directory* (`~/.codex/`, `~/.copilot/`). If you've never run them, init silently skips — no false-positive writes.
+- Telemetry adds `init.detected.codex` and `init.detected.copilot-cli` (only sent if the user has opted in).
+
+---
+
 ## [0.22.2] — 2026-05-19
 
 ### Fixed

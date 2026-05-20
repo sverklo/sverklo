@@ -151,6 +151,8 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 | VS Code | yes | — | — | manual |
 | JetBrains | yes | — | — | manual |
 | Antigravity | yes | — | — | `sverklo init` |
+| Codex CLI | yes | — | — | `sverklo init` |
+| GitHub Copilot CLI | yes | — | — | `sverklo init` |
 | Any MCP client | yes | — | — | `npx sverklo /path` |
 
 ---

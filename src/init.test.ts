@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { resolveAgentsFileTarget, resolveCopilotInstructionsTarget } from "./init.js";
+import {
+  resolveAgentsFileTarget,
+  resolveCopilotInstructionsTarget,
+  mergeCodexToml,
+  mergeCopilotJson,
+} from "./init.js";
 
 const SENTINEL = "sverklo_search";
 
@@ -250,5 +255,116 @@ describe("resolveCopilotInstructionsTarget — issue #24", () => {
       sentinel: SENTINEL,
     });
     expect(result.action).toBe("append");
+  });
+});
+
+// Issue #50 — Codex CLI + GitHub Copilot CLI MCP config merging.
+describe("mergeCodexToml — issue #50", () => {
+  it("writes a fresh block when the file is empty", () => {
+    const r = mergeCodexToml("", "/usr/local/bin/sverklo", "/repo/x");
+    expect(r.status).toBe("added");
+    expect(r.next).toContain("[mcp_servers.sverklo]");
+    expect(r.next).toContain('command = "/usr/local/bin/sverklo"');
+    expect(r.next).toContain('args = ["/repo/x"]');
+    expect(r.next.endsWith("\n")).toBe(true);
+  });
+
+  it("appends to existing config preserving other sections", () => {
+    const existing = `[interactive]\ntheme = "dark"\n`;
+    const r = mergeCodexToml(existing, "sverklo", "/repo/x");
+    expect(r.status).toBe("added");
+    expect(r.next).toContain("[interactive]");
+    expect(r.next).toContain('theme = "dark"');
+    expect(r.next).toContain("[mcp_servers.sverklo]");
+  });
+
+  it("returns 'already' when same project is already configured", () => {
+    const src =
+      `[mcp_servers.sverklo]\ncommand = "sverklo"\nargs = ["/repo/x"]\n`;
+    const r = mergeCodexToml(src, "sverklo", "/repo/x");
+    expect(r.status).toBe("already");
+    expect(r.next).toBe(src);
+  });
+
+  it("rewires to a new project when the existing block points elsewhere", () => {
+    const src =
+      `[mcp_servers.sverklo]\ncommand = "sverklo"\nargs = ["/repo/old"]\n`;
+    const r = mergeCodexToml(src, "sverklo", "/repo/new");
+    expect(r.status).toBe("updated");
+    if (r.status !== "updated") return;
+    expect(r.previousProject).toBe("/repo/old");
+    expect(r.next).toContain('args = ["/repo/new"]');
+    expect(r.next).not.toContain("/repo/old");
+  });
+
+  it("preserves a following section when rewriting in-place", () => {
+    const src =
+      `[mcp_servers.sverklo]\ncommand = "sverklo"\nargs = ["/repo/old"]\n\n[interactive]\ntheme = "dark"\n`;
+    const r = mergeCodexToml(src, "sverklo", "/repo/new");
+    expect(r.status).toBe("updated");
+    expect(r.next).toContain('args = ["/repo/new"]');
+    expect(r.next).toContain("[interactive]");
+    expect(r.next).toContain('theme = "dark"');
+  });
+
+  it("escapes quotes in paths via JSON.stringify", () => {
+    const r = mergeCodexToml("", "sverklo", '/path/with"quote');
+    expect(r.next).toContain('args = ["/path/with\\"quote"]');
+  });
+});
+
+describe("mergeCopilotJson — issue #50", () => {
+  it("creates a fresh config when source is null", () => {
+    const r = mergeCopilotJson(null, "sverklo", "/repo/x");
+    expect(r.status).toBe("added");
+    const parsed = JSON.parse(r.next);
+    expect(parsed.mcpServers.sverklo).toEqual({
+      command: "sverklo",
+      args: ["/repo/x"],
+    });
+  });
+
+  it("preserves other mcpServers entries", () => {
+    const src = JSON.stringify({
+      mcpServers: {
+        other: { command: "other-cmd", args: ["--flag"] },
+      },
+    });
+    const r = mergeCopilotJson(src, "sverklo", "/repo/x");
+    expect(r.status).toBe("added");
+    const parsed = JSON.parse(r.next);
+    expect(parsed.mcpServers.other).toEqual({
+      command: "other-cmd",
+      args: ["--flag"],
+    });
+    expect(parsed.mcpServers.sverklo.args[0]).toBe("/repo/x");
+  });
+
+  it("recovers from malformed JSON by starting fresh", () => {
+    const r = mergeCopilotJson("not valid json {", "sverklo", "/repo/x");
+    expect(r.status).toBe("added");
+    expect(() => JSON.parse(r.next)).not.toThrow();
+    const parsed = JSON.parse(r.next);
+    expect(parsed.mcpServers.sverklo.args[0]).toBe("/repo/x");
+  });
+
+  it("returns 'already' when same project is already configured", () => {
+    const src = JSON.stringify({
+      mcpServers: { sverklo: { command: "sverklo", args: ["/repo/x"] } },
+    });
+    const r = mergeCopilotJson(src, "sverklo", "/repo/x");
+    expect(r.status).toBe("already");
+  });
+
+  it("rewires to a new project when args point elsewhere", () => {
+    const src = JSON.stringify({
+      mcpServers: { sverklo: { command: "sverklo", args: ["/repo/old"] } },
+    });
+    const r = mergeCopilotJson(src, "sverklo", "/repo/new");
+    expect(r.status).toBe("updated");
+    if (r.status !== "updated") return;
+    expect(r.previousProject).toBe("/repo/old");
+    const parsed = JSON.parse(r.next);
+    expect(parsed.mcpServers.sverklo.args[0]).toBe("/repo/new");
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "sverklo",
   "mcpName": "io.github.sverklo/sverklo",
-  "version": "0.22.2",
+  "version": "0.23.0",
   "description": "Local-first code intelligence — MCP server for Claude Code, Cursor, Windsurf, Zed. Symbol graph, blast-radius, git-pinned memory. 43× fewer tokens than naive grep on the public bench. MIT, zero-config.",
   "type": "module",
   "bin": {

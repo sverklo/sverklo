@@ -258,6 +258,96 @@ export function detectCopilotExtension(): boolean {
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Codex + Copilot CLI MCP config merging
+// ---------------------------------------------------------------------------
+// Issue #50: extend `sverklo init` to auto-configure the OpenAI Codex CLI
+// (`~/.codex/config.toml`) and the GitHub Copilot CLI (`~/.copilot/mcp-config.json`).
+// Both follow the same shape sverklo writes for Antigravity: one MCP server
+// entry per host, pointed at the current project path.
+//
+// The helpers below are pure (string in, string out) so the merge logic is
+// testable without filesystem fixtures. init() above handles the IO.
+
+export type CodexMergeResult =
+  | { status: "added"; next: string }
+  | { status: "updated"; next: string; previousProject: string | null }
+  | { status: "already"; next: string };
+
+const CODEX_BLOCK_RE = /\[mcp_servers\.sverklo\][\s\S]*?(?=\n\[|\n*$)/;
+const CODEX_ARGS_RE = /args\s*=\s*\[\s*"([^"]+)"/;
+
+export function mergeCodexToml(
+  currentSrc: string,
+  sverkloBin: string,
+  projectPath: string,
+): CodexMergeResult {
+  const newBlock =
+    `[mcp_servers.sverklo]\n` +
+    `command = ${JSON.stringify(sverkloBin)}\n` +
+    `args = [${JSON.stringify(projectPath)}]\n`;
+  const existingMatch = currentSrc.match(CODEX_BLOCK_RE);
+  const previousProject = existingMatch
+    ? existingMatch[0].match(CODEX_ARGS_RE)?.[1] ?? null
+    : null;
+
+  if (existingMatch && previousProject === projectPath) {
+    return { status: "already", next: currentSrc };
+  }
+
+  const next = existingMatch
+    ? currentSrc.replace(CODEX_BLOCK_RE, newBlock.trimEnd())
+    : currentSrc.trimEnd() + (currentSrc.trim() ? "\n\n" : "") + newBlock;
+  const ensured = next.endsWith("\n") ? next : next + "\n";
+
+  return existingMatch
+    ? { status: "updated", next: ensured, previousProject }
+    : { status: "added", next: ensured };
+}
+
+export type CopilotMergeResult =
+  | { status: "added"; next: string }
+  | { status: "updated"; next: string; previousProject: string | null }
+  | { status: "already"; next: string };
+
+interface CopilotConfigShape {
+  mcpServers?: Record<
+    string,
+    { command: string; args: string[]; env?: Record<string, string> }
+  >;
+}
+
+export function mergeCopilotJson(
+  currentSrc: string | null,
+  sverkloBin: string,
+  projectPath: string,
+): CopilotMergeResult {
+  let parsed: CopilotConfigShape = {};
+  if (currentSrc) {
+    try {
+      parsed = JSON.parse(currentSrc) as CopilotConfigShape;
+    } catch {
+      parsed = {};
+    }
+  }
+  if (!parsed.mcpServers) parsed.mcpServers = {};
+  const existing = parsed.mcpServers.sverklo;
+  const previousProject = existing?.args?.[0] ?? null;
+
+  if (existing && previousProject === projectPath) {
+    return { status: "already", next: currentSrc ?? "" };
+  }
+
+  parsed.mcpServers.sverklo = {
+    command: sverkloBin,
+    args: [projectPath],
+  };
+  const next = JSON.stringify(parsed, null, 2) + "\n";
+  return existing
+    ? { status: "updated", next, previousProject }
+    : { status: "added", next };
+}
+
 /**
  * Resolve the absolute path to the sverklo binary.
  * Using a full path is more reliable than relying on PATH inheritance
@@ -686,6 +776,65 @@ export async function initProject(
     }
   }
 
+  // 3.6 OpenAI Codex CLI — global MCP config at ~/.codex/config.toml.
+  //     TOML, but the structure is two-level so we serialize inline (no new
+  //     dep). Per-machine, not per-project — same trade-off as Antigravity.
+  const codexDir = join(homedir(), ".codex");
+  if (existsSync(codexDir)) {
+    const codexConfigPath = join(codexDir, "config.toml");
+    let codexSrc = "";
+    if (existsSync(codexConfigPath)) {
+      try {
+        codexSrc = readFileSync(codexConfigPath, "utf-8");
+      } catch {
+        codexSrc = "";
+      }
+    }
+    const result = mergeCodexToml(codexSrc, sverkloBin, projectPath);
+    if (result.status === "already") {
+      console.log("  ~/.codex/config.toml — sverklo already configured for this project");
+    } else {
+      writeFileSync(codexConfigPath, result.next);
+      if (result.status === "updated") {
+        console.log(
+          `  ~/.codex/config.toml — rewired sverklo from ${result.previousProject ?? "<unknown>"} → ${projectPath}`
+        );
+      } else {
+        console.log(`  ~/.codex/config.toml — added sverklo (project: ${projectPath})`);
+      }
+      console.log("    Restart Codex to pick up the new MCP server.");
+    }
+  }
+
+  // 3.7 GitHub Copilot CLI — global MCP config at ~/.copilot/mcp-config.json.
+  //     JSON, same shape as Claude Desktop / Cursor.
+  const copilotDir = join(homedir(), ".copilot");
+  if (existsSync(copilotDir)) {
+    const copilotConfigPath = join(copilotDir, "mcp-config.json");
+    let cpSrc: string | null = null;
+    if (existsSync(copilotConfigPath)) {
+      try {
+        cpSrc = readFileSync(copilotConfigPath, "utf-8");
+      } catch {
+        cpSrc = null;
+      }
+    }
+    const result = mergeCopilotJson(cpSrc, sverkloBin, projectPath);
+    if (result.status === "already") {
+      console.log("  ~/.copilot/mcp-config.json — sverklo already configured for this project");
+    } else {
+      writeFileSync(copilotConfigPath, result.next);
+      if (result.status === "updated") {
+        console.log(
+          `  ~/.copilot/mcp-config.json — rewired sverklo from ${result.previousProject ?? "<unknown>"} → ${projectPath}`
+        );
+      } else {
+        console.log(`  ~/.copilot/mcp-config.json — added sverklo (project: ${projectPath})`);
+      }
+      console.log("    Run `gh copilot /mcp list` to verify Copilot CLI sees sverklo.");
+    }
+  }
+
   // 4. Migrate legacy .claude/mcp.json if present (from older sverklo versions)
   const legacyMcpPath = join(projectPath, ".claude", "mcp.json");
   if (existsSync(legacyMcpPath)) {
@@ -770,6 +919,12 @@ export async function initProject(
   }
   if (existsSync(join(homedir(), ".gemini", "antigravity"))) {
     void track("init.detected.antigravity");
+  }
+  if (existsSync(join(homedir(), ".codex"))) {
+    void track("init.detected.codex");
+  }
+  if (existsSync(join(homedir(), ".copilot"))) {
+    void track("init.detected.copilot-cli");
   }
   if (
     copilotExtensionDetected ||
