@@ -3,16 +3,15 @@ import type { Baseline, BaselineOutput } from "../base.ts";
 import type { Task, ExpectedAnswer } from "../../types.ts";
 
 /**
- * Bifrost Gateway Baseline (manifest-size only)
+ * Bifrost Mock Fixture (benchmark runner integration only)
  *
  * Scope:
- * - Dataset-level Bifrost process
- * - No LLM loop (explicitly excluded)
- * - Measures orchestration overhead + manifest-size delta
+ * - NOT a real Bifrost gateway integration
+ * - Used only for benchmark infrastructure testing
  */
 
-export class BifrostBaseline implements Baseline {
-  name = "bifrost+grep-codemode";
+export class BifrostMockBaseline implements Baseline {
+  name = "bifrost-mock";
 
   private child: ChildProcessWithoutNullStreams | null = null;
   private buffer = "";
@@ -22,7 +21,7 @@ export class BifrostBaseline implements Baseline {
   private firstTask = true;
   private setupTimeMs = 0;
 
-  private errorCount = 0;
+  // private errorCount = 0;
 
   // -----------------------------
   // Dataset setup
