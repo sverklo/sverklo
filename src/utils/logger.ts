@@ -21,6 +21,16 @@ export function logTiming(msg: string): void {
   }
 }
 
+/**
+ * Always-on summary line. Used by the indexer for the final "Indexing
+ * complete" output so users see total elapsed time on every flow that
+ * triggers indexing (`sverklo audit`, `sverklo index`, etc.), without
+ * needing to opt into SVERKLO_DEBUG. Issue #54.
+ */
+export function logSummary(msg: string): void {
+  process.stderr.write(`${msg}\n`);
+}
+
 export function logError(msg: string, err?: unknown): void {
   process.stderr.write(`[sverklo:error] ${msg}\n`);
   if (err instanceof Error) {

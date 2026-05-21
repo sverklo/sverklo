@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSverkloConfig, getWeight } from "./config-file.js";
+import { loadSverkloConfig, getWeight, explainWeight } from "./config-file.js";
 
 describe("loadSverkloConfig", () => {
   let tmpRoot: string;
@@ -201,5 +201,49 @@ describe("getWeight", () => {
       ],
     };
     expect(getWeight(config, "src/foo.ts")).toBe(2.0);
+  });
+});
+
+describe("explainWeight — issue #56", () => {
+  it("returns defaults when no config", () => {
+    const r = explainWeight(null, "src/foo.ts");
+    expect(r.effective).toBe(1.0);
+    expect(r.matches).toEqual([]);
+    expect(r.source).toBeNull();
+  });
+
+  it("returns defaults when no glob matches", () => {
+    const config = { weights: [{ glob: "tests/**", weight: 0.5 }] };
+    const r = explainWeight(config, "src/foo.ts");
+    expect(r.effective).toBe(1.0);
+    expect(r.matches).toEqual([]);
+  });
+
+  it("captures the single matching glob", () => {
+    const config = { weights: [{ glob: "src/**", weight: 2.5 }] };
+    const r = explainWeight(config, "src/foo.ts");
+    expect(r.effective).toBe(2.5);
+    expect(r.matches).toEqual([{ glob: "src/**", weight: 2.5, index: 0 }]);
+  });
+
+  it("captures every match in declaration order; last wins", () => {
+    const config = {
+      weights: [
+        { glob: "tests/**", weight: 0.8 },
+        { glob: "tests/fixtures/**", weight: 0.5 },
+      ],
+    };
+    const r = explainWeight(config, "tests/fixtures/sample.json");
+    expect(r.effective).toBe(0.5);
+    expect(r.matches).toEqual([
+      { glob: "tests/**", weight: 0.8, index: 0 },
+      { glob: "tests/fixtures/**", weight: 0.5, index: 1 },
+    ]);
+  });
+
+  it("passes through the source path", () => {
+    const config = { weights: [{ glob: "src/**", weight: 1.5 }] };
+    const r = explainWeight(config, "src/x.ts", "/repo/.sverklo.yaml");
+    expect(r.source).toBe("/repo/.sverklo.yaml");
   });
 });

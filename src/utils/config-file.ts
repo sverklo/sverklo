@@ -145,3 +145,38 @@ export function getWeight(
 
   return weight;
 }
+
+/**
+ * Like `getWeight`, but returns the full match trail so callers can
+ * explain to the user which glob actually won. Used by
+ * `sverklo weights explain <file>` (issue #56).
+ *
+ * Returns:
+ *   - effective: the final weight that getWeight() would return
+ *   - matches:   every glob entry that matched, in declaration order.
+ *                The LAST entry in this list is the one that took effect.
+ *   - source:    where the config was loaded from, or null if no config.
+ */
+export function explainWeight(
+  config: SverkloConfig | null,
+  relativePath: string,
+  source: string | null = null,
+): {
+  effective: number;
+  matches: Array<{ glob: string; weight: number; index: number }>;
+  source: string | null;
+} {
+  const matches: Array<{ glob: string; weight: number; index: number }> = [];
+  if (!config?.weights || config.weights.length === 0) {
+    return { effective: 1.0, matches, source };
+  }
+  config.weights.forEach((entry, index) => {
+    if (picomatch.isMatch(relativePath, entry.glob)) {
+      matches.push({ glob: entry.glob, weight: entry.weight, index });
+    }
+  });
+  const effective = matches.length === 0
+    ? 1.0
+    : matches[matches.length - 1]!.weight;
+  return { effective, matches, source };
+}
