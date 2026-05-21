@@ -222,8 +222,16 @@ class OllamaProvider implements EmbeddingProvider {
       try {
         const probeRes = await fetch(`${this.baseUrl}/api/embed`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: this.model, input: ["dimension probe"] }),
+          headers: {
+            "content-type": "application/json",
+            "connection": "keep-alive",
+          },
+          keepalive: true,
+          body: JSON.stringify({
+            model: this.model,
+            input: ["dimension probe"],
+            keep_alive: "10m",
+          }),
         });
         if (probeRes.ok) {
           const probeJson = (await probeRes.json()) as OllamaEmbedResponse;
@@ -250,10 +258,22 @@ class OllamaProvider implements EmbeddingProvider {
 
     for (let i = 0; i < texts.length; i += BATCH) {
       const batch = texts.slice(i, i + BATCH);
+      // `keep_alive` keeps the model resident on the Ollama server
+      // between batches — otherwise the model can be unloaded after
+      // idle gaps and the next batch pays the cold-load tax again.
+      // Closes part of issue #55.
       const res = await fetch(`${this.baseUrl}/api/embed`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: this.model, input: batch }),
+        headers: {
+          "content-type": "application/json",
+          "connection": "keep-alive",
+        },
+        keepalive: true,
+        body: JSON.stringify({
+          model: this.model,
+          input: batch,
+          keep_alive: "10m",
+        }),
       });
       if (!res.ok) {
         const body = await res.text().catch(() => "<no body>");

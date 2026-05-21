@@ -34,7 +34,7 @@ import { buildDocLinks } from "./doc-linker.js";
 import { extractReferences } from "./symbol-extractor.js";
 import { createIgnoreFilter } from "../utils/ignore.js";
 import { estimateTokens } from "../utils/tokens.js";
-import { log, logError, logTiming } from "../utils/logger.js";
+import { log, logError, logSummary, logTiming } from "../utils/logger.js";
 import { loadSverkloConfig, type SverkloConfig } from "../utils/config-file.js";
 import { track } from "../telemetry/index.js";
 import type { ProjectConfig, ImportRef, IndexStatus } from "../types/index.js";
@@ -509,7 +509,10 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
       // for up to FRESHNESS_CACHE_MS after a forced rebuild.
       this.freshnessCache = null;
       const elapsed = this.lastIndexedTime - startTime;
-      log(
+      // Always-on summary so users see total time on every indexing
+      // flow (audit, index, reindex) without needing SVERKLO_DEBUG=1.
+      // Issue #54.
+      logSummary(
         `Indexing complete: ${this.fileStore.count()} files, ` +
           `${this.chunkStore.count()} chunks in ${elapsed}ms`
       );

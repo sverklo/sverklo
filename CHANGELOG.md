@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.23.1] — 2026-05-21
+
+### Fixed
+
+- **#54** — `Indexing complete: N files, M chunks in Xms` now prints unconditionally on every flow that triggers indexing (`sverklo audit`, `sverklo index`, `sverklo reindex`). Previously gated on `SVERKLO_DEBUG=1` so default users never saw a total elapsed time. New `logSummary()` in `src/utils/logger.ts`.
+- **#55** — Ollama embedding requests now include `keep_alive: "10m"` + `connection: keep-alive` HTTP hints. Keeps the model resident between batches; closes a class of cold-load tax. Structural gap remains — ONNX is in-process, Ollama is over HTTP — so pick ONNX unless you specifically need Ollama's model selection. Documented at [sverklo.com/docs/config/](https://sverklo.com/docs/config/) with a comparison table.
+
+### Added
+
+- **#56 (partial)** — `sverklo weights explain <path>` subcommand. Walks `.sverklo.yaml` weight rules and shows which globs matched, in declaration order, with the winner marked. Closes the "no tooling to explain effective weights" gap. Remaining `#56` requests (git-worktree inherit, stale-project cleanup) deferred to a separate feature spec — both are filesystem-heavy and warrant their own spec-kit cycle.
+
+---
+
 ## [0.23.0] — 2026-05-20
 
 ### Added
