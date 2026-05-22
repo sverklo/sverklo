@@ -30,6 +30,11 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+      # 2026-05-22: the Tier-2.3 dashboard split shipped a SyntaxError
+      # in dashboard.js that hid for 8 days because TS build + vitest
+      # never load the browser assets. Pipe every shipped .js asset
+      # through `node --check` so a parse error fails CI immediately.
+      - run: npm run lint:assets
       - run: npm test
 
   install-smoke:
