@@ -37,6 +37,7 @@ export type ChunkType =
 export type RetrievalMethod =
   | "fts"
   | "vector"
+  | "hybrid"
   | "symbol"
   | "refs"
   | "pagerank"
@@ -144,6 +145,19 @@ export interface IndexStatus {
   lastIndexedAt: number | null;
   indexing: boolean;
   progress?: { done: number; total: number };
+  /**
+   * Embedding pipeline observability (#60 + #59). Lets sverklo doctor,
+   * the dashboard, and the MCP status tool surface "vector lane is only
+   * seeing 49% of chunks" or "configured 1024 dims, stored at 384"
+   * without the user having to drop down into SQLite.
+   */
+  embeddings?: {
+    chunksEmbedded: number;
+    coveragePct: number;            // 0..100
+    dimensionsObserved: number | null;  // null when table is empty
+    dimensionsConfigured: number | null; // from .sverklo.yaml `embeddings.dimensions`
+    provider: string | null;        // configured provider name (onnx | ollama | …)
+  };
 }
 
 export interface ParsedChunk {

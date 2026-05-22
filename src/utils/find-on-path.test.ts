@@ -71,4 +71,25 @@ describe("findOnPath", () => {
     if (process.platform !== "win32") chmodSync(bin, 0o755);
     expect(findOnPath("tooly")).toBe(bin);
   });
+
+  // Issue #53: nvm-windows / nvm4w drops npm's cmd-shim trio into the
+  // node prefix (`tooly` no extension, `tooly.cmd`, `tooly.ps1`). The
+  // extension-less file is a sh-style shim Windows cannot execute.
+  // findOnPath must prefer `.cmd` so doctor.ts / init.ts get a path
+  // Windows can actually spawn.
+  it("prefers .cmd over extension-less shim on Windows (issue #53)", () => {
+    writeFileSync(join(tmp, "tooly"), "#!/bin/sh\nnode tooly.js\n");
+    writeFileSync(join(tmp, "tooly.cmd"), "@echo off\nnode tooly.js\n");
+    if (process.platform !== "win32") chmodSync(join(tmp, "tooly"), 0o755);
+    process.env.PATH = tmp;
+
+    const resolved = findOnPath("tooly");
+    if (process.platform === "win32") {
+      // The sh-shim is unexecutable on Windows — must pick the .cmd.
+      expect(resolved).toBe(join(tmp, "tooly.cmd"));
+    } else {
+      // POSIX behavior unchanged: extension-less is the right answer.
+      expect(resolved).toBe(join(tmp, "tooly"));
+    }
+  });
 });

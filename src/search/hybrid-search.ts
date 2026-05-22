@@ -144,11 +144,30 @@ function computeConfidence(
  * Result of a hybrid search — the ranked candidates plus a confidence
  * signal the caller can surface in the output. Issue #4.
  */
+/**
+ * Per-lane attribution for the hybrid search. Issue #61 (2026-05-22):
+ * Viraj asked whether the vector lane was actually contributing or
+ * whether results were all coming from BM25. Now the caller can show
+ * "BM25=N vector=M overlap=K" so the user can debug retrieval health
+ * (e.g. "vector=0 with provider=ollama" = silent fallback).
+ */
+export interface HybridLaneStats {
+  candidatePool: number;       // total RRF candidates considered
+  ftsHits: number;             // # candidates surfaced by BM25 (FTS)
+  vectorHits: number;          // # candidates surfaced by vector cosine
+  bothLanes: number;           // # candidates surfaced by both
+  vectorPoolScanned: number;   // # candidate chunks that had embeddings to compare against
+  vectorPoolEmpty: number;     // # candidate chunks with NO embedding row (coverage gap)
+}
+
 export interface HybridSearchResult {
   results: SearchResult[];
   confidence: "high" | "medium" | "low";
   confidenceReason: string | null;
   fallbackHint: string | null;
+  // Optional so existing tests that mock the result without lanes still
+  // compile. Production-path callers always populate it (#61).
+  lanes?: HybridLaneStats;
 }
 
 /**
@@ -164,7 +183,7 @@ export interface HybridSearchResult {
 async function rankCandidates(
   indexer: IndexFiles & IndexCode,
   options: SearchOptions
-): Promise<SearchResult[]> {
+): Promise<{ candidates: SearchResult[]; lanes: HybridLaneStats }> {
   const { query, scope, language, type } = options;
 
   // Signal A: BM25 text search
@@ -209,24 +228,35 @@ async function rankCandidates(
   }
 
   // Only compute cosine similarity for candidate chunks (~100-500 vs thousands)
+  // Track vector-pool coverage so the caller can surface a "vector lane saw
+  // X/Y chunks" diagnostic (issue #61, paired with #60 coverage tracking).
   const vectorScores: { chunkId: number; score: number }[] = [];
+  let vectorPoolScanned = 0;
+  let vectorPoolEmpty = 0;
   for (const chunkId of candidateChunkIds) {
     const vec = indexer.embeddingStore.get(chunkId);
-    if (!vec) continue;
+    if (!vec) {
+      vectorPoolEmpty++;
+      continue;
+    }
+    vectorPoolScanned++;
     vectorScores.push({ chunkId, score: cosineSimilarity(queryVector, vec) });
   }
 
   vectorScores.sort((a, b) => b.score - a.score);
   const topVector = vectorScores.slice(0, 50);
 
-  // Reciprocal Rank Fusion
+  // Reciprocal Rank Fusion + per-lane attribution tracking (#61).
   const rrfScores = new Map<number, number>();
+  const ftsIds = new Set<number>();
+  const vectorIds = new Set<number>();
 
   // Add FTS scores
   for (let rank = 0; rank < ftsResults.length; rank++) {
     const chunkId = ftsResults[rank].id;
     const score = 1 / (RRF_K + rank + 1);
     rrfScores.set(chunkId, (rrfScores.get(chunkId) || 0) + score);
+    ftsIds.add(chunkId);
   }
 
   // Add vector scores
@@ -234,7 +264,11 @@ async function rankCandidates(
     const chunkId = topVector[rank].chunkId;
     const score = 1 / (RRF_K + rank + 1);
     rrfScores.set(chunkId, (rrfScores.get(chunkId) || 0) + score);
+    vectorIds.add(chunkId);
   }
+
+  let bothLanes = 0;
+  for (const id of ftsIds) if (vectorIds.has(id)) bothLanes++;
 
   // Batch-load candidate chunks in ONE SQLite query instead of N
   // chunkStore.getById point reads. RRF candidate set is bounded by
@@ -276,7 +310,17 @@ async function rankCandidates(
 
   // Sort by score, return unbounded — caller packs.
   candidates.sort((a, b) => b.score - a.score);
-  return candidates;
+  return {
+    candidates,
+    lanes: {
+      candidatePool: rrfScores.size,
+      ftsHits: ftsIds.size,
+      vectorHits: vectorIds.size,
+      bothLanes,
+      vectorPoolScanned,
+      vectorPoolEmpty,
+    },
+  };
 }
 
 /**
@@ -288,12 +332,12 @@ export async function hybridSearch(
   indexer: IndexFiles & IndexCode,
   options: SearchOptions
 ): Promise<SearchResult[]> {
-  const ranked = await rankCandidates(indexer, options);
+  const { candidates } = await rankCandidates(indexer, options);
   // Issue #29: optional ColBERT/PLAID-style late-interaction rerank.
   // No-op when SVERKLO_RERANK is unset (the production default). The
   // call site is wired now so the experiment branch can drop in real
   // model integration without re-touching this file.
-  const reranked = await maybeRerank(options.query, ranked);
+  const reranked = await maybeRerank(options.query, candidates);
   return packResults(reranked, options.tokenBudget);
 }
 
@@ -319,7 +363,7 @@ export async function hybridSearchWithConfidence(
 ): Promise<HybridSearchResult> {
   // Single rank pass; confidence reads the unbounded list, the output
   // is packed to the caller's budget. No double work.
-  const ranked = await rankCandidates(indexer, options);
+  const { candidates: ranked, lanes } = await rankCandidates(indexer, options);
 
   const shape = classifyQueryShape(options.query);
   const confidence = computeConfidence(ranked, shape);
@@ -359,6 +403,7 @@ export async function hybridSearchWithConfidence(
     confidence: confidence.level,
     confidenceReason: confidence.reason,
     fallbackHint,
+    lanes,
   };
 }
 

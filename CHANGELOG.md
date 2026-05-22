@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.25.0] — 2026-05-22
+
+### Fixed
+
+- **#53 — Windows MCP probe still failed on nvm-windows / nvm4w after v0.22.2.** npm's cmd-shim emits three sibling shims into the install prefix (`sverklo` sh-style, `sverklo.cmd`, `sverklo.ps1`) and `findOnPath` returned the extension-less one because empty-string came first in its PATHEXT-equivalent list. Windows cannot execute that shim (no PATHEXT match, shebangs ignored), so `spawnSync` produced empty stdout and all three probe checks (handshake / tools/list / tools/call) reported "no … response". Fix in `src/utils/find-on-path.ts`: on Windows, prefer `.cmd` / `.exe` / `.bat` / `.ps1` over the extension-less candidate. Defense in depth in `src/doctor.ts`: treat any Windows-resolved sverklo path as needing `shell: true`, so cmd.exe applies PATHEXT even if a future PATH layout slips through. CI Windows regression check now asserts `MCP handshake` succeeds in addition to the issue #43 string checks.
+- **#59 embedding dimension reporting + (fixed): `.sverklo.yaml` `embeddings.provider` was a silent no-op.** `Indexer.index()` called `createEmbeddingProvider()` with no arguments, so the YAML config never reached the factory — users configuring `provider: ollama` with a 1024-dim model got the bundled 384-dim MiniLM stored in the index and no visible signal of the mismatch. Now the indexer passes `this.sverkloConfig`, the silent-fallback path tags its log line `WARN` and includes the configured dimensions, and `embeddings.onnx.modelPath` (a documented field that no provider actually consumes) logs a loud "not yet supported" warning instead of silently degrading. Locked in by `indexer-provider-integration.test.ts` and `storage/embedding-store.test.ts`.
+- **#59 (diagnostic)** — `sverklo doctor` now reports the configured embedding provider + dimensions alongside what's actually stored in the index (e.g. `provider=ollama:qwen3-embedding:0.6b (configured 1024d) but stored vectors are 384d × 3200. 3200 / 6550 chunks embedded.`). Reads the embeddings table directly via `length(vector)/4` so config drift, silent fallbacks, AND incomplete coverage (issue #60) all surface as a single check. Fails when dims disagree; warns on coverage gaps.
+- **#58 — `sverklo reindex --force` no longer claims `✓ Done` after silent EBUSY.** On Windows when an MCP server still held `index.db` / `-wal` / `-shm` open, every `unlinkSync` failed but the old code logged the errors via `logError`, opened the same stale files, ran an empty index pass, and printed success. Users thought they were testing a fresh index when nothing had been deleted. `Indexer.clearIndex()` now returns `{ deleted, failed }`; the CLI checks `failed.length` and exits non-zero with a Windows-specific "close the MCP client, wait for the OS to release the handle" hint when `EBUSY` / `EPERM` is in play. The same handling applies to `sverklo bench self` (cold-start can't trust the timing if the clear silently failed). The MCP `clear_index` tool now reports "NOT fully deleted" honestly when files are locked.
+- **#61 — `sverklo_search` evidence rows are no longer labeled `method: "fts"`** when the hybrid pipeline runs both BM25 and vector lanes. Renamed to `method: "hybrid"` (new variant in `RetrievalMethod`). More usefully: every search response now appends a `retrieval lanes: BM25=N · vector=M (scanned X of Y candidate chunks) · overlap=K` footer so users can see whether the vector lane actually contributed. When `vectorHits === 0` despite candidates being scanned, the response surfaces a "check provider/dimension config with sverklo doctor" hint — paired with the #59 doctor diagnostic.
+
+### Added
+
+- **#60 — embedding coverage is now first-class in `IndexStatus`.** The MCP `sverklo_status` tool and the HTTP `/api/status` endpoint (dashboard) both surface `embeddings: { chunksEmbedded, coveragePct, dimensionsObserved, dimensionsConfigured, provider }`. New `EmbeddingStore.dimensionsObserved()` reads `length(vector)/4` from any one row in `O(1)`. Pairs with the `sverklo doctor` diagnostic that ships in the same release.
+
+---
+
 ## [0.23.1] — 2026-05-21
 
 ### Fixed

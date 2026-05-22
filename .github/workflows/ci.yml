@@ -107,6 +107,16 @@ jobs:
             Write-Host "::error::issue #43 regression: shell error leaked from doctor"
             exit 1
           }
+          # Issue #53: on nvm-windows the npm prefix contains both the
+          # extension-less sh-shim AND `sverklo.cmd`. If findOnPath picks
+          # the wrong one, the MCP probe spawns a binary Windows can't
+          # execute and all three probe responses are empty. Assert the
+          # handshake probe explicitly so any future PATH-priority
+          # regression breaks CI instead of users.
+          if ($out -match "no initialize response") {
+            Write-Host "::error::issue #53 regression: MCP probe got no initialize response on Windows"
+            exit 1
+          }
 
   install-published:
     # Schedule-only. Installs the published sverklo@latest from npm to catch

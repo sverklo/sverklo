@@ -107,4 +107,19 @@ export class EmbeddingStore {
       }
     ).c;
   }
+
+  /**
+   * Read the dimension of one stored vector (any row). Returns null if
+   * the table is empty. Used by sverklo doctor / status to surface
+   * dim mismatches against the configured provider (#59 / #60).
+   *
+   * Cheap: SELECT … LIMIT 1, then divide blob length by 4 (Float32).
+   */
+  dimensionsObserved(): number | null {
+    const row = this.db
+      .prepare("SELECT length(vector) AS bytes FROM embeddings LIMIT 1")
+      .get() as { bytes: number } | undefined;
+    if (!row || row.bytes === 0) return null;
+    return Math.floor(row.bytes / 4);
+  }
 }

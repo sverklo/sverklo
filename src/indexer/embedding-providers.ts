@@ -335,6 +335,18 @@ export async function createEmbeddingProvider(
       case "default":
       case "bundled":
       case "onnx":
+        // #59 (v0.25.0): warn loudly when `embeddings.onnx.modelPath` is
+        // set in .sverklo.yaml. The field is in the documented config
+        // schema but no provider consumes it — users pointing at a custom
+        // 1024-dim model silently got the bundled 384-dim MiniLM. Until
+        // we ship custom-ONNX-path support, surface the no-op explicitly.
+        if (embCfg?.onnx?.modelPath) {
+          log(
+            `[embedding] WARN: .sverklo.yaml has embeddings.onnx.modelPath='${embCfg.onnx.modelPath}' ` +
+              `but custom ONNX model paths are not yet supported. Using the bundled all-MiniLM-L6-v2 (384d). ` +
+              `Track sverklo/sverklo#59. To use a different model today, switch to provider: ollama.`
+          );
+        }
         provider = new BundledOnnxProvider();
         break;
 
@@ -409,8 +421,17 @@ export async function createEmbeddingProvider(
     }
     return provider;
   } catch (err) {
+    // #59 (v0.25.0): silent fallback was the original bug — users saw
+    // "ok, configured ollama" but the index stored 384-dim MiniLM vectors
+    // anyway. Make the fallback unambiguous: include both the requested
+    // provider and the dim it would have produced (when known), and tag
+    // the line WARN so SVERKLO_DEBUG=1 readers can grep for it.
+    const configuredDims = embCfg?.dimensions
+      ? ` (configured dimensions: ${embCfg.dimensions})`
+      : "";
     log(
-      `[embedding] Provider '${providerName}' init failed: ${(err as Error).message}. Falling back to default.`
+      `[embedding] WARN: provider '${providerName}'${configuredDims} init failed: ${(err as Error).message}. ` +
+        `Falling back to bundled all-MiniLM-L6-v2 (384d). Your index will use 384-dim vectors, NOT what you configured.`
     );
     const fallback = new BundledOnnxProvider();
     await fallback.init();

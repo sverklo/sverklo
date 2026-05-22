@@ -3,8 +3,11 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { track } from "./telemetry/index.js";
 import { findOnPath } from "./utils/find-on-path.js";
+import { loadSverkloConfig } from "./utils/config-file.js";
+import { getProjectConfig } from "./utils/config.js";
 
 /**
  * Read the version from the package.json bundled with the running
@@ -109,6 +112,121 @@ export function runDoctor(projectPath: string): void {
       status: "warn",
       message: "not downloaded yet (will auto-download on first MCP tool call)",
       fix: "sverklo setup",
+    });
+  }
+
+  // 3b. Embedding provider configured vs. actually stored (issue #59).
+  //
+  // The original v0.24 wiring bug ignored .sverklo.yaml `embeddings.provider`,
+  // so users configuring Ollama at 1024 dims got the bundled 384-dim MiniLM
+  // and had no visible signal of the mismatch. v0.25 fixes the wiring,
+  // but the diagnostic stays: even after the fix, a config typo, an
+  // unreachable Ollama endpoint, or a stale index built before the upgrade
+  // can still leave the stored vectors out of sync with the config. The
+  // single source of truth for what's actually in the index is the
+  // embeddings table on disk — read it directly here.
+  try {
+    const embCfg = loadSverkloConfig(projectPath)?.embeddings;
+    const configuredProvider =
+      embCfg?.provider || process.env.SVERKLO_EMBEDDING_PROVIDER || "default";
+    const configuredDims = embCfg?.dimensions; // may be undefined (auto-detect)
+
+    const projCfg = getProjectConfig(projectPath);
+    if (!existsSync(projCfg.dbPath)) {
+      // No index yet — first `sverklo index` will create it. Report
+      // what's configured so the user can sanity-check before any
+      // expensive cold-index work.
+      const cfgLine = configuredDims
+        ? `${configuredProvider} (${configuredDims}d configured)`
+        : configuredProvider;
+      checks.push({
+        name: "embedding index",
+        status: "ok",
+        message: `not built yet — configured provider: ${cfgLine}`,
+      });
+    } else {
+      // Inspect the existing index. Open read-only so we don't fight
+      // a running indexer process. node:sqlite's DatabaseSync doesn't
+      // expose a readOnly mode, so we just open and run SELECTs — they
+      // don't take a write lock under WAL.
+      const probe = new DatabaseSync(projCfg.dbPath);
+      try {
+        // length(vector)/4 because BLOB is stored as Float32Array bytes (4 bytes/float).
+        // Group by dim so we see ALL dims present, not just the modal one.
+        // A healthy index has exactly one group; multiple groups means
+        // the index was built across a provider change without a rebuild.
+        const dimRows = probe
+          .prepare(
+            "SELECT length(vector)/4 AS dims, COUNT(*) AS c FROM embeddings GROUP BY dims ORDER BY c DESC"
+          )
+          .all() as Array<{ dims: number; c: number }>;
+        const chunkCount = (
+          probe.prepare("SELECT COUNT(*) AS c FROM chunks").get() as { c: number }
+        ).c;
+        const embeddedCount = dimRows.reduce((s, r) => s + r.c, 0);
+
+        if (embeddedCount === 0) {
+          checks.push({
+            name: "embedding index",
+            status: "warn",
+            message: `0 / ${chunkCount} chunks have embeddings — configured provider: ${configuredProvider}`,
+            fix: "sverklo reindex",
+          });
+        } else {
+          const dimsSummary = dimRows
+            .map((r) => `${r.dims}d × ${r.c}`)
+            .join(", ");
+          const coverage = `${embeddedCount} / ${chunkCount} chunks embedded`;
+          const cfgDimsNote = configuredDims
+            ? `configured ${configuredDims}d`
+            : "auto-detect";
+
+          // Three states to surface:
+          //   (a) dim mismatch between config and storage
+          //   (b) coverage gap (< 100% chunks embedded — issue #60)
+          //   (c) multiple distinct dims in one index (split state)
+          const storedDims = dimRows[0].dims;
+          const dimMismatch =
+            configuredDims !== undefined && configuredDims !== storedDims;
+          const coverageGap = embeddedCount < chunkCount;
+          const multipleDims = dimRows.length > 1;
+
+          if (dimMismatch || multipleDims) {
+            checks.push({
+              name: "embedding index",
+              status: "fail",
+              message:
+                `provider=${configuredProvider} (${cfgDimsNote}) but stored vectors are ${dimsSummary}. ` +
+                `${coverage}.`,
+              fix:
+                "sverklo reindex (config and index disagree — silent fallback or stale provider)",
+            });
+          } else if (coverageGap) {
+            checks.push({
+              name: "embedding index",
+              status: "warn",
+              message: `provider=${configuredProvider} (${dimsSummary}). ${coverage}.`,
+              fix: "sverklo reindex (some chunks have no embedding — see issue #60)",
+            });
+          } else {
+            checks.push({
+              name: "embedding index",
+              status: "ok",
+              message: `provider=${configuredProvider} (${dimsSummary}). ${coverage}.`,
+            });
+          }
+        }
+      } finally {
+        try { probe.close(); } catch { /* ignore */ }
+      }
+    }
+  } catch (err) {
+    // Doctor must never throw on a bad index — surface as a warning
+    // and keep running the remaining checks.
+    checks.push({
+      name: "embedding index",
+      status: "warn",
+      message: `could not inspect: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
 
@@ -508,8 +626,17 @@ export function runDoctor(projectPath: string): void {
       // The fix is to launch via the platform shell. On POSIX the
       // resolved path is the JS file with a #! shebang — no shell
       // wrapper needed. Issue #47.
-      const isWinShim =
-        process.platform === "win32" && /\.(cmd|bat)$/i.test(sverkloBin);
+      //
+      // Issue #53: on nvm-windows / nvm4w, `where.exe sverklo` returns
+      // BOTH the extension-less sh-style shim and `sverklo.cmd`. If the
+      // resolved path is the extension-less shim, Windows can't execute
+      // it (no PATHEXT match, shebangs ignored) and the probe times out
+      // silently with empty stdout — exactly the failure mode Viraj hit
+      // on v0.23.1. find-on-path.ts now prefers `.cmd`, but as a belt-
+      // and-suspenders measure we also treat *any* Windows resolution
+      // as needing the shell. cmd.exe will then apply PATHEXT and find
+      // the real shim. POSIX behavior unchanged.
+      const isWinShim = process.platform === "win32";
       const result = spawnSync(sverkloBin, ["."], {
         input,
         encoding: "utf-8",

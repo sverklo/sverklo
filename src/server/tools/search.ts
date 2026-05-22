@@ -155,13 +155,37 @@ export async function handleSearch(
     footerLines.push(response.fallbackHint);
   }
 
+  // Lane-attribution footer (#61). The previous behavior reported every
+  // hit as method:"fts" — opaque about whether the vector lane actually
+  // contributed. Now surface BM25/vector/overlap so the user can debug
+  // retrieval health (e.g. "vector=0 with provider=ollama" = silent
+  // fallback, paired with #59 dim-mismatch).
+  if (response.lanes) {
+    const l = response.lanes;
+    footerLines.push("");
+    footerLines.push(
+      `_retrieval lanes: BM25=${l.ftsHits} · vector=${l.vectorHits} (scanned ${l.vectorPoolScanned} of ${l.vectorPoolScanned + l.vectorPoolEmpty} candidate chunks) · overlap=${l.bothLanes}_`
+    );
+    if (l.vectorHits === 0 && l.vectorPoolScanned > 0) {
+      footerLines.push(
+        "_vector lane returned nothing despite seeing candidates — check provider/dimension config with `sverklo doctor`_"
+      );
+    } else if (l.vectorPoolEmpty > l.vectorPoolScanned) {
+      footerLines.push(
+        `_${l.vectorPoolEmpty} of ${l.vectorPoolEmpty + l.vectorPoolScanned} candidate chunks had no embedding — coverage gap (#60). Check \`sverklo doctor\`._`
+      );
+    }
+  }
+
   // Q4: per-hit Evidence rows. Each result gets its own ev_ id the agent
   // can verify with sverklo_verify. Capped at 16 to keep the footer
   // bounded; oversize result sets get evidence for their top entries.
+  // #61: was hardcoded "fts" — now "hybrid" because hybridSearch fuses
+  // BM25 + vector + PageRank + RRF, not pure FTS.
   const { footer: evidenceFooter } = emitForHits(
     indexer,
     response.results,
-    "fts",
+    "hybrid",
     16
   );
 

@@ -548,14 +548,24 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         }
         case "clear_index": {
           log("clear_index: wiping index database");
-          indexer.clearIndex();
-          // Kick off a fresh full reindex in the background
+          const cr = indexer.clearIndex();
+          if (cr.failed.length > 0) {
+            // Issue #58: be honest when the unlink failed. The MCP server
+            // shouldn't tell its host "deleted" when nothing was deleted.
+            result =
+              `Index database NOT fully deleted (${cr.failed.length} file(s) locked). ` +
+              `Failed: ${cr.failed.map((f) => `${f.path} (${f.error.code ?? "ERR"})`).join(", ")}. ` +
+              `A reindex will run anyway but may reuse stale data.`;
+          } else {
+            result =
+              "Index database deleted. Reindexing started in the background — " +
+              "use get_indexing_status to monitor progress.";
+          }
+          // Kick off a fresh full reindex in the background regardless —
+          // best-effort recovery if some files were deleted.
           indexPromise = indexer.index().catch((err) => {
             logError("clear_index: reindex failed", err);
           });
-          result =
-            "Index database deleted. Reindexing started in the background — " +
-            "use get_indexing_status to monitor progress.";
           break;
         }
 
@@ -1053,13 +1063,21 @@ export async function startGlobalMcpServer(): Promise<void> {
         }
         case "clear_index": {
           log("clear_index: wiping index database");
-          indexer.clearIndex();
+          const cr2 = indexer.clearIndex();
+          if (cr2.failed.length > 0) {
+            // See parallel handler ~500 lines up. Same fix, same honesty.
+            result =
+              `Index database NOT fully deleted (${cr2.failed.length} file(s) locked). ` +
+              `Failed: ${cr2.failed.map((f) => `${f.path} (${f.error.code ?? "ERR"})`).join(", ")}. ` +
+              `A reindex will run anyway but may reuse stale data.`;
+          } else {
+            result =
+              "Index database deleted. Reindexing started in the background — " +
+              "use get_indexing_status to monitor progress.";
+          }
           indexer.index().catch((err) => {
             logError("clear_index: reindex failed", err);
           });
-          result =
-            "Index database deleted. Reindexing started in the background — " +
-            "use get_indexing_status to monitor progress.";
           break;
         }
 

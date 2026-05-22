@@ -10,11 +10,16 @@
  * Keep in sync with `class Indexer` in indexer.ts. Full plan:
  * docs/refactor-plan-indexer-coupling.md.
  */
+export interface ClearIndexResult {
+  deleted: string[];
+  failed: Array<{ path: string; error: NodeJS.ErrnoException }>;
+}
+
 export interface IndexAdmin {
   index(): Promise<void>;
   reindexFile(relativePath: string, absolutePath: string, language: string): Promise<void>;
   removeFile(relativePath: string): void;
-  clearIndex(): void;
+  clearIndex(): ClearIndexResult;
   close(): void;
   invalidateFreshnessCache(): void;
 }

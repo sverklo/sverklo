@@ -327,12 +327,21 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
       };
       const tProviderInit = phaseStart();
 
-      // Select the embedding provider lazily on first index. This
-      // reads SVERKLO_EMBEDDING_PROVIDER + related env vars and falls
-      // back to the bundled ONNX model on any failure. Only runs once
-      // per Indexer instance — subsequent index() calls reuse it.
+      // Select the embedding provider lazily on first index. Reads
+      // .sverklo.yaml `embeddings.*` first, then SVERKLO_EMBEDDING_PROVIDER
+      // + related env vars, then falls back to the bundled ONNX model on
+      // any failure. Only runs once per Indexer instance — subsequent
+      // index() calls reuse it.
+      //
+      // Bug fix (#59, v0.25.0): this used to call createEmbeddingProvider()
+      // with no arguments, which made `.sverklo.yaml` `embeddings.provider`
+      // a silent no-op. Users configuring Ollama / a custom ONNX model
+      // through the YAML got the bundled 384-dim MiniLM and didn't know.
       if (!this.embeddingProvider) {
-        this.embeddingProvider = await createEmbeddingProvider();
+        this.embeddingProvider = await createEmbeddingProvider(
+          process.env,
+          this.sverkloConfig,
+        );
       }
       phaseEnd("provider_init", tProviderInit);
 
@@ -617,15 +626,32 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
   }
 
   getStatus(): IndexStatus {
+    const chunkCount = this.chunkStore.count();
+    const chunksEmbedded = this.embeddingStore.count();
+    const coveragePct = chunkCount > 0
+      ? Math.round((chunksEmbedded / chunkCount) * 1000) / 10
+      : 0;
+    // #60 + #59: surface the embedding pipeline state so users can spot
+    // dim mismatch or coverage gaps without dropping to SQLite.
+    const embeddings = {
+      chunksEmbedded,
+      coveragePct,
+      dimensionsObserved: this.embeddingStore.dimensionsObserved(),
+      dimensionsConfigured:
+        (this.sverkloConfig?.embeddings?.dimensions as number | undefined) ?? null,
+      provider:
+        (this.sverkloConfig?.embeddings?.provider as string | undefined) ?? null,
+    };
     return {
       projectName: this.config.name,
       rootPath: this.config.rootPath,
       fileCount: this.fileStore.count(),
-      chunkCount: this.chunkStore.count(),
+      chunkCount,
       languages: this.fileStore.getLanguages(),
       lastIndexedAt: this.lastIndexedTime,
       indexing: this.indexing,
       progress: this.indexing ? this.progress : undefined,
+      embeddings,
     };
   }
 
@@ -713,8 +739,15 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
   /**
    * Delete the index database entirely and reinitialize empty stores.
    * Caller is responsible for triggering a reindex afterwards if desired.
+   *
+   * Returns the list of files that were deleted plus any that failed
+   * (e.g. EBUSY on Windows when another sverklo process holds the
+   * SQLite WAL/SHM open). Callers MUST check the `failed` array —
+   * issue #58 (2026-05-22) showed reindex --force happily exiting
+   * "Done" after every unlink failed and the same stale DB was
+   * reopened, leaving users certain they'd tested a fresh index.
    */
-  clearIndex(): void {
+  clearIndex(): { deleted: string[]; failed: Array<{ path: string; error: NodeJS.ErrnoException }> } {
     // Close existing connection
     try {
       this.db.close();
@@ -724,13 +757,18 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
 
     // Delete the .db file (and sqlite sidecars if present)
     const dbPath = this.config.dbPath;
+    const deleted: string[] = [];
+    const failed: Array<{ path: string; error: NodeJS.ErrnoException }> = [];
     for (const suffix of ["", "-wal", "-shm", "-journal"]) {
       const p = dbPath + suffix;
       if (existsSync(p)) {
         try {
           unlinkSync(p);
+          deleted.push(p);
         } catch (err) {
-          logError(`Failed to delete ${p}`, err);
+          const e = err as NodeJS.ErrnoException;
+          logError(`Failed to delete ${p}`, e);
+          failed.push({ path: p, error: e });
         }
       }
     }
@@ -755,6 +793,8 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
     this.progress = { done: 0, total: 0 };
     this.lastIndexedTime = null;
     this.freshnessCache = null;
+
+    return { deleted, failed };
   }
 }
 
