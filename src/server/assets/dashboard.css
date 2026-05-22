@@ -668,6 +668,18 @@ footer.status .spacer { flex: 1; }
 .cmdk-item.selected { background: var(--bg-3); color: var(--accent); }
 .cmdk-item .kind { font-size: 11px; color: var(--text-3); }
 
+/* error banner — surfaces init() failures instead of silent blank page */
+.error-banner {
+  background: #4a1f1f;
+  color: #f5c2c2;
+  padding: 10px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  border-bottom: 1px solid #6b2a2a;
+}
+.error-banner[hidden] { display: none; }
+.error-banner code { background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 3px; }
+
 /* scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

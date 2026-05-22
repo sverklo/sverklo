@@ -12,6 +12,8 @@ When sverklo MCP server is connected, **always prefer sverklo tools over built-i
 - Use `sverklo_remember` to save important decisions
 - Use `sverklo_recall` to check past decisions
 
+**Cross-project search** (v0.24.0+): if you need to read code in a neighboring sverklo-registered project (not the current cwd), call `sverklo_list_repos` and then pass `repo:"<name>"` to `sverklo_search` / `sverklo_lookup` / `sverklo_investigate` / `sverklo_search_iterative`. Don't fall back to grep when the data is already indexed.
+
 This is our own product — dogfood it.
 
 ## Project structure

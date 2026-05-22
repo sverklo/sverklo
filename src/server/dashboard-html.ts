@@ -47,6 +47,8 @@ export function getDashboardHTML(): string {
 </head>
 <body>
 
+<div id="error-banner" class="error-banner" hidden></div>
+
 <div class="app">
   <!-- ────────── HEADER ────────── -->
   <header class="chrome">

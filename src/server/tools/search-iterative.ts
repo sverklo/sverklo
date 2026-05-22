@@ -30,6 +30,13 @@ export const searchIterativeTool = {
         type: "number",
         description: "Candidate pool size (default 200). Capped at 500.",
       },
+      repo: {
+        type: "string",
+        description:
+          "Optional: name of a registered repo to search (see sverklo_list_repos). " +
+          "Defaults to the current workspace. Use this to widen the iterative search " +
+          "over a sibling project that has been sverklo-init'd but isn't the current cwd.",
+      },
     },
     required: ["query"],
   },

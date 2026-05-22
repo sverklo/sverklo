@@ -19,6 +19,13 @@ export const investigateTool = {
         type: "string",
         description: "Natural-language question or exploration target.",
       },
+      repo: {
+        type: "string",
+        description:
+          "Optional: name of a registered repo to investigate (see sverklo_list_repos). " +
+          "Defaults to the current workspace. Use this to investigate a sibling project " +
+          "that has been sverklo-init'd but isn't the current cwd.",
+      },
       scope: {
         type: "string",
         description: "Optional path prefix to limit all retrievers to, e.g. 'src/api/'.",

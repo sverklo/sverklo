@@ -20,6 +20,13 @@ export const lookupTool = {
         type: "string",
         description: "Symbol name to look up (exact or prefix match)",
       },
+      repo: {
+        type: "string",
+        description:
+          "Optional: name of a registered repo to search (see sverklo_list_repos). " +
+          "Defaults to the current workspace. Use this to look up a symbol in a sibling " +
+          "project that has been sverklo-init'd but isn't the current cwd.",
+      },
       type: {
         type: "string",
         enum: [
