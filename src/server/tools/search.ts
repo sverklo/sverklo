@@ -27,6 +27,13 @@ export const searchTool = {
         type: "string",
         description: "Natural language query or code pattern",
       },
+      repo: {
+        type: "string",
+        description:
+          "Optional: name of a registered repo to search (see sverklo_list_repos). " +
+          "Defaults to the current workspace. Use this to query a sibling project that " +
+          "has been sverklo-init'd but isn't the current cwd — avoids falling back to grep.",
+      },
       token_budget: {
         type: "number",
         description: "Max tokens to return (default: 4000)",

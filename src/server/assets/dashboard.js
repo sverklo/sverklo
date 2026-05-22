@@ -11,7 +11,14 @@ let state = {
 // ────────── API ──────────
 async function api(path) {
   const r = await fetch(path);
-  return r.json();
+  if (!r.ok) {
+    throw new Error('GET ' + path + ' → HTTP ' + r.status + ' ' + r.statusText);
+  }
+  try {
+    return await r.json();
+  } catch (e) {
+    throw new Error('GET ' + path + ' → invalid JSON: ' + (e && e.message ? e.message : e));
+  }
 }
 
 // ────────── INIT ──────────
@@ -20,7 +27,7 @@ async function init() {
   state.stats = await api('/api/stats');
 
   document.getElementById('bc-project').textContent = state.status.projectName;
-  document.getElementById('bc-branch').textContent = 'main'; // TODO: actual branch
+  document.getElementById('bc-branch').textContent = state.status.branch || 'detached';
   document.getElementById('bc-indexed').textContent = state.status.lastIndexedAt
     ? 'indexed ' + formatAge(state.status.lastIndexedAt)
     : 'not indexed';
@@ -651,4 +658,17 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB';
 }
 
-init();
+function showInitError(err) {
+  const banner = document.getElementById('error-banner');
+  if (!banner) return;
+  const msg = (err && err.message) ? err.message : String(err);
+  banner.innerHTML =
+    '<strong>Dashboard failed to load.</strong> ' +
+    'Check the sverklo process for errors, then refresh. Last error: <code>' +
+    msg.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]) +
+    '</code>';
+  banner.removeAttribute('hidden');
+  console.error('[sverklo dashboard] init failed', err);
+}
+
+init().catch(showInitError);
