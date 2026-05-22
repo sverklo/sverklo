@@ -21,6 +21,7 @@ import { ConceptStore } from "../storage/concept-store.js";
 import { HandleStore } from "../storage/handle-store.js";
 import { PatternStore } from "../storage/pattern-store.js";
 import { MemoryJournal } from "../memory/journal.js";
+import { getGitState } from "../memory/git-state.js";
 import { discoverFiles } from "./file-discovery.js";
 import { parseFile } from "./parser.js";
 import { describeChunk } from "./describer.js";
@@ -642,6 +643,17 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
       provider:
         (this.sverkloConfig?.embeddings?.provider as string | undefined) ?? null,
     };
+    // v0.24.0: branch was originally enriched only at the HTTP layer
+    // (http-server.ts /api/status). That left MCP sverklo_status and
+    // any other getStatus() caller without the field — inconsistent
+    // contract. Lift the read here so every consumer sees the same
+    // shape. Best-effort: null if not a git repo or git is unavailable.
+    let branch: string | null = null;
+    try {
+      branch = getGitState(this.config.rootPath).branch ?? null;
+    } catch {
+      branch = null;
+    }
     return {
       projectName: this.config.name,
       rootPath: this.config.rootPath,
@@ -652,6 +664,7 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
       indexing: this.indexing,
       progress: this.indexing ? this.progress : undefined,
       embeddings,
+      branch,
     };
   }
 

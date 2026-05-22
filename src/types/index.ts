@@ -158,6 +158,14 @@ export interface IndexStatus {
     dimensionsConfigured: number | null; // from .sverklo.yaml `embeddings.dimensions`
     provider: string | null;        // configured provider name (onnx | ollama | …)
   };
+  /**
+   * Current git branch (v0.24.0). Null when not in a git repo, in
+   * detached-HEAD, or when execSync('git branch --show-current')
+   * fails. The dashboard breadcrumb and MCP sverklo_status both
+   * read this; the HTTP /api/status endpoint passes it through
+   * unchanged.
+   */
+  branch?: string | null;
 }
 
 export interface ParsedChunk {

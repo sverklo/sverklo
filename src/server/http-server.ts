@@ -6,7 +6,6 @@ import type { Indexer } from "../indexer/indexer.js";
 import { log } from "../utils/logger.js";
 import { getDashboardHTML } from "./dashboard-html.js";
 import { getClustersJSON } from "./tools/clusters.js";
-import { getGitState } from "../memory/git-state.js";
 
 // Read the package version once at module load so the dashboard footer
 // and any other surface can show what version is actually running.
@@ -52,16 +51,11 @@ export function startHttpServer(indexer: Indexer, port: number = 3847): void {
       // ─── API routes ───
       if (url.pathname === "/api/status") {
         const status = indexer.getStatus();
-        const gitState = getGitState(indexer.rootPath);
-        // Include the running package version + git branch so the dashboard
-        // breadcrumb shows what's actually running instead of a hardcoded
-        // string. branch is null when the repo has no git, no commits, or
-        // when execSync fails (detached HEAD).
-        json(res, {
-          ...status,
-          version: PACKAGE_VERSION,
-          branch: gitState.branch,
-        });
+        // v0.25 cleanup: branch is now part of IndexStatus (Indexer.getStatus
+        // computes it via getGitState) so the dashboard, MCP sverklo_status,
+        // and this HTTP endpoint all see the same shape. We only enrich
+        // with the package version here.
+        json(res, { ...status, version: PACKAGE_VERSION });
       } else if (url.pathname === "/api/stats") {
         // Aggregated stats for the dashboard overview
         const files = indexer.fileStore.getAll();
