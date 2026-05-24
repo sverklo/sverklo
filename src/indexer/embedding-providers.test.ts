@@ -97,3 +97,87 @@ describe("fingerprintOf", () => {
     expect(fp.dimensions).toBe(384);
   });
 });
+
+// Regression: issue #66. v0.25.0 fixed the YAML wiring so the Ollama
+// provider was actually *selected*, but the provider trusted the
+// configured `embeddings.dimensions` blindly and never compared it to
+// the actual response length. Users running a model whose true output
+// dim disagreed with their config (e.g. configured 1024, model returns
+// 384) ended up with 384-dim vectors stored in the index while
+// `provider.dimensions` kept reporting 1024. `sverklo doctor` flagged
+// the mismatch but the embed phase wrote the bad data first.
+//
+// The fix: on every embed() batch, if the configured dim is known and
+// the actual response dim disagrees, throw fail-loud. Better to abort
+// the index run than to persist vectors that misrepresent themselves.
+describe("OllamaProvider dimension validation (issue #66)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("throws when Ollama returns vectors with a different dim than configured", async () => {
+    // Mock fetch: probe (/api/tags) succeeds, /api/embed returns 384-dim
+    // vectors despite the caller having configured 1024. This is the
+    // exact shape of Viraj's v0.25.1 failure.
+    global.fetch = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith("/api/tags")) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      if (u.endsWith("/api/embed")) {
+        return new Response(
+          JSON.stringify({ embeddings: [new Array(384).fill(0)] }),
+          { status: 200 }
+        );
+      }
+      return new Response("", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const p = await createEmbeddingProvider(
+      { SVERKLO_EMBEDDING_PROVIDER: "ollama" },
+      {
+        embeddings: {
+          provider: "ollama",
+          dimensions: 1024,
+          ollama: { baseUrl: "http://localhost:11434", model: "qwen3-embedding:0.6b" },
+        },
+      } as Parameters<typeof createEmbeddingProvider>[1]
+    );
+
+    // Factory should have selected ollama (not silently fallen back).
+    expect(p.name).toContain("ollama");
+    expect(p.dimensions).toBe(1024);
+
+    // The actual write path: provider.embed() must refuse rather than
+    // hand back 384-dim vectors that the indexer would persist.
+    await expect(p.embed(["hello world"])).rejects.toThrow(
+      /returned 384-dim vectors but the provider was configured for 1024-dim/
+    );
+  });
+
+  it("auto-detects dimensions when no explicit config is supplied", async () => {
+    // Inverse case: when the user does NOT pass `dimensions`, the
+    // provider should auto-detect from the response and not throw.
+    // Locks in the existing behavior so the #66 fix doesn't regress
+    // the auto-detect path.
+    global.fetch = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith("/api/tags")) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      if (u.endsWith("/api/embed")) {
+        return new Response(
+          JSON.stringify({ embeddings: [new Array(512).fill(0)] }),
+          { status: 200 }
+        );
+      }
+      return new Response("", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const p = await createEmbeddingProvider({ SVERKLO_EMBEDDING_PROVIDER: "ollama" });
+    const vecs = await p.embed(["hello"]);
+    expect(vecs).toHaveLength(1);
+    expect(vecs[0].length).toBe(512);
+    expect(p.dimensions).toBe(512);
+  });
+});

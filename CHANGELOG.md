@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.25.2] — 2026-05-24
+
+### Fixed
+
+- **#66 — Ollama provider stored 384d vectors despite `dimensions: 1024` config (real-user repro: Viraj).** v0.25.0 wired `.sverklo.yaml` `embeddings.provider` into the factory so the Ollama provider was actually *selected*, but `OllamaProvider.embed()` blindly wrapped whatever Ollama returned into a `Float32Array` and pushed it into the indexer. When the configured model's true output dim disagreed with `embeddings.dimensions` (Viraj configured 1024 against a model that returned 384), the embed phase completed "successfully" — provider kept reporting 1024 dims, indexer wrote 384-dim vectors to SQLite, and `sverklo doctor` flagged the mismatch only after 6370 chunks of bad data were on disk. Fix in `src/indexer/embedding-providers.ts`: on every batch, compare the response vector length against the configured dim. If a user passed `embeddings.dimensions: N` and Ollama returns M ≠ N, throw fail-loud with the actual N and a fix-it hint pointing at the YAML field. The auto-detect path (no user-supplied dim) is unchanged. Regression test mocks Ollama returning 384d while YAML asks for 1024 and asserts `indexer.index()` rejects — fails on v0.25.1 source (verified by stashing the fix and re-running), passes with the fix.
+- **#66 (related) — `fingerprintOf` is defined but never called outside its own test.** The module header (line 22-23 of `embedding-providers.ts`) documents an "index startup checks stored provider against current config and triggers a rebuild" guarantee, but the code that would do that comparison and trigger the rebuild was never written. Tracking issue to be opened for v0.26.0; out of scope for this patch.
+
+---
+
 ## [0.25.0] — 2026-05-22
 
 ### Fixed

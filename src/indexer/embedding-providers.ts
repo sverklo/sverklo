@@ -283,10 +283,31 @@ class OllamaProvider implements EmbeddingProvider {
       }
       const json = (await res.json()) as OllamaEmbedResponse;
 
-      // Auto-detect dimensions from the first real response.
-      if (!this._dimensionsDetected && json.embeddings?.[0]?.length) {
-        this._dimensions = json.embeddings[0].length;
-        this._dimensionsDetected = true;
+      // Validate response dimensions. Two cases:
+      //   (a) user configured `embeddings.dimensions: N` — Ollama MUST
+      //       return N-dim vectors. If it returns something else, the
+      //       index would end up with vectors that don't match what the
+      //       provider claims via `.dimensions`, doctor would flag a
+      //       mismatch on every run, and similarity scoring would be
+      //       silently wrong. Throw fail-loud so the user fixes the
+      //       model or the config — better than persisting bad data.
+      //       (#66 root cause: pre-v0.25.2 we trusted the config blindly.)
+      //   (b) no user config — auto-detect from the first response, then
+      //       enforce stability for every subsequent batch in this run.
+      const actualLen = json.embeddings?.[0]?.length;
+      if (actualLen) {
+        if (!this._dimensionsDetected) {
+          this._dimensions = actualLen;
+          this._dimensionsDetected = true;
+        } else if (actualLen !== this._dimensions) {
+          throw new Error(
+            `Ollama model '${this.model}' returned ${actualLen}-dim vectors ` +
+              `but the provider was configured for ${this._dimensions}-dim. ` +
+              `Update embeddings.dimensions in .sverklo.yaml to ${actualLen}, ` +
+              `or switch to a model whose output matches the configured dimension. ` +
+              `(sverklo/sverklo#66)`
+          );
+        }
       }
 
       for (const emb of json.embeddings) {

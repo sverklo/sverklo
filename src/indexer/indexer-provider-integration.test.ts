@@ -159,6 +159,70 @@ describe("Indexer + embedding provider integration", () => {
     }
   });
 
+  // Regression for issue #66 (v0.25.2). v0.25.0 fixed wiring but
+  // didn't validate Ollama's response dim against the configured one.
+  // Viraj's setup (`dimensions: 1024` + a model that returned 384)
+  // ended the embed phase "successfully" with 384-dim vectors in the
+  // index. The provider kept reporting 1024 dims; doctor flagged it
+  // after the fact, but by then 6370 chunks of bad data were written.
+  //
+  // This test mocks Ollama to return 384-dim vectors while the YAML
+  // requests 1024. The patched embed() throws → index() surfaces the
+  // failure. On the unpatched code, index() would complete silently
+  // and the embeddings table would contain 384-dim vectors.
+  it("fails loud when Ollama returns a different dim than configured (issue #66)", async () => {
+    delete process.env.SVERKLO_EMBEDDING_PROVIDER;
+    delete process.env.SVERKLO_OLLAMA_URL;
+
+    writeFileSync(
+      join(tmpRoot, ".sverklo.yaml"),
+      [
+        "embeddings:",
+        "  provider: ollama",
+        "  dimensions: 1024",
+        "  ollama:",
+        "    baseUrl: http://localhost:11434",
+        "    model: qwen3-embedding:0.6b",
+        "",
+      ].join("\n"),
+      "utf-8"
+    );
+
+    // Mock the wrong-dim response: 384 floats per chunk, regardless of
+    // how many inputs are in the batch.
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url: unknown, init?: unknown) => {
+      const u = String(url);
+      if (u.endsWith("/api/tags")) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      if (u.endsWith("/api/embed")) {
+        const body = JSON.parse((init as { body: string }).body);
+        const input: string[] = Array.isArray(body.input) ? body.input : [body.input];
+        return new Response(
+          JSON.stringify({
+            embeddings: input.map(() => new Array(384).fill(0)),
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const indexer = new Indexer(getProjectConfig(tmpRoot));
+      try {
+        await expect(indexer.index()).rejects.toThrow(
+          /returned 384-dim vectors but the provider was configured for 1024-dim/
+        );
+      } finally {
+        indexer.close();
+      }
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   // Regression for issue #59 (v0.25.0). The original wiring bug was
   // that Indexer.index() called createEmbeddingProvider() with no
   // arguments, so .sverklo.yaml `embeddings.provider` was a silent
