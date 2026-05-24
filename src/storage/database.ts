@@ -408,6 +408,44 @@ export function setDataVersion(db: Database, version: number): void {
 }
 
 /**
+ * Embedding fingerprint persisted to `meta` so the indexer can detect
+ * silent provider/dimension changes across runs (issue #69). Stored as
+ * JSON because `EmbeddingFingerprint` may grow new fields. Shape mirrors
+ * `EmbeddingFingerprint` in embedding-providers.ts — we re-declare it as
+ * a plain record here to keep storage/ free of indexer/ imports.
+ */
+export type StoredFingerprint = { provider: string; dimensions: number };
+
+export function getStoredFingerprint(db: Database): StoredFingerprint | null {
+  try {
+    const row = db
+      .prepare("SELECT value FROM meta WHERE key = 'embedding_fingerprint'")
+      .get() as { value: string } | undefined;
+    if (!row) return null;
+    const parsed = JSON.parse(row.value) as Partial<StoredFingerprint>;
+    if (
+      typeof parsed.provider !== "string" ||
+      typeof parsed.dimensions !== "number"
+    ) {
+      return null;
+    }
+    return { provider: parsed.provider, dimensions: parsed.dimensions };
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredFingerprint(
+  db: Database,
+  fp: StoredFingerprint
+): void {
+  db.prepare(
+    "INSERT INTO meta (key, value) VALUES ('embedding_fingerprint', ?) " +
+      "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).run(JSON.stringify({ provider: fp.provider, dimensions: fp.dimensions }));
+}
+
+/**
  * BEGIN / COMMIT / ROLLBACK helper. better-sqlite3 had `db.transaction(fn)`
  * built in; node:sqlite doesn't, so we wrap the pattern explicitly.
  * Used by Indexer.index() for the bulk-insert path.

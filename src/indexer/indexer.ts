@@ -5,6 +5,8 @@ import {
   createDatabase,
   getDataVersion,
   setDataVersion,
+  getStoredFingerprint,
+  setStoredFingerprint,
   transaction,
   CURRENT_DATA_VERSION,
 } from "../storage/database.js";
@@ -28,6 +30,7 @@ import { describeChunk } from "./describer.js";
 import { embed as legacyEmbed, initEmbedder } from "./embedder.js";
 import {
   createEmbeddingProvider,
+  fingerprintOf,
   type EmbeddingProvider,
 } from "./embedding-providers.js";
 import { buildGraph } from "./graph-builder.js";
@@ -345,6 +348,52 @@ export class Indexer implements IndexFiles, IndexCode, IndexGraph, IndexMemory, 
         );
       }
       phaseEnd("provider_init", tProviderInit);
+
+      // Issue #69: provider-change auto-detect.
+      //
+      // Compare the active provider's fingerprint against the one
+      // persisted by the last successful index. If they disagree AND
+      // the on-disk index is non-empty, refuse to incrementally update
+      // — otherwise we'd mix vector spaces inside one embeddings table
+      // (the same silent-degradation class as #59 / #66, just one layer
+      // up). Throwing here means `index()` rejects, the CLI exits
+      // non-zero, and the user sees both fingerprints + the reindex
+      // command they need to run.
+      //
+      // First-index path (empty store, no stored fingerprint) and
+      // legacy-upgrade path (non-empty store from a pre-#69 sverklo
+      // with no stored fingerprint) both fall through and stamp the
+      // current fingerprint after a successful index. The legacy path
+      // implicitly trusts that the existing vectors match the current
+      // provider — they were written by the same provider config that's
+      // active now, modulo the user changing config between sverklo
+      // versions, which is exactly what they're upgrading to detect on
+      // the NEXT run.
+      const currentFingerprint = fingerprintOf(this.embeddingProvider);
+      const storedFingerprint = getStoredFingerprint(this.db);
+      if (
+        storedFingerprint &&
+        (storedFingerprint.provider !== currentFingerprint.provider ||
+          storedFingerprint.dimensions !== currentFingerprint.dimensions)
+      ) {
+        const oldFp = `${storedFingerprint.provider} (${storedFingerprint.dimensions}d)`;
+        const newFp = `${currentFingerprint.provider} (${currentFingerprint.dimensions}d)`;
+        // `finally` below clears `this.indexing`; let the error propagate.
+        throw new Error(
+          `Embedding provider change detected — refusing to update index.\n` +
+            `  Stored:    ${oldFp}\n` +
+            `  Configured: ${newFp}\n` +
+            `Mixing providers in the same index produces inconsistent vector spaces and ` +
+            `silently degrades search quality. Run \`sverklo reindex --force\` to rebuild ` +
+            `the index with the new provider.`
+        );
+      }
+
+      // Stamp the current fingerprint. Idempotent — no-op when stored
+      // already matches. Done here (not at the end of index()) so even
+      // the no-op "index is up to date" path leaves a stamped meta row
+      // for first-time + legacy-upgrade users.
+      setStoredFingerprint(this.db, currentFingerprint);
 
       // 1. Discover files
       const tDiscover = phaseStart();
