@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.26.0] — 2026-05-24
+
+### Added
+
+- **#69 — provider-change auto-detect + refuse-stale-index.** `fingerprintOf()` had existed since v0.24 but was only called from its own unit test — the indexer never compared it against anything, so switching `embeddings.provider` in `.sverklo.yaml` (e.g. `onnx` → `ollama`, or one Ollama model → another at the same dim) silently mixed vector spaces in one embeddings table. The same-dim case slipped past the v0.25 doctor diagnostic (it only inspected `length(vector)/4`). Wiring in this release:
+  - `src/storage/database.ts` exposes `getStoredFingerprint` / `setStoredFingerprint`, persisted under `meta.key = 'embedding_fingerprint'` (JSON blob, single row, same table as `data_version`).
+  - `Indexer.index()` computes the active fingerprint right after provider init, reads the stored one, and on disagreement throws with both fingerprints + `sverklo reindex --force` as the fix. The throw happens before any writes; the CLI exits non-zero. First index and pre-#69 databases fall through and stamp the current fingerprint.
+  - `sverklo doctor` adds an "embedding fingerprint" check that compares stored provider name against the configured one (prefix-match against `ollama:model`-style names) so a switch is surfaced even when both providers happen to share dimensions.
+  - Regression covered by `src/indexer/indexer-fingerprint.test.ts`: 5 storage unit tests + 4 integration tests asserting (a) fingerprint stamps on first index, (b) provider switch is rejected with the right error message, (c) the documented `clearIndex() + index()` recovery path works, and (d) legacy databases (no fingerprint row yet) upgrade silently on next index. The 4 integration tests fail on the v0.25.2 source (verified by stashing the indexer wiring and re-running) and pass with the wiring.
+
+---
+
 ## [0.25.2] — 2026-05-24
 
 ### Fixed

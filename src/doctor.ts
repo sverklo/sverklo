@@ -216,6 +216,55 @@ export function runDoctor(projectPath: string): void {
             });
           }
         }
+
+        // Issue #69: fingerprint check. The dim-only check above misses
+        // the case where two providers produce the SAME dim (e.g. an
+        // ONNX MiniLM 384d vs an Ollama nomic-embed-text 384d) — the
+        // vector spaces are incompatible but `length(vector)/4`
+        // matches. The stored fingerprint captures provider name +
+        // dims so we can flag the switch even when dims agree.
+        try {
+          const fpRow = probe
+            .prepare(
+              "SELECT value FROM meta WHERE key = 'embedding_fingerprint'"
+            )
+            .get() as { value: string } | undefined;
+          if (fpRow && embeddedCount > 0) {
+            const stored = JSON.parse(fpRow.value) as {
+              provider?: string;
+              dimensions?: number;
+            };
+            // configuredProvider from `.sverklo.yaml` is bare ("ollama")
+            // while the fingerprint stores the resolved name
+            // ("ollama:qwen3-embedding:0.6b"). Compare with a prefix
+            // match so a user who changed only the YAML model field
+            // still surfaces as a mismatch.
+            const providerMatches =
+              typeof stored.provider === "string" &&
+              (stored.provider === configuredProvider ||
+                stored.provider.startsWith(configuredProvider + ":") ||
+                configuredProvider === "default");
+            const dimsMatch =
+              configuredDims === undefined ||
+              stored.dimensions === configuredDims;
+            if (!providerMatches || !dimsMatch) {
+              checks.push({
+                name: "embedding fingerprint",
+                status: "fail",
+                message:
+                  `index was built with ${stored.provider} (${stored.dimensions}d) ` +
+                  `but config requests ${configuredProvider}` +
+                  (configuredDims ? ` (${configuredDims}d)` : "") +
+                  `. Switching providers without a rebuild mixes vector spaces.`,
+                fix: "sverklo reindex --force",
+              });
+            }
+          }
+        } catch {
+          // meta table missing or row malformed — pre-#69 db or
+          // first-index-not-yet-completed. The dim check above already
+          // covered the visible-symptom case; don't add noise.
+        }
       } finally {
         try { probe.close(); } catch { /* ignore */ }
       }
