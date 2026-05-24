@@ -8,6 +8,7 @@ import { NaiveGrepBaseline } from "../baselines/naive-grep.ts";
 import { SmartGrepBaseline } from "../baselines/smart-grep.ts";
 import { SverkloBaseline } from "../baselines/sverklo.ts";
 import { JcodemunchBaseline } from "../baselines/jcodemunch.ts";
+import { BifrostBaseline } from "../baselines/gateway/bifrost.ts";
 import { GitNexusBaseline } from "../baselines/gitnexus.ts";
 import { SverkloRerankBaseline } from "../baselines/sverklo-rerank.ts";
 import { loadJsonl } from "../ground-truth/schema.ts";
@@ -78,6 +79,7 @@ export async function runAll(): Promise<void> {
     new SverkloBaseline(),
     new JcodemunchBaseline(),
     new GitNexusBaseline(),
+    new BifrostBaseline(),
     // Issue #29: A/B test against ColBERT-style rerank. Off by default
     // in the standard run (so npm run bench:quick output stays comparable
     // across releases) — opt in with BASELINES=sverklo-rerank.
@@ -86,8 +88,13 @@ export async function runAll(): Promise<void> {
   const filter = process.env.BASELINES?.split(",").map((s) => s.trim()).filter(Boolean);
   const baselines = filter
     ? allBaselines.filter((b) => filter.includes(b.name))
-    : // Default run: omit experimental sverklo-rerank from no-filter execution.
-      allBaselines.filter((b) => b.name !== "sverklo-rerank");
+    : // Default run: omit experimental baselines from no-filter execution.
+      // - sverklo-rerank: A/B test for ColBERT-style rerank (issue #29).
+      // - bifrost: real gateway integration, retrieval quality not yet
+      //   tuned (PR #67). Opt in with BASELINES=bifrost when the gateway
+      //   is reachable. Otherwise it would silently produce empty
+      //   predictions and skew the published bench numbers.
+      allBaselines.filter((b) => b.name !== "sverklo-rerank" && b.name !== "bifrost");
 
   const results: RunResult[] = [];
   const rawPath = join(outDir, "raw.jsonl");
