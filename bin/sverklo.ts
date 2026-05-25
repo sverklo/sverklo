@@ -67,7 +67,7 @@ if (command && command !== "--help" && command !== "-h") {
       "enrich-symbols": "Add LLM-generated purpose to top-PageRank symbols (requires Ollama). Flags: --top N, --model NAME, --base-url URL, --force.",
       "enrich-patterns": "Tag top-PageRank symbols with design patterns (requires Ollama). Flags: --top N, --model NAME, --base-url URL, --min-conf X, --force.",
       register: "Add a directory to the global registry. Usage: sverklo register [path] (defaults to cwd).",
-      unregister: "Remove a repo from the global registry. Usage: sverklo unregister <name>.",
+      unregister: "Remove a repo from the global registry. Usage: sverklo unregister <name> | --by-path <abs-path>.",
       list: "List all registered repositories.",
       workspace: "Manage cross-repo workspaces. Subcommands: create, list, index, add, remove.",
       ui: "Open the web dashboard. Usage: sverklo ui [project-path].",
@@ -162,22 +162,62 @@ if (command === "register") {
 }
 
 if (command === "unregister") {
-  const name = args[1];
-  if (!name) {
-    console.error("Usage: sverklo unregister <name>");
-    console.error("Use `sverklo list` to see registered repos.");
-    process.exit(1);
-  }
+  // Issue #73 (HaleTom, 2026-05-25): agents tearing down git worktrees
+  // know the absolute path but not the internal repo name. Looking up
+  // the name from the path required parsing `sverklo list` output —
+  // fragile + error-prone. `--by-path /abs/path` resolves the path
+  // against the registry and unregisters by the matched name.
+  const positional = args.slice(1).filter((a) => !a.startsWith("--"));
+  const byPathIdx = args.indexOf("--by-path");
+  const byPath = byPathIdx >= 0 ? args[byPathIdx + 1] : undefined;
+
   const { unregisterRepo, getRegistry } = await import("../src/registry/registry.js");
   const repos = getRegistry();
-  if (!repos[name]) {
-    console.error(`Repo "${name}" not found in registry.`);
-    const available = Object.keys(repos);
-    if (available.length > 0) {
-      console.error(`Available: ${available.join(", ")}`);
+
+  let name: string;
+  if (byPath) {
+    const { resolve } = await import("node:path");
+    const target = resolve(byPath);
+    const matches = Object.entries(repos).filter(
+      ([, entry]) => resolve(entry.path) === target
+    );
+    if (matches.length === 0) {
+      console.error(`No registered repo matches path "${target}".`);
+      const available = Object.entries(repos).map(([n, e]) => `${n} → ${e.path}`);
+      if (available.length > 0) {
+        console.error("Registered paths:");
+        for (const line of available) console.error(`  ${line}`);
+      }
+      process.exit(1);
     }
-    process.exit(1);
+    if (matches.length > 1) {
+      // Per HaleTom's comment on #73: exact-match-of-root only, so
+      // child/parent collisions don't silently disambiguate. But IF
+      // two entries map to the same exact path (rare but possible
+      // after manual registry edits), surface them both.
+      console.error(`Multiple repos match path "${target}":`);
+      for (const [n] of matches) console.error(`  ${n}`);
+      console.error("Disambiguate by passing the name directly.");
+      process.exit(1);
+    }
+    name = matches[0][0];
+  } else {
+    name = positional[0];
+    if (!name) {
+      console.error("Usage: sverklo unregister <name> | --by-path <path>");
+      console.error("Use `sverklo list` to see registered repos.");
+      process.exit(1);
+    }
+    if (!repos[name]) {
+      console.error(`Repo "${name}" not found in registry.`);
+      const available = Object.keys(repos);
+      if (available.length > 0) {
+        console.error(`Available: ${available.join(", ")}`);
+      }
+      process.exit(1);
+    }
   }
+
   unregisterRepo(name);
   console.log(`Unregistered "${name}"`);
   process.exit(0);
@@ -252,6 +292,28 @@ if (command === "reindex" || command === "re-index") {
   await indexer.index();
   const dur = ((Date.now() - start) / 1000).toFixed(1);
   const status = indexer.getStatus();
+  // Issue #74 (SlimLemon, 2026-05-25): bump the registry's lastIndexed
+  // stamp so `sverklo list` shows a fresh age after reindex. Pre-#74,
+  // the reindex CLI path skipped this update and the list display
+  // stayed stuck on whatever timestamp registerRepo() wrote. The
+  // listing already prefers the index.db mtime when it exists (issue
+  // #49), so this is belt-and-suspenders for the case where the db
+  // isn't readable from the listing context.
+  try {
+    const { updateLastIndexed, deriveRepoName, getRegistry } = await import(
+      "../src/registry/registry.js"
+    );
+    const repoName = deriveRepoName(projectPath);
+    // Only stamp if the repo is actually registered. Reindex against
+    // an unregistered path is valid (you can `sverklo reindex .` on
+    // any project) — silently skip in that case.
+    if (getRegistry()[repoName]) {
+      updateLastIndexed(repoName);
+    }
+  } catch (err) {
+    // Best-effort — registry write failure shouldn't fail the reindex
+    // command. The user's index already rebuilt successfully.
+  }
   console.log("");
   console.log(`✓ Done in ${dur}s`);
   console.log(`  ${status.fileCount} files · ${status.chunkCount} chunks`);
