@@ -57,7 +57,7 @@ if (command && command !== "--help" && command !== "-h") {
   const wantsHelp = args.slice(1).some((a) => a === "--help" || a === "-h");
   if (wantsHelp) {
     const HELP_BLURBS: Record<string, string> = {
-      init: "Set up sverklo in your project (.mcp.json + CLAUDE.md, auto-detects Claude Code/Cursor/Windsurf/Antigravity).",
+      init: "Set up sverklo in your project (.mcp.json + CLAUDE.md, auto-detects Claude Code/Cursor/Windsurf/Antigravity). With --global: one-time-per-machine setup — write SVERKLO_SNIPPET to ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md, register the project, gitignore .sverklo/, import memories. Skips per-project boilerplate.",
       doctor: "Diagnose MCP setup issues. Run after `init` to verify the agent can reach sverklo.",
       audit: "Run codebase audit and emit a graded report. Flags: --format markdown|html|json|graph|arch|obsidian, --output PATH, --open, --badge, --publish.",
       "audit-diff": "Incremental architectural quality gate. Audits `git diff` for new cycles + fan-in spikes. Flags: --against REF, --fan-in-threshold N, --format human|json, --show-existing, --verbose. Exits 1 on regression.",
@@ -75,7 +75,7 @@ if (command && command !== "--help" && command !== "-h") {
       wakeup: "Print compressed project context (for system-prompt injection in non-MCP clients).",
       digest: "5-line summary of what changed in this project. Flags: --since 7d, --format markdown|plain.",
       receipt: "Token-spend receipt for your recent Claude Code sessions. Shows where tokens went and projected yearly cost. Flags: --since 7d, --format plain|json.",
-      memory: "Manage the memory store. Subcommands: show, edit, export.",
+      memory: "Manage the memory store. Subcommands: show, edit, import, export.",
       grammars: "Manage tree-sitter grammars for the SVERKLO_PARSER=tree-sitter opt-in path. Subcommands: install.",
       weights: "Inspect .sverklo.yaml weight rules. Subcommands: explain <path> — show which glob matched and the effective weight.",
       "audit-prompt": "Print a ready-to-paste codebase-audit prompt (hybrid agent workflow).",
@@ -125,12 +125,26 @@ if (command === "--version" || command === "-v" || command === "-V") {
 }
 
 if (command === "init") {
-  // Parse flags: --auto-capture, --mine-chats
+  // Parse flags: --auto-capture, --mine-chats, --global
   const flags = args.filter((a) => a.startsWith("--"));
   const positional = args.filter((a) => !a.startsWith("--"));
   const autoCapture = flags.includes("--auto-capture");
   const mineChats = flags.includes("--mine-chats");
+  const isGlobal = flags.includes("--global");
   const projectPath = resolve(positional[1] || process.cwd());
+
+  if (isGlobal) {
+    // Issue #72 — one-time-per-machine setup. Writes SVERKLO_SNIPPET to
+    // global agent-instruction locations (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md),
+    // registers the project, gitignores .sverklo/, imports memories.
+    // Skips per-project boilerplate (.mcp.json, project AGENTS.md/CLAUDE.md,
+    // .claude/settings.local.json, skills, copilot/antigravity/codex configs,
+    // doctor).
+    const { initGlobal } = await import("../src/init-global.js");
+    await initGlobal(projectPath, { mineChats });
+    process.exit(0);
+  }
+
   const { initProject } = await import("../src/init.js");
   await initProject(projectPath, { autoCapture, mineChats });
 
@@ -2238,20 +2252,80 @@ if (command === "memory") {
   //   show    — print memory rows as markdown to stdout
   //   edit    — open memory rows in $EDITOR; round-trip content edits back
   //             to SQLite. Never deletes by omission.
+  //   import  — scan CLAUDE.md / .cursorrules / ADRs / git log into the
+  //             memory store. Wraps `importExistingMemories()`; useful
+  //             after `sverklo init --global` to retroactively pull in
+  //             a project's existing knowledge.
   const sub = args[1];
-  if (sub !== "export" && sub !== "show" && sub !== "edit") {
+  if (sub !== "export" && sub !== "show" && sub !== "edit" && sub !== "import") {
     console.log(
-      `\nsverklo memory — read, edit, and export the memory store\n\n` +
+      `\nsverklo memory — read, edit, import, and export the memory store\n\n` +
       `Subcommands:\n` +
       `  show     print all memories as markdown to stdout\n` +
       `  edit     open memories in $EDITOR; round-trip text edits back\n` +
+      `  import   scan CLAUDE.md / .cursorrules / ADRs / git log into the store\n` +
       `  export   write per-category .md files / JSON / push to Notion\n\n` +
       `Usage:\n` +
       `  sverklo memory show [--include-invalidated]\n` +
       `  sverklo memory edit [--editor PATH]\n` +
+      `  sverklo memory import [path] [--mine-chats]\n` +
       `  sverklo memory export --format markdown|notion|json --to PATH [flags]\n\n` +
       `Run \`sverklo memory <subcommand> --help\` for the full flag list.\n`
     );
+    process.exit(0);
+  }
+
+  if (sub === "import") {
+    // Issue #72 follow-up (HaleTom 2026-05-25): standalone CLI entry to
+    // `importExistingMemories()`. Useful for users who did global setup
+    // elsewhere and just want to pull a project's existing notes into
+    // the memory store without running the kitchen-sink `sverklo init`.
+    const flags = args.slice(2);
+    if (flags.includes("--help") || flags.includes("-h")) {
+      console.log(
+        `\nsverklo memory import — scan project sources into the memory store\n\n` +
+        `Scans (in priority order):\n` +
+        `  CLAUDE.md, AGENTS.md, .cursorrules, .windsurfrules\n` +
+        `  docs/ARCHITECTURE.md, CONTRIBUTING.md\n` +
+        `  docs/adr/, docs/decisions/, adr/, decisions/  (every .md becomes a memory)\n` +
+        `  git log (last 50 conventional commits)\n\n` +
+        `Idempotent: re-imports skip duplicates by content hash.\n\n` +
+        `Usage:\n` +
+        `  sverklo memory import [path]    (default: current directory)\n` +
+        `  sverklo memory import . --mine-chats   (also scan Claude Code chat transcripts)\n`
+      );
+      process.exit(0);
+    }
+    const positional = flags.filter((a) => !a.startsWith("--"));
+    const mineChats = flags.includes("--mine-chats");
+    const projectPath = resolve(positional[0] || process.cwd());
+
+    const { getProjectConfig } = await import("../src/utils/config.js");
+    const { Indexer } = await import("../src/indexer/indexer.js");
+    const { importExistingMemories } = await import("../src/memory/import.js");
+
+    const config = getProjectConfig(projectPath);
+    const indexer = new Indexer(config);
+
+    try {
+      const result = await importExistingMemories(indexer, projectPath, { mineChats });
+      if (result.imported > 0) {
+        console.log(`Imported ${result.imported} memories from:`);
+        for (const src of result.sources) {
+          console.log(`  · ${src}`);
+        }
+        if (result.skipped > 0) {
+          console.log(`(${result.skipped} duplicates skipped)`);
+        }
+      } else {
+        const hint = mineChats
+          ? "No CLAUDE.md, .cursorrules, ADRs, or matching Claude Code chats found — nothing imported."
+          : "No CLAUDE.md, .cursorrules, or ADRs found — nothing imported.";
+        console.log(hint);
+      }
+    } finally {
+      indexer.close();
+    }
     process.exit(0);
   }
 
