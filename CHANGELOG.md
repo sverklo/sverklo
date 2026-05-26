@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.27.0]
+
+### Added
+
+- **#72 — `sverklo init --global`: one-time-per-machine setup with memory import, no per-project boilerplate (HaleTom).** Users who want a global-instructions workflow had no path to `importExistingMemories()` — the whole memory-import code path was reachable only via the kitchen-sink `sverklo init`. Now `sverklo init --global [path]` writes `SVERKLO_SNIPPET` to global agent-instruction locations (`~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`), registers the project, adds `.sverklo/` to its `.gitignore`, and imports memories from CLAUDE.md / .cursorrules / ADRs / git log — all without writing the per-project artifacts `init` writes (`.mcp.json`, project `AGENTS.md`/`CLAUDE.md`, `.claude/settings.local.json`, skills, `~/.codex/config.toml`, `~/.copilot/mcp-config.json`, `~/.gemini/antigravity/mcp_config.json`, no doctor run). Idempotent: the global writes skip on second call (literal sentinel OR `## Sverklo` heading detection, matching `initProject`'s logic); the per-project bits run every time. Lives in a new `src/init-global.ts` module so `initProject()` itself is untouched — the shared `SVERKLO_SNIPPET` constant + a small extracted `addSverkloToGitignore()` helper are the only points of contact. Covered by `src/init-global.test.ts` (11 unit tests for the helpers) and `src/init-global-cli.test.ts` (6 CLI integration tests asserting the file-system side-effects from spawning the built binary against an isolated `HOME`); all 9 CLI tests were verified to fail on the v0.26.1 source (no `--global` dispatch + no `memory import` subcommand) by reverting the patches and re-running.
+- **#72 follow-up — `sverklo memory import [path]` standalone subcommand (HaleTom).** Direct CLI entry to `importExistingMemories()` for users who already did global setup elsewhere and want to retroactively pull in another project's CLAUDE.md / ADRs / .cursorrules / git log into the memory store. Re-uses the same idempotent dedup-by-content-hash path as `init`. Flags: `--mine-chats` (also scan Claude Code chat transcripts), `--help`.
+
+---
+
 ## [0.26.0] — 2026-05-24
 
 ### Added
