@@ -17,8 +17,12 @@ describe("globalInstructionTargets", () => {
   it("returns ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md relative to home", () => {
     const targets = globalInstructionTargets("/fake/home");
     const paths = targets.map((t) => t.path);
-    expect(paths).toContain("/fake/home/.claude/CLAUDE.md");
-    expect(paths).toContain("/fake/home/.codex/AGENTS.md");
+    // Use path.join so the assertion matches the platform separator
+    // (Windows uses backslash). Without this, the Windows runner sees
+    // '\\fake\\home\\.claude\\CLAUDE.md' but the assertion was looking
+    // for forward slashes — Day-1-launch CI false-positive.
+    expect(paths).toContain(join("/fake/home", ".claude", "CLAUDE.md"));
+    expect(paths).toContain(join("/fake/home", ".codex", "AGENTS.md"));
     expect(targets).toHaveLength(2);
   });
 });
