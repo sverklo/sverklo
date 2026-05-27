@@ -4,13 +4,13 @@ import type { FileRecord, ChunkType, SearchResult, CodeChunk } from "../../types
 import { resolveBudget } from "../../utils/budget.js";
 import { rerank, rerankerConfigFromEnv } from "../../search/rerank.js";
 
-// Issue #6: on the first call, sverklo_lookup paid a ~1.6s penalty while
+// Issue #6: on the first call, lookup paid a ~1.6s penalty while
 // warming up prepared statements via fileStore.getAll() to build a
 // pagerank-by-file map. The getByNameWithFile JOIN below returns the
 // same shape in a single indexed query, eliminating the full scan.
 
 export const lookupTool = {
-  name: "sverklo_lookup",
+  name: "lookup",
   description:
     "Look up a specific symbol (function, class, type, variable) by name. Returns its full definition, signature, and location.",
   inputSchema: {
@@ -23,7 +23,7 @@ export const lookupTool = {
       repo: {
         type: "string",
         description:
-          "Optional: name of a registered repo to search (see sverklo_list_repos). " +
+          "Optional: name of a registered repo to search (see list_repos). " +
           "Defaults to the current workspace. Use this to look up a symbol in a sibling " +
           "project that has been sverklo-init'd but isn't the current cwd.",
       },
@@ -61,7 +61,7 @@ export async function handleLookup(
   const symbol = args.symbol;
   if (typeof symbol !== "string" || symbol.trim() === "") {
     return (
-      'Error: `symbol` is required. Usage: sverklo_lookup symbol:"MyClass".\n' +
+      'Error: `symbol` is required. Usage: lookup symbol:"MyClass".\n' +
       "The tool schema names this parameter `symbol`, not `name` — common typo."
     );
   }

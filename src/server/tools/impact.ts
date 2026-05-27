@@ -10,7 +10,7 @@ import {
 } from "../../search/partition.js";
 
 export const impactTool = {
-  name: "sverklo_impact",
+  name: "impact",
   description:
     "Refactor blast-radius: callers of a symbol with confidence scoring. Run before editing. Use cross_repo:true to see impact across linked projects in a workspace.",
   inputSchema: {

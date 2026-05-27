@@ -8,7 +8,7 @@ import { resolveBudget } from "../../utils/budget.js";
 import { validateGitRef } from "../../utils/git-validation.js";
 
 export const diffSearchTool = {
-  name: "sverklo_diff_search",
+  name: "diff_search",
   description:
     "Semantic search scoped to files in a git diff (and optionally their dependency closure). " +
     "Use this when reviewing an MR/PR and you need to find code related to a query — but only " +
@@ -71,7 +71,7 @@ export async function handleDiffSearch(
     const out = result.stdout;
     changedPaths = out.trim().split("\n").filter(Boolean);
   } catch {
-    return `Error: not a git repository or invalid ref \`${ref}\`. Try \`sverklo_diff_search query:"..." ref:"HEAD~1..HEAD"\`.`;
+    return `Error: not a git repository or invalid ref \`${ref}\`. Try \`diff_search query:"..." ref:"HEAD~1..HEAD"\`.`;
   }
 
   if (changedPaths.length === 0) {

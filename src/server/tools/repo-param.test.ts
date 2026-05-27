@@ -45,7 +45,10 @@ describe("v0.24.0 — `repo` param on search-family tool schemas", () => {
     for (const { tool } of tools) {
       const props = tool.inputSchema.properties as Record<string, { description?: string }>;
       const desc = props.repo.description ?? "";
-      expect(desc.toLowerCase()).toContain("sverklo_list_repos");
+      // v0.28.0 (#71): tool names dropped the sverklo_ prefix. The
+      // discovery hint that previously said "sverklo_list_repos" now
+      // says "list_repos". Old name still works via deprecation alias.
+      expect(desc.toLowerCase()).toContain("list_repos");
     }
   });
 });

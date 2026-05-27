@@ -20,7 +20,7 @@ import type { VerifyResult } from "../../types/index.js";
 //     answer acknowledge them?
 
 export const critiqueTool = {
-  name: "sverklo_critique",
+  name: "critique",
   description:
     "Deterministic coverage check for an agent's answer. Takes the evidence ids the agent cited " +
     "plus the symbols it discussed; verifies each evidence is still current and flags whether the " +
@@ -61,7 +61,7 @@ export function handleCritique(
   const claim = typeof args.claim === "string" ? args.claim : null;
 
   if (evidenceIds.length === 0 && symbols.length === 0) {
-    return "sverklo_critique requires at least one of `evidence_ids` or `symbols`.";
+    return "critique requires at least one of `evidence_ids` or `symbols`.";
   }
 
   // 1. Evidence verification.
@@ -157,8 +157,8 @@ function formatCritique(c: CritiqueData): string {
   const parts: string[] = [];
   parts.push(
     c.claim
-      ? `## sverklo_critique — "${c.claim}"`
-      : "## sverklo_critique"
+      ? `## critique — "${c.claim}"`
+      : "## critique"
   );
   parts.push("");
 

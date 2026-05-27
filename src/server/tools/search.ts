@@ -8,7 +8,7 @@ import { resolveBudget } from "../../utils/budget.js";
 import { validateEnum, requireString } from "./_validation.js";
 
 export const searchTool = {
-  name: "sverklo_search",
+  name: "search",
   description:
     "Hybrid semantic + text search with PageRank ranking. " +
     "WORKS WELL for: exploratory questions where you don't know the exact symbol " +
@@ -30,7 +30,7 @@ export const searchTool = {
       repo: {
         type: "string",
         description:
-          "Optional: name of a registered repo to search (see sverklo_list_repos). " +
+          "Optional: name of a registered repo to search (see list_repos). " +
           "Defaults to the current workspace. Use this to query a sibling project that " +
           "has been sverklo-init'd but isn't the current cwd — avoids falling back to grep.",
       },
@@ -96,7 +96,7 @@ export async function handleSearch(
   const queryArg = requireString(
     args.query,
     "query",
-    'sverklo_search query:"how does retry logic work" [scope:src/api/] [type:function] [mode:refs|full]'
+    'search query:"how does retry logic work" [scope:src/api/] [type:function] [mode:refs|full]'
   );
   if (!queryArg.ok) return queryArg.message;
   const mode = validateEnum(args.mode, ["refs", "full"], "mode", "full");
@@ -178,7 +178,7 @@ export async function handleSearch(
   }
 
   // Q4: per-hit Evidence rows. Each result gets its own ev_ id the agent
-  // can verify with sverklo_verify. Capped at 16 to keep the footer
+  // can verify with verify. Capped at 16 to keep the footer
   // bounded; oversize result sets get evidence for their top entries.
   // #61: was hardcoded "fts" — now "hybrid" because hybridSearch fuses
   // BM25 + vector + PageRank + RRF, not pure FTS.
@@ -207,7 +207,7 @@ function formatRefsOnly(results: SearchResult[]): string {
   }
   lines.push("");
   lines.push(
-    `_${results.length} ref(s). Re-run with mode:"full" or use sverklo_ctx_slice for bodies._`
+    `_${results.length} ref(s). Re-run with mode:"full" or use ctx_slice for bodies._`
   );
   return lines.join("\n");
 }

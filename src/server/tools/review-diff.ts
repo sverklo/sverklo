@@ -12,7 +12,7 @@ import { resolveBudget } from "../../utils/budget.js";
 import { validateGitRef } from "../../utils/git-validation.js";
 
 export const reviewDiffTool = {
-  name: "sverklo_review_diff",
+  name: "review_diff",
   description:
     "Diff-aware context bundler for code review. Takes a git ref or range and returns: " +
     "changed files, semantic delta (added/removed/modified symbols), dangling references " +
@@ -76,7 +76,7 @@ export function handleReviewDiff(
   // ─── 1. Get list of changed files ───
   const changedFiles = getChangedFiles(indexer.rootPath, ref);
   if (changedFiles === null) {
-    return "Error: not a git repository or invalid ref. Try `sverklo_review_diff ref:HEAD~1..HEAD`.";
+    return "Error: not a git repository or invalid ref. Try `review_diff ref:HEAD~1..HEAD`.";
   }
   if (changedFiles.length === 0) {
     return `No file changes between \`${ref}\`. Working tree clean or ref invalid.`;
@@ -388,7 +388,7 @@ export function handleReviewDiff(
           remLines.push(`    · ${f}`);
         }
         if (refs!.files.length > 3) {
-          remLines.push(`    · ...and ${refs!.files.length - 3} more (call sverklo_impact for full list)`);
+          remLines.push(`    · ...and ${refs!.files.length - 3} more (call impact for full list)`);
         }
       }
     }
@@ -478,11 +478,11 @@ export function handleReviewDiff(
         .filter((s) => (danglingRefs.get(s.name)?.count ?? 0) > 0)
         .map((s) => s.name);
       if (dangerNames.length > 0) {
-        recLines.push(`- Run \`sverklo_impact symbol:"${dangerNames[0]}"\` to see all callers of removed symbols`);
+        recLines.push(`- Run \`impact symbol:"${dangerNames[0]}"\` to see all callers of removed symbols`);
       }
     }
     if (modifiedFiles.length > 0) {
-      recLines.push(`- Run \`sverklo_diff_search query:"..."\` to search semantically within these files`);
+      recLines.push(`- Run \`diff_search query:"..."\` to search semantically within these files`);
     }
     if (addedSymbols.length > 0 && duplicateCandidates.length === 0) {
       recLines.push(`- New symbols look unique — no duplication detected against indexed code`);

@@ -932,7 +932,7 @@ if (command === "telemetry") {
     console.log("  os          darwin / linux / win32");
     console.log("  node_major  the Node major version sverklo is running on");
     console.log("  event       one of 17 fixed event types");
-    console.log("  tool        sverklo_* tool name (when applicable)");
+    console.log("  tool        sverklo tool name (when applicable)");
     console.log("  outcome     ok / error / timeout");
     console.log("  duration_ms tool execution time");
     console.log("");
@@ -1144,7 +1144,7 @@ if (command === "profile") {
       console.log(`             ${tools.map((t: string) => t.replace(/^sverklo_/, "")).join(", ")}`);
       console.log();
     }
-    console.log("  full        36 tools  (all sverklo_* tools — default)");
+    console.log("  full        36 tools  (every first-party sverklo tool — default)");
     console.log("\n  Set with: SVERKLO_PROFILE=core sverklo init");
     console.log("  Or in .sverklo.yaml: profile: core");
     console.log("  See: https://sverklo.com/blog/we-already-shipped-mcp-code-mode/\n");
@@ -1178,8 +1178,14 @@ if (command === "profile") {
     // Structured doc — use it directly. The --days window doesn't apply
     // to cumulative stats; we use the full lifetime instead, and tell
     // the user when the doc started accumulating.
+    //
+    // v0.28.0: canonicalize legacy `sverklo_*` names in historical stats
+    // files so they collapse onto the new short names (`sverklo_search`
+    // + `search` → `search`). Without this, a long-running user's stats
+    // would show duplicate rows after the rename.
     for (const [tool, stat] of Object.entries(structuredStats.tools)) {
-      counts[tool] = stat.calls;
+      const canon = tool.startsWith("sverklo_") ? tool.slice("sverklo_".length) : tool;
+      counts[canon] = (counts[canon] || 0) + stat.calls;
     }
     total = structuredStats.totalCalls;
     const sinceStr = new Date(structuredStats.startedAt).toISOString().slice(0, 10);
@@ -1201,7 +1207,10 @@ if (command === "profile") {
       process.exit(0);
     }
     for (const c of calls) {
-      const tool = String(c.detail.tool);
+      const raw = String(c.detail.tool);
+      // v0.28.0: collapse legacy `sverklo_*` rows onto canonical names so
+      // upgraded users don't see split-personality stats.
+      const tool = raw.startsWith("sverklo_") ? raw.slice("sverklo_".length) : raw;
       counts[tool] = (counts[tool] || 0) + 1;
     }
     total = calls.length;
@@ -1218,8 +1227,7 @@ if (command === "profile") {
   console.log("  " + "-".repeat(70));
   for (const [tool, n] of ranked) {
     const pct = ((n / total) * 100).toFixed(1) + "%";
-    const display = tool.startsWith("sverklo_") ? tool : tool;
-    console.log("  " + display.padEnd(38) + String(n).padStart(10) + pct.padStart(10));
+    console.log("  " + tool.padEnd(38) + String(n).padStart(10) + pct.padStart(10));
   }
   console.log("  " + "-".repeat(70));
 
@@ -1230,6 +1238,15 @@ if (command === "profile") {
   const profileOrder: string[] = ["core", "nav", "review", "lean", "research"];
   type ProfileFit = { name: string; size: number; coveragePct: number; missing: string[] };
   const fits: ProfileFit[] = [];
+  // v0.28.0: first-party tools no longer carry a `sverklo_` prefix, so
+  // "missing from profile" is anyone-not-in-profile minus the Zilliz
+  // compat aliases (recorded but not first-party).
+  const COMPAT_ALIASES = new Set([
+    "index_codebase",
+    "search_code",
+    "clear_index",
+    "get_indexing_status",
+  ]);
   for (const name of profileOrder) {
     const profileTools = PROFILES[name];
     if (!profileTools) continue;
@@ -1238,7 +1255,7 @@ if (command === "profile") {
     const missing: string[] = [];
     for (const [tool, n] of ranked) {
       if (profileSet.has(tool)) covered += n;
-      else if (tool.startsWith("sverklo_")) missing.push(tool);
+      else if (!COMPAT_ALIASES.has(tool)) missing.push(tool);
     }
     fits.push({ name, size: profileTools.length, coveragePct: covered / total, missing });
   }

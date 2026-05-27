@@ -64,8 +64,8 @@ describe("handleRecall — mode=core", () => {
     const indexer = fakeIndexerWithCore([]);
     const out = await handleRecall(indexer, { mode: "core" });
     expect(out).toContain("No core memories");
-    expect(out).toContain("sverklo_promote");
-    expect(out).toContain("sverklo_remember");
+    expect(out).toContain("promote");
+    expect(out).toContain("remember");
   });
 
   it("returns all core memories when populated", async () => {
@@ -108,7 +108,7 @@ describe("handleRecall — mode=core", () => {
     const out = await handleRecall(indexer, { mode: "core" });
     expect(out).toContain("30 core memories");
     expect(out).toContain("soft limit");
-    expect(out).toContain("sverklo_demote");
+    expect(out).toContain("demote");
   });
 
   it("does not warn below the soft limit", async () => {

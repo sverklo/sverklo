@@ -4,7 +4,7 @@ import { resolveBudget } from "../../utils/budget.js";
 import { isVendoredPath } from "../audit-analysis.js";
 
 export const overviewTool = {
-  name: "sverklo_overview",
+  name: "overview",
   description:
     "Get a structural map of the codebase. Shows the most important files and their key symbols ranked by dependency importance (PageRank). Use this FIRST when starting work on an unfamiliar codebase or directory.",
   inputSchema: {
@@ -51,7 +51,7 @@ export function handleOverview(
   for (const file of files) {
     // Skip vendored / cached / generated paths so the overview reflects
     // the user's own code, not third-party deps. Same exclusion as
-    // sverklo_audit (Dogfood T1 / T4 in the same review pass).
+    // audit (Dogfood T1 / T4 in the same review pass).
     if (isVendoredPath(file.path)) continue;
     if (path) {
       // Match `path` against `file.path` in three positions:
@@ -61,7 +61,7 @@ export function handleOverview(
       //
       // The embedded form handles multi-repo MCP mode where the
       // global registry stores files as "<repo>/src/foo.ts" — without
-      // it, `sverklo_overview path:"src"` returns empty when the
+      // it, `overview path:"src"` returns empty when the
       // server is bound to the parent of the project (the multi-repo
       // workspace shape). Dogfood review 2026-05-14 (Issue C) caught
       // this as a regression of the v0.20.24 T4 fix in workspace mode.

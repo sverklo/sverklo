@@ -3,7 +3,7 @@ import { verifyEvidence } from "../../memory/evidence.js";
 import type { VerifyResult } from "../../types/index.js";
 
 export const verifyTool = {
-  name: "sverklo_verify",
+  name: "verify",
   description:
     "Check whether one or more evidence ids (from a prior search-family tool's " +
     "```evidence block) still point to the same code they did at retrieval time. " +
@@ -34,7 +34,7 @@ export function handleVerify(
 ): string {
   const ids = args.evidence_ids;
   if (!Array.isArray(ids) || ids.length === 0) {
-    return "sverklo_verify requires evidence_ids: string[].";
+    return "verify requires evidence_ids: string[].";
   }
 
   const results: VerifyResult[] = ids.map((id) =>
@@ -64,8 +64,8 @@ function glyph(status: VerifyResult["status"]): string {
 function formatVerify(results: VerifyResult[], claim: string | null): string {
   const parts: string[] = [];
   const header = claim
-    ? `## sverklo_verify — ${results.length} evidence id(s) for "${claim}"`
-    : `## sverklo_verify — ${results.length} evidence id(s)`;
+    ? `## verify — ${results.length} evidence id(s) for "${claim}"`
+    : `## verify — ${results.length} evidence id(s)`;
   parts.push(header);
   parts.push("");
   for (const r of results) {

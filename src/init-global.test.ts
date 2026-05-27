@@ -47,7 +47,8 @@ describe("writeGlobalInstructionsTo — issue #72", () => {
     expect(existsSync(target.path)).toBe(true);
     const content = readFileSync(target.path, "utf-8");
     expect(content).toContain("Sverklo");
-    expect(content).toContain("sverklo_search");
+    // v0.28.0: heading marker replaces the legacy `sverklo_search` literal.
+    expect(content).toMatch(/^##\s+Sverklo\b/m);
   });
 
   it("appends to an existing file that lacks the snippet", () => {
@@ -58,7 +59,8 @@ describe("writeGlobalInstructionsTo — issue #72", () => {
     expect(result.action).toBe("append");
     const content = readFileSync(target.path, "utf-8");
     expect(content).toContain("# my global rules");
-    expect(content).toContain("sverklo_search");
+    // v0.28.0: heading marker replaces the legacy `sverklo_search` literal.
+    expect(content).toMatch(/^##\s+Sverklo\b/m);
   });
 
   it("is idempotent: a second call against the same file is a no-op skip (literal sentinel)", () => {
@@ -133,16 +135,24 @@ describe("addSverkloToGitignore — extracted helper from initProject", () => {
   });
 });
 
-// Sanity: the snippet shared with initProject still contains the
-// sentinel string our idempotency detector looks for. If someone
-// rewrites SVERKLO_SNIPPET without "sverklo_search" in it, both
-// initProject's and initGlobal's "already present" detection break.
+// Sanity: the snippet shared with initProject must still match the
+// idempotency detector. v0.28.0 (issue #71) dropped the `sverklo_` prefix
+// from every tool name, so the literal `sverklo_search` is no longer in
+// the snippet body — the `## Sverklo` heading is now the primary marker.
+// The literal-sentinel path is still wired into the writers to detect
+// PRE-v0.28 snippets in user repos, so we don't double-inject on upgrade.
 describe("SVERKLO_SNIPPET sentinel invariant", () => {
-  it("contains the literal sentinel `sverklo_search`", () => {
-    expect(SVERKLO_SNIPPET).toContain("sverklo_search");
+  it("contains a `## Sverklo` heading for the heading sentinel", () => {
+    expect(SVERKLO_SNIPPET).toMatch(/^##\s+Sverklo\b/m);
   });
 
-  it("contains a `## Sverklo` heading for the secondary sentinel", () => {
-    expect(SVERKLO_SNIPPET).toMatch(/^##\s+Sverklo\b/m);
+  it("references the canonical (un-prefixed) tool names", () => {
+    // Spot-check: the snippet should advertise the renamed tools.
+    // If the rename ever regresses the snippet, agents written against
+    // v0.28+ skills will trip the deprecation warning on every call.
+    expect(SVERKLO_SNIPPET).toContain("`search`");
+    expect(SVERKLO_SNIPPET).toContain("`lookup`");
+    expect(SVERKLO_SNIPPET).toContain("`overview`");
+    expect(SVERKLO_SNIPPET).not.toContain("`sverklo_search`");
   });
 });

@@ -21,7 +21,7 @@ const RRF_K = 60;
 const CORE_TIER_SOFT_LIMIT = 25;
 
 export const recallTool = {
-  name: "sverklo_recall",
+  name: "recall",
   description:
     "Search memories semantically. Finds past decisions, preferences, and patterns relevant to a query. " +
     "Supports two specialized modes: `mode=core` returns only the always-on project invariants (fast, " +
@@ -116,8 +116,8 @@ export async function handleRecall(
       return (
         "No core memories yet. Core memories are always-on project invariants " +
         "that auto-load each session. Promote an existing memory with " +
-        "`sverklo_promote id:<n> tier:core`, or save a new one with " +
-        "`sverklo_remember ... tier:core`."
+        "`promote id:<n> tier:core`, or save a new one with " +
+        "`remember ... tier:core`."
       );
     }
 
@@ -134,7 +134,7 @@ export async function handleRecall(
       parts.push(
         `⚠️ ${totalCore} core memories — exceeds the soft limit of ${CORE_TIER_SOFT_LIMIT}. ` +
           "Core memories are injected into every session prompt; too many crowds the context " +
-          "window. Demote the least-critical ones with `sverklo_demote id:<n>`."
+          "window. Demote the least-critical ones with `demote id:<n>`."
       );
     }
     return parts.join("\n");

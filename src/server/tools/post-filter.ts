@@ -2,7 +2,7 @@ import { responseStore } from "../response-store.js";
 import { grepResults, headResults, ctxPeek } from "../../search/post-filter.js";
 
 export const grepResultsTool = {
-  name: "sverklo_grep_results",
+  name: "grep_results",
   description:
     "Filter the result blocks of a prior sverklo tool call by a regex pattern — " +
     "operates on the cached text so no second retrieval happens. Pass the " +
@@ -18,7 +18,7 @@ export const grepResultsTool = {
 };
 
 export const headResultsTool = {
-  name: "sverklo_head_results",
+  name: "head_results",
   description:
     "Keep only the top N result blocks of a prior sverklo tool call. Cheap way " +
     "to shrink a chatty response when you just need the top hit.",
@@ -33,7 +33,7 @@ export const headResultsTool = {
 };
 
 export const ctxPeekTool = {
-  name: "sverklo_ctx_peek",
+  name: "ctx_peek",
   description:
     "Return a byte-slice from a single result block of a prior tool call. " +
     "Use when the agent needs to inspect a specific offset without the full body.",

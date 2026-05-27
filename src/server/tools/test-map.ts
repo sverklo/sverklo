@@ -8,7 +8,7 @@ import { computeRiskScore, formatRiskBadge } from "./risk-score.js";
 import { validateGitRef } from "../../utils/git-validation.js";
 
 export const testMapTool = {
-  name: "sverklo_test_map",
+  name: "test_map",
   description:
     "Map a git diff to its test coverage. Given a ref/range, lists which tests likely cover " +
     "each changed source file (via name heuristics + import graph), flags changed source files " +
@@ -60,7 +60,7 @@ export function handleTestMap(
       // existsSync should never throw; if it does, treat as not-a-repo.
     }
     if (!isGitRepo) {
-      return `Error: \`${indexer.rootPath}\` is not a git repository (no .git found). \`sverklo_test_map\` only works on git-versioned projects.`;
+      return `Error: \`${indexer.rootPath}\` is not a git repository (no .git found). \`test_map\` only works on git-versioned projects.`;
     }
 
     const result = spawnSync(
@@ -85,7 +85,7 @@ export function handleTestMap(
       // 'foo'" — surface the actual message so the user can fix their ref.
       const stderr = (result.stderr || "").trim();
       const hint = stderr.includes("ambiguous argument") || stderr.includes("bad revision")
-        ? ` Try \`sverklo_test_map ref:"HEAD~1..HEAD"\` if HEAD~N is out of range for this repo's history.`
+        ? ` Try \`test_map ref:"HEAD~1..HEAD"\` if HEAD~N is out of range for this repo's history.`
         : "";
       return `Error from \`git diff ${ref}\`: ${stderr || `exit ${result.status}`}.${hint}`;
     }

@@ -5,7 +5,7 @@ import { resolveBudget } from "../../utils/budget.js";
 import { rerank, rerankerConfigFromEnv } from "../../search/rerank.js";
 
 export const findReferencesTool = {
-  name: "sverklo_refs",
+  name: "refs",
   description:
     "Find all references to a symbol across the codebase. Shows where a function, class, or type is imported, called, or used. Matches on identifier word boundaries by default — `embed` does NOT match `embeddingStore`. Pass `exact: false` to opt into substring matching.",
   inputSchema: {
@@ -61,7 +61,7 @@ export async function handleFindReferences(
 ): Promise<string> {
   const symbol = args.symbol;
   if (typeof symbol !== "string" || symbol.trim() === "") {
-    return 'Error: `symbol` is required. Usage: sverklo_refs symbol:"MyClass".';
+    return 'Error: `symbol` is required. Usage: refs symbol:"MyClass".';
   }
   const exact = args.exact !== false; // default true
   const tokenBudget = resolveBudget(args, "refs", null, 2000);
@@ -151,7 +151,7 @@ export async function handleFindReferences(
   // by rerank score instead — keeps file diversity (one chunk per
   // file maximum, so a chunky file can't monopolize the candidates).
   // Issue #29 wiring: this is the second of two paths the bench
-  // primitives now exercise (the first is sverklo_lookup).
+  // primitives now exercise (the first is lookup).
   let sortedFiles: [string, { line: number; context: string; type: string }[]][];
   const refsRerankConfig = rerankerConfigFromEnv();
   if (refsRerankConfig.mode !== "off" && firstChunkPerFile.size > 1) {

@@ -5,7 +5,7 @@ import { PATTERN_TAXONOMY, PATTERN_SET } from "../../storage/pattern-store.js";
 // that the LLM tagged with a given design pattern, sorted by confidence.
 
 export const patternsTool = {
-  name: "sverklo_patterns",
+  name: "patterns",
   description:
     "Query the LLM-derived design-pattern annotations on indexed symbols. " +
     "Pass a `pattern` from the closed taxonomy (observer, repository, validator, ...) " +

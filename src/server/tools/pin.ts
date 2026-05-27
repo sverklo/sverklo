@@ -1,7 +1,7 @@
 import type { IndexMemory } from "../../indexer/index-memory.js";
 
 export const pinTool = {
-  name: "sverklo_pin",
+  name: "pin",
   description:
     "Pin a memory to a specific file or symbol. Pinned memories surface automatically " +
     "when recalling by that file path or symbol name, without needing semantic search.",
@@ -22,7 +22,7 @@ export const pinTool = {
 };
 
 export const unpinTool = {
-  name: "sverklo_unpin",
+  name: "unpin",
   description: "Remove a pin from a memory.",
   inputSchema: {
     type: "object" as const,

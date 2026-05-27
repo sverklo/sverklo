@@ -464,8 +464,13 @@ export function runDoctor(projectPath: string): void {
   if (agentsExists || claudeExists) {
     const agentsContent = agentsExists ? readFileSync(agentsFilePath, "utf-8") : "";
     const claudeContent = claudeExists ? readFileSync(claudeFilePath, "utf-8") : "";
-    const agentsHasSnippet = agentsContent.includes("sverklo_search");
-    const claudeHasSnippet = claudeContent.includes("sverklo_search");
+    // v0.28.0: snippet body no longer contains literal `sverklo_search`
+    // (tools were renamed). Detect via the heading instead, falling back
+    // to the legacy token for pre-v0.28 snippets users may still have.
+    const hasSverkloSnippet = (content: string): boolean =>
+      /^##\s+Sverklo\b/m.test(content) || content.includes("sverklo_search");
+    const agentsHasSnippet = hasSverkloSnippet(agentsContent);
+    const claudeHasSnippet = hasSverkloSnippet(claudeContent);
     const claudeDelegatesToAgents = claudeExists && /agents\.md/i.test(claudeContent);
 
     if (agentsExists && claudeExists && claudeHasSnippet && !agentsHasSnippet && claudeDelegatesToAgents) {
@@ -509,7 +514,10 @@ export function runDoctor(projectPath: string): void {
   const copilotExists = existsSync(copilotPath);
   if (copilotExists) {
     const copilotContent = readFileSync(copilotPath, "utf-8");
-    const hasSnippet = copilotContent.includes("sverklo_search");
+    // v0.28.0: accept both new (heading) and legacy (`sverklo_search`) markers.
+    const hasSnippet =
+      /^##\s+Sverklo\b/m.test(copilotContent) ||
+      copilotContent.includes("sverklo_search");
     if (hasSnippet) {
       checks.push({
         name: "Copilot prefer-sverklo",
@@ -599,7 +607,7 @@ export function runDoctor(projectPath: string): void {
     checks.push({
       name: "memory journal",
       status: "ok",
-      message: "not created yet (normal — appears on the first sverklo_remember call)",
+      message: "not created yet (normal — appears on the first `remember` call)",
     });
   }
 
@@ -607,7 +615,11 @@ export function runDoctor(projectPath: string): void {
   const claudeMdPath = join(projectPath, "CLAUDE.md");
   if (existsSync(claudeMdPath)) {
     const content = readFileSync(claudeMdPath, "utf-8");
-    if (content.includes("sverklo_search")) {
+    // v0.28.0: accept both new (heading) and legacy (`sverklo_search`) markers.
+    if (
+      /^##\s+Sverklo\b/m.test(content) ||
+      content.includes("sverklo_search")
+    ) {
       checks.push({
         name: "CLAUDE.md",
         status: "ok",
@@ -630,7 +642,7 @@ export function runDoctor(projectPath: string): void {
     });
   }
 
-  // 7. MCP round-trip: initialize → tools/list → tools/call sverklo_status.
+  // 7. MCP round-trip: initialize → tools/list → tools/call `status`.
   //    A passing handshake alone is not proof Claude Code can actually USE
   //    sverklo — it only proves the binary speaks JSON-RPC. The dispatch
   //    probe runs the same three calls Claude Code makes on every fresh
@@ -661,7 +673,7 @@ export function runDoctor(projectPath: string): void {
       jsonrpc: "2.0" as const,
       id: 3,
       method: "tools/call",
-      params: { name: "sverklo_status", arguments: {} },
+      params: { name: "status", arguments: {} },
     };
     const input =
       [initReq, initializedNote, listReq, callReq]
@@ -743,24 +755,24 @@ export function runDoctor(projectPath: string): void {
       }
 
       // 7b. tools/list response (id=2) — proves the server advertises
-      //     sverklo_status; if Claude Code can read this, it can route.
+      //     the `status` tool; if Claude Code can read this, it can route.
       const listResp = responses.get(2) as
         | { result?: { tools?: Array<{ name?: string }> }; error?: { message?: string } }
         | undefined;
       const advertised = listResp?.result?.tools?.map((t) => t.name).filter(Boolean) ?? [];
       if (advertised.length > 0) {
-        const hasStatus = advertised.includes("sverklo_status");
+        const hasStatus = advertised.includes("status");
         if (hasStatus) {
           checks.push({
             name: "MCP tools/list",
             status: "ok",
-            message: `${advertised.length} tool${advertised.length === 1 ? "" : "s"} advertised (sverklo_status present)`,
+            message: `${advertised.length} tool${advertised.length === 1 ? "" : "s"} advertised (status present)`,
           });
         } else {
           checks.push({
             name: "MCP tools/list",
             status: "warn",
-            message: `${advertised.length} tools advertised but sverklo_status missing — profile may be filtering it`,
+            message: `${advertised.length} tools advertised but status tool missing — profile may be filtering it`,
             fix: "unset SVERKLO_PROFILE or use SVERKLO_PROFILE=core",
           });
         }
@@ -778,7 +790,7 @@ export function runDoctor(projectPath: string): void {
         });
       }
 
-      // 7c. tools/call sverklo_status (id=3) — proves dispatch end-to-end.
+      // 7c. tools/call `status` (id=3) — proves dispatch end-to-end.
       const callResp = responses.get(3) as
         | {
             result?: { content?: Array<{ type?: string; text?: string }>; isError?: boolean };
@@ -791,7 +803,7 @@ export function runDoctor(projectPath: string): void {
         checks.push({
           name: "MCP tools/call",
           status: "ok",
-          message: `sverklo_status returned ${firstText.length} chars — dispatch round-trip works`,
+          message: `status returned ${firstText.length} chars — dispatch round-trip works`,
         });
       } else if (callResp?.error?.message) {
         checks.push({

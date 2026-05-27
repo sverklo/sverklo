@@ -39,10 +39,10 @@ const REVIEW_CHANGES: PromptDefinition = {
     const r = ref || "main..HEAD";
     return `You are reviewing the diff \`${r}\`. Use sverklo's diff-aware tools, in order:
 
-1. Call \`sverklo_review_diff\` with \`ref:"${r}"\` to get the changed files, semantic delta (added/removed/modified symbols), dangling references for removed symbols, importer counts, and a per-file risk score. Read the **Highest-risk files** section first.
-2. Call \`sverklo_test_map\` with \`ref:"${r}"\` to see which tests cover the changes and which changed files have no matching tests. Prioritise the risk-ranked uncovered list.
-3. For any removed symbol with dangling references, call \`sverklo_impact symbol:"<name>"\` to enumerate every caller — these are likely breakages.
-4. For any added symbol that looks like it duplicates existing functionality, call \`sverklo_lookup\` to find the existing definition.
+1. Call \`review_diff\` with \`ref:"${r}"\` to get the changed files, semantic delta (added/removed/modified symbols), dangling references for removed symbols, importer counts, and a per-file risk score. Read the **Highest-risk files** section first.
+2. Call \`test_map\` with \`ref:"${r}"\` to see which tests cover the changes and which changed files have no matching tests. Prioritise the risk-ranked uncovered list.
+3. For any removed symbol with dangling references, call \`impact symbol:"<name>"\` to enumerate every caller — these are likely breakages.
+4. For any added symbol that looks like it duplicates existing functionality, call \`lookup\` to find the existing definition.
 5. Only after the above, read the actual diff with \`git diff ${r}\` for the highest-risk file(s).
 
 Constraint: keep the total number of tool calls under 8. Do not grep for things sverklo can answer structurally. Do not paraphrase the tool output back at the user — synthesise the review. End with a clear verdict (LGTM / request changes / blocking concern) and a bulleted list of must-fix items, each tied to a file:line.`;
@@ -64,16 +64,16 @@ const PRE_MERGE_CHECK: PromptDefinition = {
     const r = ref || "main..HEAD";
     return `You are the last reviewer before merging \`${r}\`. Be strict.
 
-1. Call \`sverklo_review_diff ref:"${r}"\`. The response includes a per-file risk score. **Block the merge** if any file is risk level "critical" without an explicit reason in the PR description.
-2. Call \`sverklo_test_map ref:"${r}"\`. **Block the merge** if any uncovered file has risk level "high" or "critical" — require tests or an explicit waiver.
-3. For every removed symbol with dangling references, call \`sverklo_impact\` and verify each caller has been updated in the same diff. A dangling reference is a hard block.
-4. Call \`sverklo_recall query:"<area being changed>"\` to surface any prior decisions or invariants that this change might violate.
+1. Call \`review_diff ref:"${r}"\`. The response includes a per-file risk score. **Block the merge** if any file is risk level "critical" without an explicit reason in the PR description.
+2. Call \`test_map ref:"${r}"\`. **Block the merge** if any uncovered file has risk level "high" or "critical" — require tests or an explicit waiver.
+3. For every removed symbol with dangling references, call \`impact\` and verify each caller has been updated in the same diff. A dangling reference is a hard block.
+4. Call \`recall query:"<area being changed>"\` to surface any prior decisions or invariants that this change might violate.
 
 Output a structured verdict:
 - **Status:** APPROVED / BLOCKED / NEEDS CLARIFICATION
 - **Blocking issues:** (file:line + reason)
 - **Non-blocking concerns:** (file:line + reason)
-- **Suggested follow-ups:** (memories to save with sverklo_remember, or tests to add)
+- **Suggested follow-ups:** (memories to save with remember, or tests to add)
 
 Do not approve without justification for every "high" or "critical" risk file.`;
   },
@@ -82,7 +82,7 @@ Do not approve without justification for every "high" or "critical" risk file.`;
 const ONBOARD: PromptDefinition = {
   name: "sverklo/onboard",
   description:
-    "New-developer onboarding tour. Builds a mental model of the codebase using sverklo_overview, top-PageRank files, and core memories.",
+    "New-developer onboarding tour. Builds a mental model of the codebase using overview, top-PageRank files, and core memories.",
   arguments: [
     {
       name: "focus",
@@ -96,10 +96,10 @@ const ONBOARD: PromptDefinition = {
       : "Give a generalist tour suitable for any new contributor.";
     return `Help a new developer get oriented in this codebase. ${focusLine}
 
-1. Call \`sverklo_overview\` to get the high-level structure: top languages, top-PageRank files, module map.
-2. Call \`sverklo_recall query:"architecture"\` and \`sverklo_recall query:"conventions"\` to surface any saved invariants and design decisions.
-3. ${focus ? `Call \`sverklo_search query:"${focus}"\` to find the entry points for the focus area.` : "Pick 2-3 of the highest-PageRank source files and call `sverklo_lookup` on their main exported symbols to show what they do."}
-4. For the most central file you find, call \`sverklo_deps\` to show its place in the import graph.
+1. Call \`overview\` to get the high-level structure: top languages, top-PageRank files, module map.
+2. Call \`recall query:"architecture"\` and \`recall query:"conventions"\` to surface any saved invariants and design decisions.
+3. ${focus ? `Call \`search query:"${focus}"\` to find the entry points for the focus area.` : "Pick 2-3 of the highest-PageRank source files and call `lookup` on their main exported symbols to show what they do."}
+4. For the most central file you find, call \`deps\` to show its place in the import graph.
 
 Then write a concise onboarding doc (under 600 words) with:
 - "Start here" — the 3-5 files to read first, in order, with a one-line reason for each
@@ -118,10 +118,10 @@ const ARCHITECTURE_MAP: PromptDefinition = {
   arguments: [],
   build: () => `Produce an architecture map of this codebase using only sverklo tools.
 
-1. Call \`sverklo_overview\` for the structural summary (file/chunk/language counts, top-PageRank files).
-2. For each of the top 5 PageRank files, call \`sverklo_deps\` to see what depends on it and what it depends on. These are the load-bearing modules.
-3. Call \`sverklo_recall query:"architecture"\` for any saved design decisions.
-4. Call \`sverklo_search query:"entry point main bootstrap"\` to find the application entry points.
+1. Call \`overview\` for the structural summary (file/chunk/language counts, top-PageRank files).
+2. For each of the top 5 PageRank files, call \`deps\` to see what depends on it and what it depends on. These are the load-bearing modules.
+3. Call \`recall query:"architecture"\` for any saved design decisions.
+4. Call \`search query:"entry point main bootstrap"\` to find the application entry points.
 
 Produce an architecture map with:
 - **Entry points** — where execution starts
@@ -147,11 +147,11 @@ const DEBUG_ISSUE: PromptDefinition = {
   build: ({ symptom }) => {
     return `Help debug this issue: **${symptom || "(unspecified — ask the user for the symptom first)"}**
 
-1. Call \`sverklo_recall query:"${symptom}"\` — there may be a prior decision or known-issue memory that explains this.
-2. Call \`sverklo_search query:"${symptom}"\` to find the most semantically relevant code regions. Read the top 3 results.
-3. From those results, identify the 1-2 most likely entry points or error sources. Call \`sverklo_refs symbol:"<name>"\` on each to see who calls them — the bug may be in a caller, not the function itself.
-4. If the symptom mentions a specific error message, call \`sverklo_search query:"<error string>"\` to find where it's thrown.
-5. Call \`sverklo_deps file:"<suspect file>"\` to see what the suspect code depends on — the bug may be in a dependency.
+1. Call \`recall query:"${symptom}"\` — there may be a prior decision or known-issue memory that explains this.
+2. Call \`search query:"${symptom}"\` to find the most semantically relevant code regions. Read the top 3 results.
+3. From those results, identify the 1-2 most likely entry points or error sources. Call \`refs symbol:"<name>"\` on each to see who calls them — the bug may be in a caller, not the function itself.
+4. If the symptom mentions a specific error message, call \`search query:"<error string>"\` to find where it's thrown.
+5. Call \`deps file:"<suspect file>"\` to see what the suspect code depends on — the bug may be in a dependency.
 
 Then produce:
 - **Most likely root cause:** (file:line + one-paragraph explanation)
@@ -163,14 +163,14 @@ Do not propose code changes without identifying a specific file:line. If the sea
   },
 };
 
-// ── Research recipes (v0.14, P1-16). Leverage sverklo_investigate +
-// sverklo_verify so answers stay grounded in evidence the user can audit.
+// ── Research recipes (v0.14, P1-16). Leverage investigate +
+// verify so answers stay grounded in evidence the user can audit.
 
 const MAP_FEATURE: PromptDefinition = {
   name: "sverklo/map-feature",
   description:
     "Map a feature across the codebase: entry points, key symbols, tests, and docs. " +
-    "Uses sverklo_investigate to fan-out over FTS + vector + symbol + refs in one call.",
+    "Uses investigate to fan-out over FTS + vector + symbol + refs in one call.",
   arguments: [
     {
       name: "feature",
@@ -188,10 +188,10 @@ const MAP_FEATURE: PromptDefinition = {
     const scopeArg = scope ? `, scope:"${scope}"` : "";
     return `Map the \`${feature}\` feature across the codebase. Use sverklo's research tools in this order:
 
-1. Call \`sverklo_investigate query:"${feature}"${scopeArg}\` for a single-pass fan-out over FTS, embeddings, symbols, and refs. Read the \`found_by\` tags — results agreed on by multiple retrievers are higher-signal than single-source hits.
-2. Pick the top 3-5 symbols from the investigation and call \`sverklo_refs\` on each to expand the surface area. Note any **Doc mentions** sections — they tell you where the feature is documented.
-3. For the two most-referenced symbols, call \`sverklo_impact\` to see blast radius before proposing any changes. If partition plans appear, pick one bucket and drill in rather than reading the full list.
-4. Call \`sverklo_test_map\` scoped to the same directories — which tests cover this feature?
+1. Call \`investigate query:"${feature}"${scopeArg}\` for a single-pass fan-out over FTS, embeddings, symbols, and refs. Read the \`found_by\` tags — results agreed on by multiple retrievers are higher-signal than single-source hits.
+2. Pick the top 3-5 symbols from the investigation and call \`refs\` on each to expand the surface area. Note any **Doc mentions** sections — they tell you where the feature is documented.
+3. For the two most-referenced symbols, call \`impact\` to see blast radius before proposing any changes. If partition plans appear, pick one bucket and drill in rather than reading the full list.
+4. Call \`test_map\` scoped to the same directories — which tests cover this feature?
 5. Summarise in this structure:
    - **Entry points:** 1-3 files where the feature is first reached
    - **Core symbols:** classes/functions that implement it
@@ -200,7 +200,7 @@ const MAP_FEATURE: PromptDefinition = {
    - **Docs:** README / ADR sections that describe it
    - **Open questions:** things sverklo's retrievers couldn't pin down
 
-End with a list of evidence ids (from the \`evidence\` footers) the user can \`sverklo_verify\` if they want to audit your map.`;
+End with a list of evidence ids (from the \`evidence\` footers) the user can \`verify\` if they want to audit your map.`;
   },
 };
 
@@ -224,11 +224,11 @@ const ASSESS_IMPACT: PromptDefinition = {
     return `Assess the impact of changing \`${symbol}\`.${changeLine}
 Run these steps, in order:
 
-1. \`sverklo_lookup symbol:"${symbol}"\` — confirm exactly one definition exists. If there are multiple, pin down which one the change targets before proceeding.
-2. \`sverklo_impact symbol:"${symbol}"\` — full caller graph. If the result returns a partition plan (> 80 callers), traverse one bucket at a time rather than reading the raw list.
-3. \`sverklo_test_map symbol:"${symbol}"\` — which tests exercise the callers? Callers with zero test coverage are the highest-risk items.
-4. \`sverklo_refs symbol:"${symbol}"\` with \`exact:true\` — confirms we haven't missed documentation mentions. If any **Doc mentions** show up, flag them as places the change should also update the docs.
-5. If \`cross_repo:true\` is available (workspace configured), re-run \`sverklo_impact symbol:"${symbol}" cross_repo:true\` — cross-repo contracts are the most expensive category of breakage.
+1. \`lookup symbol:"${symbol}"\` — confirm exactly one definition exists. If there are multiple, pin down which one the change targets before proceeding.
+2. \`impact symbol:"${symbol}"\` — full caller graph. If the result returns a partition plan (> 80 callers), traverse one bucket at a time rather than reading the raw list.
+3. \`test_map symbol:"${symbol}"\` — which tests exercise the callers? Callers with zero test coverage are the highest-risk items.
+4. \`refs symbol:"${symbol}"\` with \`exact:true\` — confirms we haven't missed documentation mentions. If any **Doc mentions** show up, flag them as places the change should also update the docs.
+5. If \`cross_repo:true\` is available (workspace configured), re-run \`impact symbol:"${symbol}" cross_repo:true\` — cross-repo contracts are the most expensive category of breakage.
 
 Deliver a decision memo:
 - **Risk level:** LOW / MEDIUM / HIGH (justify in one sentence)
@@ -238,7 +238,7 @@ Deliver a decision memo:
 - **Cross-repo touches:** if any
 - **Go / no-go:** with a one-line rationale
 
-Attach the evidence ids for every claim so the user can \`sverklo_verify\` your analysis didn't go stale between reading and acting.`;
+Attach the evidence ids for every claim so the user can \`verify\` your analysis didn't go stale between reading and acting.`;
   },
 };
 

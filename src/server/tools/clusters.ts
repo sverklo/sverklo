@@ -2,11 +2,11 @@ import type { IndexGraph } from "../../indexer/index-graph.js";
 import { detectClusters, type FileCluster } from "../../search/cluster.js";
 
 export const clustersTool = {
-  name: "sverklo_clusters",
+  name: "clusters",
   description:
     "Group files into modules by graph-community detection (label propagation " +
     "over the import graph). Returns 3+ file clusters with their hub file. Use " +
-    "this on first contact with an unfamiliar repo — pair with sverklo_concepts " +
+    "this on first contact with an unfamiliar repo — pair with concepts " +
     "(after running `sverklo concept-index`) for an LLM-named summary of each " +
     "cluster. Skip if the codebase has fewer than ~20 source files; structure " +
     "won't be informative.",
@@ -30,7 +30,7 @@ export function handleClusters(
   // Gather files and edges from the index
   const files = indexer.fileStore.getAll();
   if (files.length === 0) {
-    return "No files indexed yet. Run sverklo_status to check indexing progress.";
+    return "No files indexed yet. Run status to check indexing progress.";
   }
 
   const allEdges = indexer.graphStore.getAll();

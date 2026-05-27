@@ -55,8 +55,8 @@ describe("handleIndexStatus", () => {
 
   it("includes recommended-workflow suggestions", () => {
     const out = handleIndexStatus(indexer);
-    expect(out).toContain("sverklo_search");
-    expect(out).toContain("sverklo_overview");
+    expect(out).toContain("search");
+    expect(out).toContain("overview");
   });
 
   it("stale-binary warning fires when the binary mtime is ahead of process start", () => {

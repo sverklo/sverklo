@@ -2,12 +2,12 @@ import type { IndexFiles } from "../../indexer/index-files.js";
 import type { IndexMemory } from "../../indexer/index-memory.js";
 
 export const wakeupTool = {
-  name: "sverklo_wakeup",
+  name: "wakeup",
   description:
     "500-token codebase summary suitable for pasting into a system prompt " +
     "when the agent has no MCP access. Use this when integrating sverklo " +
     "intelligence into Cursor, Codex, or a CI bot that can't run the MCP " +
-    "server. For MCP-connected agents, prefer sverklo_status and the " +
+    "server. For MCP-connected agents, prefer status and the " +
     "richer per-tool surfaces — they return more and stay in budget.",
   inputSchema: {
     type: "object" as const,
@@ -74,7 +74,7 @@ export function generateWakeup(
     }
   }
 
-  parts.push(`_Sverklo-generated wake-up. For full search, use sverklo_search via MCP._`);
+  parts.push(`_Sverklo-generated wake-up. For full search, use search via MCP._`);
 
   let output = parts.join("\n");
 

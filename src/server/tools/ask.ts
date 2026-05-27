@@ -14,14 +14,14 @@ import { emitForHits } from "../../memory/evidence-emit.js";
 // never generated prose).
 
 export const askTool = {
-  name: "sverklo_ask",
+  name: "ask",
   description:
     "Natural-language router over sverklo's existing primitives. " +
     "Maps a question to (a) the closest concept (if the concept index exists), " +
     "(b) an investigate fan-out, and (c) refs/impact on the top symbols surfaced. " +
     "Returns a structured answer with evidence — no generated prose. Use when you " +
     "want a single keystroke that exercises the whole stack; for fine-grained " +
-    "control prefer sverklo_search / sverklo_investigate / sverklo_refs.",
+    "control prefer search / investigate / refs.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -45,7 +45,7 @@ export async function handleAsk(
 ): Promise<string> {
   const query = args.query;
   if (typeof query !== "string" || query.trim() === "") {
-    return "sverklo_ask requires a non-empty `query`.";
+    return "ask requires a non-empty `query`.";
   }
   const scope = args.scope as string | undefined;
   const mode = (args.mode as "fast" | "thorough" | undefined) ?? "fast";
@@ -95,19 +95,19 @@ export async function handleAsk(
     if (topSymbol) {
       const callerCount = indexer.symbolRefStore.getCallerCount(topSymbol);
       lines.push(`## Likely entry symbol: \`${topSymbol}\` — ${callerCount} caller(s)`);
-      lines.push(`_Drill in: \`sverklo_impact symbol:"${topSymbol}"\` for the full caller graph._`);
+      lines.push(`_Drill in: \`impact symbol:"${topSymbol}"\` for the full caller graph._`);
       lines.push("");
     }
   }
 
   lines.push(
-    `_Mode: ${mode}. Drill in: \`sverklo_investigate query:"${query}"\` for the raw fan-out, or \`sverklo_search_iterative\` for a wider pool with refinement hints._`
+    `_Mode: ${mode}. Drill in: \`investigate query:"${query}"\` for the raw fan-out, or \`search_iterative\` for a wider pool with refinement hints._`
   );
 
   // Bug-bash 2 finding #3: the description promised "evidence + hits, no
   // generated prose" but no `ev_` ids were ever emitted, so any agent
-  // that called sverklo_verify on the output got "non-string id".
-  // Emit the same per-hit evidence footer that sverklo_investigate uses.
+  // that called verify on the output got "non-string id".
+  // Emit the same per-hit evidence footer that investigate uses.
   const maxHits = Math.min(8, inv.hits.length);
   const { footer } = emitForHits(
     indexer,
