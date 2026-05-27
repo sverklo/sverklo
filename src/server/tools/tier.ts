@@ -9,7 +9,7 @@ import type { MemoryTier } from "../../types/index.js";
 const CORE_TIER_SOFT_LIMIT = 25;
 
 export const promoteTool = {
-  name: "sverklo_promote",
+  name: "promote",
   description:
     "Promote a memory to the core tier. Core memories are auto-injected into every session " +
     "via sverklo://context resource — use for project invariants that should always be in the " +
@@ -27,10 +27,10 @@ export const promoteTool = {
 };
 
 export const demoteTool = {
-  name: "sverklo_demote",
+  name: "demote",
   description:
     "Demote a memory from core to archive tier. Archive memories are only retrieved on demand " +
-    "via sverklo_recall — not automatically injected. Use for memories that no longer need " +
+    "via recall — not automatically injected. Use for memories that no longer need " +
     "to be in every session.",
   inputSchema: {
     type: "object" as const,
@@ -82,7 +82,7 @@ function setTier(indexer: IndexMemory, args: Record<string, unknown>, tier: Memo
         base +
         `\n\n⚠️ Core tier now has ${coreCount} memories (soft limit: ${CORE_TIER_SOFT_LIMIT}). ` +
         "These are injected into every session prompt — too many crowds the context window. " +
-        "Consider demoting the least-critical ones with `sverklo_demote id:<n>`."
+        "Consider demoting the least-critical ones with `demote id:<n>`."
       );
     }
   }

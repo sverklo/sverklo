@@ -1,7 +1,7 @@
 import { getRegistry } from "../../registry/registry.js";
 
 export const listReposTool = {
-  name: "sverklo_list_repos",
+  name: "list_repos",
   description:
     "List all indexed repositories in the global registry. " +
     "Use this to discover available repos when running in global (multi-repo) mode. " +

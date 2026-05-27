@@ -7,7 +7,7 @@ import { validateEnum, requireString } from "./_validation.js";
 const CONFLICT_THRESHOLD = 0.85;
 
 export const rememberTool = {
-  name: "sverklo_remember",
+  name: "remember",
   description:
     "Save a persistent memory tied to git state. Auto-invalidates conflicting prior memories.",
   inputSchema: {
@@ -66,7 +66,7 @@ export async function handleRemember(
   const contentArg = requireString(
     args.content,
     "content",
-    'sverklo_remember content:"we picked SQLite for the index" [category:decision] [kind:semantic]'
+    'remember content:"we picked SQLite for the index" [category:decision] [kind:semantic]'
   );
   if (!contentArg.ok) return contentArg.message;
   const content = contentArg.value;

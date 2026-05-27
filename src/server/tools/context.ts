@@ -1,4 +1,4 @@
-// sverklo_context: umbrella "give me everything relevant to this task" tool.
+// context: umbrella "give me everything relevant to this task" tool.
 //
 // Inspired by code-review-graph's get_minimal_context. Instead of forcing the
 // model to chain 5-8 atomic calls (overview → search → lookup → recall → ...)
@@ -21,7 +21,7 @@ import { estimateTokens } from "../../utils/tokens.js";
 import type { CodeChunk, FileRecord } from "../../types/index.js";
 
 export const contextTool = {
-  name: "sverklo_context",
+  name: "context",
   description:
     "Umbrella context bundler. Give a task description and get a single curated bundle: " +
     "codebase overview header, semantically relevant code, related symbols, and matching " +
@@ -202,11 +202,11 @@ export async function handleContext(
   if (topResults.length > 0) {
     const top = topResults[0];
     if (top.chunk.name) {
-      parts.push(`- \`sverklo_refs symbol:"${top.chunk.name}"\` to see who uses the most relevant symbol`);
-      parts.push(`- \`sverklo_lookup symbol:"${top.chunk.name}"\` for the full definition`);
+      parts.push(`- \`refs symbol:"${top.chunk.name}"\` to see who uses the most relevant symbol`);
+      parts.push(`- \`lookup symbol:"${top.chunk.name}"\` for the full definition`);
     }
   }
-  parts.push(`- \`sverklo_search query:"<more specific term>"\` to drill into a sub-area`);
+  parts.push(`- \`search query:"<more specific term>"\` to drill into a sub-area`);
   if (detail !== "full") {
     parts.push(`- Re-run with \`detail_level:"full"\` to also see dependency neighbours`);
   }
@@ -381,7 +381,7 @@ async function buildPrunedRepoMap(
     if (cost > remaining) {
       const fallback =
         `## \`${file.path}\` · PR ${file.pagerank.toFixed(3)}\n` +
-        `- _${chunks.length} symbols (budget exhausted — use sverklo_lookup for details)_\n`;
+        `- _${chunks.length} symbols (budget exhausted — use lookup for details)_\n`;
       const fallbackCost = estimateTokens(fallback);
       if (fallbackCost <= remaining) {
         parts.push(fallback);
@@ -408,7 +408,7 @@ async function buildPrunedRepoMap(
   );
   if (filesRendered > 0) {
     parts.push(
-      "_Use `sverklo_lookup symbol:<symbol>` or `sverklo_search query:<...>` to drill into any symbol._"
+      "_Use `lookup symbol:<symbol>` or `search query:<...>` to drill into any symbol._"
     );
   }
 

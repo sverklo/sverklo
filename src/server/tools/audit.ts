@@ -7,12 +7,12 @@ import { analyzeCodebase, isVendoredPath } from "../audit-analysis.js";
 import { getAuditHistory, formatTrend } from "../../utils/audit-history.js";
 
 export const auditTool = {
-  name: "sverklo_audit",
+  name: "audit",
   description:
     "One-call codebase health report: god nodes (highest blast-radius symbols), " +
     "hub files (highest PageRank), orphan symbols (likely dead code), and " +
     "language/memory stats. Use as the seed for a code-quality pass — pair " +
-    "with sverklo_impact for blast-radius and sverklo_deps for fan-in/fan-out. " +
+    "with impact for blast-radius and deps for fan-in/fan-out. " +
     "Cheaper than running overview + impact + dependencies separately.",
   inputSchema: {
     type: "object" as const,
@@ -34,7 +34,7 @@ interface GodNode {
 export function handleAudit(indexer: IndexFiles & IndexCode & IndexGraph & IndexMemory, args: Record<string, unknown>): string {
   const tokenBudget = resolveBudget(args, "audit", null, 4000);
   // Default-exclude vendored / cached / generated paths from EVERY
-  // audit dimension. Without this, running sverklo_audit against a
+  // audit dimension. Without this, running audit against a
   // workspace whose index includes `<repo>/benchmark/.cache/<vendor>`
   // bubbled third-party HTTP-verb methods to the top of the god-node
   // ranking and made every hub file an express dependency. Dogfood
@@ -323,7 +323,7 @@ export function handleAudit(indexer: IndexFiles & IndexCode & IndexGraph & Index
     memLines.push(`- **${coreMemories.length}** core memories (auto-injected each session)`);
     memLines.push(`- **${memoryCount - coreMemories.length}** archive memories (searched on demand)`);
     if (staleMemories.length > 0) {
-      memLines.push(`- **${staleMemories.length}** stale memories — consider \`sverklo_forget\` or \`sverklo_remember\` to update`);
+      memLines.push(`- **${staleMemories.length}** stale memories — consider \`forget\` or \`remember\` to update`);
     }
     memLines.push("");
     if (!addSection(memLines.join("\n"))) return sections.join("\n");
@@ -383,7 +383,7 @@ export function handleAudit(indexer: IndexFiles & IndexCode & IndexGraph & Index
     const suggestLines: string[] = [];
     suggestLines.push(`## Suggested Next Steps`);
     if (godNodes.length > 0) {
-      suggestLines.push(`- Before refactoring **${godNodes[0].name}**, run \`sverklo_impact\` to see the ${godNodes[0].refCount} call sites`);
+      suggestLines.push(`- Before refactoring **${godNodes[0].name}**, run \`impact\` to see the ${godNodes[0].refCount} call sites`);
     }
     if (hubFiles[0]) {
       suggestLines.push(`- \`${hubFiles[0].path}\` is your most-imported file — changes here cascade widely`);

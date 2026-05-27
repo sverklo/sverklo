@@ -86,6 +86,99 @@ import { logActivity } from "../utils/activity-log.js";
 import { ToolStatsWriter } from "../utils/tool-stats.js";
 import { pinTool, unpinTool, handlePin, handleUnpin } from "./tools/pin.js";
 
+// ── v0.28.0 tool rename: deprecation aliases (issue #71) ─────────────
+//
+// In v0.28.0 we dropped the redundant `sverklo_` prefix from every tool's
+// canonical name. MCP clients (Claude Code, opencode, Cursor) already
+// namespace tools by server name, so the old `sverklo_search` showed up as
+// `mcp__sverklo__sverklo_search` — double-prefix noise in every tool ID.
+//
+// To avoid breaking everyone's pinned skills/docs on day one, we keep the
+// legacy `sverklo_*` names alive as routing aliases for one minor release.
+// On the FIRST invocation of each legacy name per server instance, we emit
+// a one-time stderr warning. v0.29.0 will remove the aliases.
+//
+// Tools are advertised in `tools/list` under their CANONICAL names only —
+// we don't dual-advertise to keep the tool count stable (37, not 74). The
+// alias map drives both deprecation warnings and switch-case dispatch.
+export const LEGACY_TOOL_ALIASES: Record<string, string> = {
+  sverklo_context: "context",
+  sverklo_search: "search",
+  sverklo_overview: "overview",
+  sverklo_lookup: "lookup",
+  sverklo_refs: "refs",
+  sverklo_deps: "deps",
+  sverklo_status: "status",
+  sverklo_remember: "remember",
+  sverklo_recall: "recall",
+  sverklo_forget: "forget",
+  sverklo_memories: "memories",
+  sverklo_ast_grep: "ast_grep",
+  sverklo_impact: "impact",
+  sverklo_audit: "audit",
+  sverklo_wakeup: "wakeup",
+  sverklo_review_diff: "review_diff",
+  sverklo_diff_search: "diff_search",
+  sverklo_test_map: "test_map",
+  sverklo_promote: "promote",
+  sverklo_demote: "demote",
+  sverklo_clusters: "clusters",
+  sverklo_pin: "pin",
+  sverklo_unpin: "unpin",
+  sverklo_investigate: "investigate",
+  sverklo_search_iterative: "search_iterative",
+  sverklo_ask: "ask",
+  sverklo_verify: "verify",
+  sverklo_critique: "critique",
+  sverklo_concepts: "concepts",
+  sverklo_patterns: "patterns",
+  sverklo_grep_results: "grep_results",
+  sverklo_head_results: "head_results",
+  sverklo_ctx_peek: "ctx_peek",
+  sverklo_ctx_slice: "ctx_slice",
+  sverklo_ctx_grep: "ctx_grep",
+  sverklo_ctx_stats: "ctx_stats",
+  sverklo_list_repos: "list_repos",
+};
+
+// Zilliz claude-context compatibility names — these are not first-party
+// sverklo tools and are excluded from telemetry / trajectory recording.
+const COMPAT_ALIASES = new Set<string>([
+  "index_codebase",
+  "search_code",
+  "clear_index",
+  "get_indexing_status",
+]);
+
+function isCompatAlias(name: string): boolean {
+  return COMPAT_ALIASES.has(name);
+}
+
+/**
+ * Resolve a possibly-legacy tool name to its canonical form, emitting a
+ * one-time stderr deprecation warning the first time each legacy name is
+ * seen in this server instance. Pure function on the resolution side;
+ * mutates `warnedAliases` as a side effect. Returns the canonical name.
+ *
+ * Exported for unit tests.
+ */
+export function resolveToolName(
+  name: string,
+  warnedAliases: Set<string>,
+  writeWarning: (msg: string) => void = (m) => process.stderr.write(m)
+): string {
+  const canonical = LEGACY_TOOL_ALIASES[name];
+  if (!canonical) return name;
+  if (!warnedAliases.has(name)) {
+    warnedAliases.add(name);
+    writeWarning(
+      `[sverklo:DEPRECATED] tool name "${name}" is deprecated; use "${canonical}". ` +
+        `The old name will be removed in v0.29.0.\n`
+    );
+  }
+  return canonical;
+}
+
 // Zilliz claude-context compatibility tool definitions.
 // These mirror github.com/zilliztech/claude-context tool names so users can
 // swap claude-context for sverklo without changing their MCP client config.
@@ -113,9 +206,9 @@ const indexCodebaseTool = {
 const searchCodeTool = {
   name: "search_code",
   description:
-    "[Zilliz claude-context compat] Alias for sverklo_search. Semantic + text hybrid " +
-    "code search using embeddings and PageRank. Provided for drop-in compatibility " +
-    "with the Zilliz claude-context MCP server.",
+    "[Zilliz claude-context compat] Alias for sverklo's `search` tool. Semantic + " +
+    "text hybrid code search using embeddings and PageRank. Provided for drop-in " +
+    "compatibility with the Zilliz claude-context MCP server.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -143,8 +236,9 @@ const clearIndexTool = {
 const getIndexingStatusTool = {
   name: "get_indexing_status",
   description:
-    "[Zilliz claude-context compat] Alias for sverklo_status. Returns current indexing " +
-    "progress and statistics. Provided for drop-in compatibility with Zilliz claude-context.",
+    "[Zilliz claude-context compat] Alias for sverklo's `status` tool. Returns " +
+    "current indexing progress and statistics. Provided for drop-in compatibility " +
+    "with Zilliz claude-context.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -274,8 +368,8 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       parts.push(`${status.fileCount} files, ${status.chunkCount} chunks indexed`);
       parts.push(`Languages: ${status.languages.join(", ") || "none"}`);
       parts.push("");
-      parts.push("Use sverklo_search for semantic code search (preferred over grep).");
-      parts.push("Use sverklo_remember to save important decisions.");
+      parts.push("Use the sverklo `search` tool for semantic code search (preferred over grep).");
+      parts.push("Use the sverklo `remember` tool to save important decisions.");
 
       return {
         contents: [
@@ -375,14 +469,23 @@ export async function startMcpServer(rootPath: string): Promise<void> {
     tools: visibleTools,
   }));
 
+  // Tracks which legacy tool names have already emitted their one-time
+  // deprecation warning in this server instance. v0.28.0 → v0.29.0 sunset.
+  const warnedAliases = new Set<string>();
+
   // Handle tool calls
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
+    const rawName = request.params.name;
+    const args = request.params.arguments;
+    // Rewrite legacy `sverklo_*` names to canonical short form. Emits a
+    // one-time stderr warning per legacy name. Pass-through for canonical
+    // and compat-alias names.
+    const name = resolveToolName(rawName, warnedAliases);
 
     // Ensure index is ready for search operations.
     // Status tools and clear_index don't need to wait — they manage indexing themselves.
     const skipWait =
-      name === "sverklo_status" ||
+      name === "status" ||
       name === "get_indexing_status" ||
       name === "clear_index" ||
       name === "index_codebase";
@@ -401,112 +504,112 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       let result: string;
 
       switch (name) {
-        case "sverklo_context":
+        case "context":
           result = await handleContext(indexer, args || {});
           break;
-        case "sverklo_search":
+        case "search":
           result = await handleSearch(indexer, args || {});
           break;
-        case "sverklo_overview":
+        case "overview":
           result = handleOverview(indexer, args || {});
           break;
-        case "sverklo_lookup":
+        case "lookup":
           result = await handleLookup(indexer, args || {});
           break;
-        case "sverklo_refs":
+        case "refs":
           result = await handleFindReferences(indexer, args || {});
           break;
-        case "sverklo_deps":
+        case "deps":
           result = handleDependencies(indexer, args || {});
           break;
-        case "sverklo_status":
+        case "status":
           result = handleIndexStatus(indexer);
           break;
-        case "sverklo_remember":
+        case "remember":
           result = await handleRemember(indexer, args || {});
           break;
-        case "sverklo_recall":
+        case "recall":
           result = await handleRecall(indexer, args || {});
           break;
-        case "sverklo_forget":
+        case "forget":
           result = handleForget(indexer, args || {});
           break;
-        case "sverklo_memories":
+        case "memories":
           result = handleMemories(indexer, args || {});
           break;
-        case "sverklo_ast_grep":
+        case "ast_grep":
           result = handleAstGrep(indexer, args || {});
           break;
-        case "sverklo_impact":
+        case "impact":
           result = handleImpact(indexer, args || {});
           break;
-        case "sverklo_audit":
+        case "audit":
           result = handleAudit(indexer, args || {});
           break;
-        case "sverklo_wakeup":
+        case "wakeup":
           result = handleWakeup(indexer, args || {});
           break;
-        case "sverklo_review_diff":
+        case "review_diff":
           result = handleReviewDiff(indexer, args || {});
           break;
-        case "sverklo_diff_search":
+        case "diff_search":
           result = await handleDiffSearch(indexer, args || {});
           break;
-        case "sverklo_test_map":
+        case "test_map":
           result = handleTestMap(indexer, args || {});
           break;
-        case "sverklo_promote":
+        case "promote":
           result = handlePromote(indexer, args || {});
           break;
-        case "sverklo_demote":
+        case "demote":
           result = handleDemote(indexer, args || {});
           break;
-        case "sverklo_clusters":
+        case "clusters":
           result = handleClusters(indexer, args || {});
           break;
-        case "sverklo_pin":
+        case "pin":
           result = handlePin(indexer, args || {});
           break;
-        case "sverklo_unpin":
+        case "unpin":
           result = handleUnpin(indexer, args || {});
           break;
-        case "sverklo_investigate":
+        case "investigate":
           result = await handleInvestigate(indexer, args || {});
           break;
-        case "sverklo_search_iterative":
+        case "search_iterative":
           result = await handleSearchIterative(indexer, args || {});
           break;
-        case "sverklo_ask":
+        case "ask":
           result = await handleAsk(indexer, args || {});
           break;
-        case "sverklo_verify":
+        case "verify":
           result = handleVerify(indexer, args || {});
           break;
-        case "sverklo_critique":
+        case "critique":
           result = handleCritique(indexer, args || {});
           break;
-        case "sverklo_concepts":
+        case "concepts":
           result = await handleConcepts(indexer, args || {});
           break;
-        case "sverklo_patterns":
+        case "patterns":
           result = handlePatterns(indexer, args || {});
           break;
-        case "sverklo_grep_results":
+        case "grep_results":
           result = handleGrepResults(args || {});
           break;
-        case "sverklo_head_results":
+        case "head_results":
           result = handleHeadResults(args || {});
           break;
-        case "sverklo_ctx_peek":
+        case "ctx_peek":
           result = handleCtxPeek(args || {});
           break;
-        case "sverklo_ctx_slice":
+        case "ctx_slice":
           result = handleCtxSlice(indexer, args || {});
           break;
-        case "sverklo_ctx_grep":
+        case "ctx_grep":
           result = handleCtxGrep(indexer, args || {});
           break;
-        case "sverklo_ctx_stats":
+        case "ctx_stats":
           result = handleCtxStats(indexer, args || {});
           break;
 
@@ -587,16 +690,16 @@ export async function startMcpServer(rootPath: string): Promise<void> {
       // second retrieval. Tools that don't return result blocks (status,
       // memories, verify, etc.) don't register — their output isn't blockish.
       if (
-        name === "sverklo_search" ||
-        name === "sverklo_refs" ||
-        name === "sverklo_lookup" ||
-        name === "sverklo_impact" ||
-        name === "sverklo_diff_search" ||
-        name === "sverklo_ast_grep" ||
-        name === "sverklo_investigate" ||
-        name === "sverklo_search_iterative" ||
-        name === "sverklo_context" ||
-        name === "sverklo_ask"
+        name === "search" ||
+        name === "refs" ||
+        name === "lookup" ||
+        name === "impact" ||
+        name === "diff_search" ||
+        name === "ast_grep" ||
+        name === "investigate" ||
+        name === "search_iterative" ||
+        name === "context" ||
+        name === "ask"
       ) {
         const id = responseStore.set(name, result);
         // Persistent handle (P1-8) — survives across MCP sessions.
@@ -606,11 +709,12 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         result = result + `\n\n_response_id: ${id} · handle: ${uri}_`;
       }
 
-      // Fire-and-forget telemetry. Only sverklo_* names are tracked
+      // Fire-and-forget telemetry. Only first-party tool names are tracked
       // (compat aliases like search_code are excluded — they pollute the
       // tool name distribution and we already account for them via the
-      // underlying handlers).
-      if (name.startsWith("sverklo_")) {
+      // underlying handlers). v0.28.0 renamed the canonical names — anything
+      // NOT one of the four Zilliz compat names is one of ours.
+      if (!isCompatAlias(name)) {
         const dur = Date.now() - __telemetryStart;
         // Bucketed response size — lets us answer "did flipping `compact`
         // default actually save tokens?" without recording any content.
@@ -656,7 +760,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
         outcome: "error",
         errorCode: err instanceof Error && err.name !== "Error" ? err.name : undefined,
       });
-      if (name.startsWith("sverklo_")) {
+      if (!isCompatAlias(name)) {
         void track("tool.call", {
           tool: name,
           outcome: "error",
@@ -695,7 +799,7 @@ export async function startMcpServer(rootPath: string): Promise<void> {
 const repoProperty = {
   type: "string" as const,
   description:
-    "Repository name (from sverklo_list_repos). " +
+    "Repository name (from the list_repos tool). " +
     "Optional if only one repo is indexed.",
 };
 
@@ -746,7 +850,7 @@ export async function startGlobalMcpServer(): Promise<void> {
       },
       instructions:
         "Sverklo (global mode): code intelligence serving multiple repos. " +
-        "Use sverklo_list_repos to see available repositories, then pass the " +
+        "Use the list_repos tool to see available repositories, then pass the " +
         "repo name to any tool. If only one repo is registered, the repo " +
         "parameter is optional.",
     }
@@ -766,7 +870,7 @@ export async function startGlobalMcpServer(): Promise<void> {
     name: p.name,
     description: p.description,
     arguments: [
-      { name: "repo", description: "Repository name (from sverklo_list_repos). Optional if only one repo is indexed.", required: false },
+      { name: "repo", description: "Repository name (from the list_repos tool). Optional if only one repo is indexed.", required: false },
       ...p.arguments,
     ],
   }));
@@ -852,12 +956,18 @@ export async function startGlobalMcpServer(): Promise<void> {
     tools: visibleTools,
   }));
 
+  // Tracks which legacy tool names have already emitted their one-time
+  // deprecation warning in this server instance. v0.28.0 → v0.29.0 sunset.
+  const warnedAliases = new Set<string>();
+
   // Handle tool calls — resolve indexer from pool based on `repo` arg
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
+    const rawName = request.params.name;
+    const args = request.params.arguments;
+    const name = resolveToolName(rawName, warnedAliases);
 
     // list_repos doesn't need an indexer
-    if (name === "sverklo_list_repos") {
+    if (name === "list_repos") {
       const result = handleListRepos();
       if (process.env.SVERKLO_DISABLE_HINTS !== "1") {
         const argRecord = (args || {}) as Record<string, unknown>;
@@ -878,12 +988,12 @@ export async function startGlobalMcpServer(): Promise<void> {
     // pool throws "No repositories registered..." which the MCP catch
     // below converts to `isError: true`. Clients like OpenCode render
     // that as a generic "Not connected", hiding the actionable
-    // remediation message. For sverklo_status and sverklo_list_repos
-    // specifically, the "no repos" state is NOT an error — it's the
-    // expected first-run state. Return the registration hint as a
-    // normal text response so the agent surfaces it.
+    // remediation message. For status and list_repos specifically, the
+    // "no repos" state is NOT an error — it's the expected first-run
+    // state. Return the registration hint as a normal text response so
+    // the agent surfaces it.
     if (
-      (name === "sverklo_status" || name === "sverklo_list_repos" || name === "get_indexing_status") &&
+      (name === "status" || name === "list_repos" || name === "get_indexing_status") &&
       Object.keys(getRegistry()).length === 0
     ) {
       void track("tool.call", { tool: name, outcome: "ok", duration_ms: 0 });
@@ -897,7 +1007,7 @@ export async function startGlobalMcpServer(): Promise<void> {
         "# or from anywhere\n" +
         `sverklo register ${cwd}\n` +
         "```\n\n" +
-        "Then call `sverklo_status` again to see the index. " +
+        "Then call `status` again to see the index. " +
         "The MCP server picks up new registrations without a restart.";
       return { content: [{ type: "text" as const, text: hintText }] };
     }
@@ -907,7 +1017,7 @@ export async function startGlobalMcpServer(): Promise<void> {
 
       // Wait for index on search-like operations
       const skipWait =
-        name === "sverklo_status" ||
+        name === "status" ||
         name === "get_indexing_status" ||
         name === "clear_index" ||
         name === "index_codebase";
@@ -918,112 +1028,112 @@ export async function startGlobalMcpServer(): Promise<void> {
       let result: string;
 
       switch (name) {
-        case "sverklo_context":
+        case "context":
           result = await handleContext(indexer, args || {});
           break;
-        case "sverklo_search":
+        case "search":
           result = await handleSearch(indexer, args || {});
           break;
-        case "sverklo_overview":
+        case "overview":
           result = handleOverview(indexer, args || {});
           break;
-        case "sverklo_lookup":
+        case "lookup":
           result = await handleLookup(indexer, args || {});
           break;
-        case "sverklo_refs":
+        case "refs":
           result = await handleFindReferences(indexer, args || {});
           break;
-        case "sverklo_deps":
+        case "deps":
           result = handleDependencies(indexer, args || {});
           break;
-        case "sverklo_status":
+        case "status":
           result = handleIndexStatus(indexer);
           break;
-        case "sverklo_remember":
+        case "remember":
           result = await handleRemember(indexer, args || {});
           break;
-        case "sverklo_recall":
+        case "recall":
           result = await handleRecall(indexer, args || {});
           break;
-        case "sverklo_forget":
+        case "forget":
           result = handleForget(indexer, args || {});
           break;
-        case "sverklo_memories":
+        case "memories":
           result = handleMemories(indexer, args || {});
           break;
-        case "sverklo_ast_grep":
+        case "ast_grep":
           result = handleAstGrep(indexer, args || {});
           break;
-        case "sverklo_impact":
+        case "impact":
           result = handleImpact(indexer, args || {});
           break;
-        case "sverklo_audit":
+        case "audit":
           result = handleAudit(indexer, args || {});
           break;
-        case "sverklo_wakeup":
+        case "wakeup":
           result = handleWakeup(indexer, args || {});
           break;
-        case "sverklo_review_diff":
+        case "review_diff":
           result = handleReviewDiff(indexer, args || {});
           break;
-        case "sverklo_diff_search":
+        case "diff_search":
           result = await handleDiffSearch(indexer, args || {});
           break;
-        case "sverklo_test_map":
+        case "test_map":
           result = handleTestMap(indexer, args || {});
           break;
-        case "sverklo_promote":
+        case "promote":
           result = handlePromote(indexer, args || {});
           break;
-        case "sverklo_demote":
+        case "demote":
           result = handleDemote(indexer, args || {});
           break;
-        case "sverklo_clusters":
+        case "clusters":
           result = handleClusters(indexer, args || {});
           break;
-        case "sverklo_pin":
+        case "pin":
           result = handlePin(indexer, args || {});
           break;
-        case "sverklo_unpin":
+        case "unpin":
           result = handleUnpin(indexer, args || {});
           break;
-        case "sverklo_investigate":
+        case "investigate":
           result = await handleInvestigate(indexer, args || {});
           break;
-        case "sverklo_search_iterative":
+        case "search_iterative":
           result = await handleSearchIterative(indexer, args || {});
           break;
-        case "sverklo_ask":
+        case "ask":
           result = await handleAsk(indexer, args || {});
           break;
-        case "sverklo_verify":
+        case "verify":
           result = handleVerify(indexer, args || {});
           break;
-        case "sverklo_critique":
+        case "critique":
           result = handleCritique(indexer, args || {});
           break;
-        case "sverklo_concepts":
+        case "concepts":
           result = await handleConcepts(indexer, args || {});
           break;
-        case "sverklo_patterns":
+        case "patterns":
           result = handlePatterns(indexer, args || {});
           break;
-        case "sverklo_grep_results":
+        case "grep_results":
           result = handleGrepResults(args || {});
           break;
-        case "sverklo_head_results":
+        case "head_results":
           result = handleHeadResults(args || {});
           break;
-        case "sverklo_ctx_peek":
+        case "ctx_peek":
           result = handleCtxPeek(args || {});
           break;
-        case "sverklo_ctx_slice":
+        case "ctx_slice":
           result = handleCtxSlice(indexer, args || {});
           break;
-        case "sverklo_ctx_grep":
+        case "ctx_grep":
           result = handleCtxGrep(indexer, args || {});
           break;
-        case "sverklo_ctx_stats":
+        case "ctx_stats":
           result = handleCtxStats(indexer, args || {});
           break;
 
@@ -1094,16 +1204,16 @@ export async function startGlobalMcpServer(): Promise<void> {
       }
 
       if (
-        name === "sverklo_search" ||
-        name === "sverklo_refs" ||
-        name === "sverklo_lookup" ||
-        name === "sverklo_impact" ||
-        name === "sverklo_diff_search" ||
-        name === "sverklo_ast_grep" ||
-        name === "sverklo_investigate" ||
-        name === "sverklo_search_iterative" ||
-        name === "sverklo_context" ||
-        name === "sverklo_ask"
+        name === "search" ||
+        name === "refs" ||
+        name === "lookup" ||
+        name === "impact" ||
+        name === "diff_search" ||
+        name === "ast_grep" ||
+        name === "investigate" ||
+        name === "search_iterative" ||
+        name === "context" ||
+        name === "ask"
       ) {
         const id = responseStore.set(name, result);
         // Persistent handle (P1-8) — survives across MCP sessions.
@@ -1113,7 +1223,7 @@ export async function startGlobalMcpServer(): Promise<void> {
         result = result + `\n\n_response_id: ${id} · handle: ${uri}_`;
       }
 
-      if (name.startsWith("sverklo_")) {
+      if (!isCompatAlias(name)) {
         const dur = Date.now() - __telemetryStart;
         // Bucketed response size — lets us answer "did flipping `compact`
         // default actually save tokens?" without recording any content.
@@ -1149,7 +1259,7 @@ export async function startGlobalMcpServer(): Promise<void> {
         "tool.error",
         { tool: name, error: err instanceof Error ? err.message : String(err) }
       );
-      if (name.startsWith("sverklo_")) {
+      if (!isCompatAlias(name)) {
         void track("tool.call", {
           tool: name,
           outcome: "error",

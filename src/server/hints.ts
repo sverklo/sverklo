@@ -50,40 +50,31 @@ export class HintEngine {
       names.some((n) => patterns.includes(n));
 
     // Diff workflow: any of the diff-aware tools were used recently
-    if (
-      hasAny("sverklo_review_diff", "sverklo_test_map", "sverklo_diff_search")
-    ) {
+    if (hasAny("review_diff", "test_map", "diff_search")) {
       return "reviewing-diff";
     }
 
     // Impact tracing: chained refs/impact lookups
     if (
-      last === "sverklo_impact" ||
-      last === "sverklo_refs" ||
-      (names.filter((n) => n === "sverklo_refs" || n === "sverklo_impact").length >= 2)
+      last === "impact" ||
+      last === "refs" ||
+      names.filter((n) => n === "refs" || n === "impact").length >= 2
     ) {
       return "tracing-impact";
     }
 
     // Memory curation: remember/recall/forget activity
-    if (
-      hasAny("sverklo_remember", "sverklo_forget", "sverklo_promote", "sverklo_demote")
-    ) {
+    if (hasAny("remember", "forget", "promote", "demote")) {
       return "memory-curating";
     }
 
     // Onboarding: overview followed by lookups/searches without a target
-    if (
-      names.includes("sverklo_overview") &&
-      names.length <= 4
-    ) {
+    if (names.includes("overview") && names.length <= 4) {
       return "onboarding";
     }
 
     // Debugging: search-heavy with error-shaped queries
-    const recentSearches = this.history.filter(
-      (c) => c.name === "sverklo_search"
-    );
+    const recentSearches = this.history.filter((c) => c.name === "search");
     if (recentSearches.length >= 2) {
       const queries = recentSearches
         .map((c) => String(c.args?.query ?? "").toLowerCase())
@@ -96,7 +87,7 @@ export class HintEngine {
       return "exploring";
     }
 
-    if (last === "sverklo_search" || last === "sverklo_lookup") {
+    if (last === "search" || last === "lookup") {
       return "exploring";
     }
 
@@ -128,81 +119,81 @@ export class HintEngine {
     const out: string[] = [];
 
     switch (tool) {
-      case "sverklo_review_diff": {
+      case "review_diff": {
         const ref = (args.ref as string) || "main..HEAD";
-        out.push(`Run \`sverklo_test_map ref:"${ref}"\` to see which changes lack tests.`);
-        out.push(`For any removed symbol with dangling refs, call \`sverklo_impact symbol:"<name>"\`.`);
+        out.push(`Run \`test_map ref:"${ref}"\` to see which changes lack tests.`);
+        out.push(`For any removed symbol with dangling refs, call \`impact symbol:"<name>"\`.`);
         break;
       }
-      case "sverklo_test_map": {
+      case "test_map": {
         const ref = (args.ref as string) || "main..HEAD";
-        if (!this.history.some((c) => c.name === "sverklo_review_diff")) {
-          out.push(`Pair this with \`sverklo_review_diff ref:"${ref}"\` for blast radius and risk scores.`);
+        if (!this.history.some((c) => c.name === "review_diff")) {
+          out.push(`Pair this with \`review_diff ref:"${ref}"\` for blast radius and risk scores.`);
         }
         out.push(`Untested high-risk files are the ones to push back on in review.`);
         break;
       }
-      case "sverklo_impact":
-      case "sverklo_refs": {
+      case "impact":
+      case "refs": {
         const sym = (args.symbol as string) || (args.name as string) || "<name>";
-        out.push(`Call \`sverklo_lookup symbol:"${sym}"\` to see the definition you're tracing.`);
+        out.push(`Call \`lookup symbol:"${sym}"\` to see the definition you're tracing.`);
         if (intent === "reviewing-diff") {
           out.push(`Each caller listed needs to be updated in the same diff if you removed the symbol.`);
         }
         break;
       }
-      case "sverklo_search": {
+      case "search": {
         if (intent === "debugging") {
-          out.push(`Narrow with \`sverklo_lookup\` if the search surfaced a likely target symbol.`);
-          out.push(`Call \`sverklo_recall query:"<error>"\` — there may be a saved memory about this issue.`);
+          out.push(`Narrow with \`lookup\` if the search surfaced a likely target symbol.`);
+          out.push(`Call \`recall query:"<error>"\` — there may be a saved memory about this issue.`);
         } else if (intent === "exploring") {
-          out.push(`If a symbol stands out, \`sverklo_refs symbol:"<name>"\` shows everything that uses it.`);
+          out.push(`If a symbol stands out, \`refs symbol:"<name>"\` shows everything that uses it.`);
         }
         break;
       }
-      case "sverklo_lookup": {
+      case "lookup": {
         const name = (args.name as string) || "<name>";
-        out.push(`\`sverklo_refs symbol:"${name}"\` enumerates everything that calls this.`);
-        out.push(`\`sverklo_deps file:"<file>"\` shows what the containing file imports.`);
+        out.push(`\`refs symbol:"${name}"\` enumerates everything that calls this.`);
+        out.push(`\`deps file:"<file>"\` shows what the containing file imports.`);
         break;
       }
-      case "sverklo_overview": {
-        out.push(`Try \`sverklo_recall query:"architecture"\` for any saved design decisions.`);
-        out.push(`Call \`sverklo_deps file:"<top-pagerank file>"\` on a high-PR file to see its centrality.`);
+      case "overview": {
+        out.push(`Try \`recall query:"architecture"\` for any saved design decisions.`);
+        out.push(`Call \`deps file:"<top-pagerank file>"\` on a high-PR file to see its centrality.`);
         break;
       }
-      case "sverklo_deps": {
-        out.push(`If a dependency looks suspicious, \`sverklo_search query:"<concept>"\` finds related code.`);
+      case "deps": {
+        out.push(`If a dependency looks suspicious, \`search query:"<concept>"\` finds related code.`);
         break;
       }
-      case "sverklo_recall": {
+      case "recall": {
         if (intent === "memory-curating") {
-          out.push(`Use \`sverklo_promote\` to mark a memory as core (always-loaded) context.`);
+          out.push(`Use \`promote\` to mark a memory as core (always-loaded) context.`);
         } else {
-          out.push(`If you act on a memory, \`sverklo_remember\` the outcome so the next session starts smarter.`);
+          out.push(`If you act on a memory, \`remember\` the outcome so the next session starts smarter.`);
         }
         break;
       }
-      case "sverklo_remember": {
-        out.push(`\`sverklo_promote id:<id>\` to make this a core memory loaded on every session.`);
+      case "remember": {
+        out.push(`\`promote id:<id>\` to make this a core memory loaded on every session.`);
         break;
       }
-      case "sverklo_context": {
+      case "context": {
         const task = (args.task as string) || "";
         const detail = (args.detail_level as string) || "normal";
         if (detail !== "full") {
           out.push(`If the bundle isn't enough, re-run with \`detail_level:"full"\` for dependency neighbours.`);
         }
-        out.push(`Drill into a specific symbol with \`sverklo_lookup\` or \`sverklo_refs\` from the relevant-code list.`);
+        out.push(`Drill into a specific symbol with \`lookup\` or \`refs\` from the relevant-code list.`);
         if (/bug|error|fail|broken/i.test(task)) {
-          out.push(`Looks like a debug task — \`sverklo_recall query:"${task.slice(0, 60)}"\` may surface a known issue.`);
+          out.push(`Looks like a debug task — \`recall query:"${task.slice(0, 60)}"\` may surface a known issue.`);
         }
         break;
       }
-      case "sverklo_diff_search": {
+      case "diff_search": {
         const ref = (args.ref as string) || "main..HEAD";
-        if (!this.history.some((c) => c.name === "sverklo_review_diff")) {
-          out.push(`Run \`sverklo_review_diff ref:"${ref}"\` first for the structural picture.`);
+        if (!this.history.some((c) => c.name === "review_diff")) {
+          out.push(`Run \`review_diff ref:"${ref}"\` first for the structural picture.`);
         }
         break;
       }

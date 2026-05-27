@@ -24,14 +24,14 @@ Follow the hybrid workflow — prefer sverklo tools where they're the sharpest i
 
 ## Phase 1 — Discovery (prefer sverklo)
 
-1. \`sverklo_overview\` — structural map of the codebase, ranked by importance. Identify hub files and large files first.
-2. \`sverklo_audit\` — one-call pass for god nodes, hub files, and dead-code candidates. Treat this as your seed list.
-3. \`sverklo_search\` — semantic queries for anti-patterns you can describe in English but not regex cleanly (e.g. "swallowed exceptions", "silent failure returning null", "unsafe narrowing cast").
+1. \`overview\` — structural map of the codebase, ranked by importance. Identify hub files and large files first.
+2. \`audit\` — one-call pass for god nodes, hub files, and dead-code candidates. Treat this as your seed list.
+3. \`search\` — semantic queries for anti-patterns you can describe in English but not regex cleanly (e.g. "swallowed exceptions", "silent failure returning null", "unsafe narrowing cast").
 
 ## Phase 2 — Verify dead code and usage (sverklo wins here)
 
-4. \`sverklo_refs <symbol>\` — prove a method, class, or constant really has zero callers before you delete it. Grep can't match this with certainty because it misses reflective/string-based calls that the symbol graph catches.
-5. \`sverklo_deps <file>\` — map the dependency fan-in of suspicious hub files.
+4. \`refs <symbol>\` — prove a method, class, or constant really has zero callers before you delete it. Grep can't match this with certainty because it misses reflective/string-based calls that the symbol graph catches.
+5. \`deps <file>\` — map the dependency fan-in of suspicious hub files.
 
 ## Phase 3 — Exact patterns (built-in wins here)
 
@@ -51,7 +51,7 @@ Follow the hybrid workflow — prefer sverklo tools where they're the sharpest i
 
 - Every finding gets: file path, line numbers, severity, one-sentence fix.
 - Don't report style nits. Report things that would hurt in production.
-- If a finding relies on "this symbol is unused", verify with \`sverklo_refs\` before reporting it.
+- If a finding relies on "this symbol is unused", verify with \`refs\` before reporting it.
 - If a finding relies on "this pattern appears N times", verify with \`Grep\` count before reporting it.
 - Stop at 8–12 findings. More than that is noise.
 
@@ -65,13 +65,13 @@ Follow the hybrid workflow:
 ## Phase 1 — Understand the diff
 
 1. \`git diff <base>...HEAD --stat\` and \`git log --oneline <base>...HEAD\` — structural shape of the change.
-2. \`sverklo_review_diff\` — risk-scored review order. Read the highest-risk files first.
-3. \`sverklo_diff_search\` — semantic search scoped to the changed surface.
+2. \`review_diff\` — risk-scored review order. Read the highest-risk files first.
+3. \`diff_search\` — semantic search scoped to the changed surface.
 
 ## Phase 2 — Blast radius (sverklo wins here)
 
-4. For each modified symbol, \`sverklo_refs <symbol>\` and \`sverklo_impact <symbol>\` to see who depends on it. Flag silent behavior changes on high-fan-in symbols.
-5. \`sverklo_test_map\` — which tests cover the changed symbols? Flag modified production code with no test changes.
+4. For each modified symbol, \`refs <symbol>\` and \`impact <symbol>\` to see who depends on it. Flag silent behavior changes on high-fan-in symbols.
+5. \`test_map\` — which tests cover the changed symbols? Flag modified production code with no test changes.
 
 ## Phase 3 — Read the changed files line by line (built-in wins here)
 

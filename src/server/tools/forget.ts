@@ -1,13 +1,13 @@
 import type { IndexMemory } from "../../indexer/index-memory.js";
 
 export const forgetTool = {
-  name: "sverklo_forget",
+  name: "forget",
   description:
     "Permanently delete a memory after recall returned a stale or wrong entry. " +
-    "Prefer sverklo_remember (with the new content) over forget+remember when " +
+    "Prefer remember (with the new content) over forget+remember when " +
     "superseding a decision — supersession preserves the audit trail via " +
     "valid_until_sha + superseded_by; forget loses it. Get IDs from " +
-    "sverklo_recall or sverklo_memories.",
+    "recall or memories.",
   inputSchema: {
     type: "object" as const,
     properties: {

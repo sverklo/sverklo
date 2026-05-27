@@ -55,8 +55,10 @@ describe("CLI: sverklo init --global (#72)", () => {
     const codexGlobal = join(tmpHome, ".codex", "AGENTS.md");
     expect(existsSync(claudeGlobal)).toBe(true);
     expect(existsSync(codexGlobal)).toBe(true);
-    expect(readFileSync(claudeGlobal, "utf-8")).toContain("sverklo_search");
-    expect(readFileSync(codexGlobal, "utf-8")).toContain("sverklo_search");
+    // v0.28.0: snippet was renamed; check for the heading marker instead
+    // of the legacy `sverklo_search` literal.
+    expect(readFileSync(claudeGlobal, "utf-8")).toMatch(/^##\s+Sverklo\b/m);
+    expect(readFileSync(codexGlobal, "utf-8")).toMatch(/^##\s+Sverklo\b/m);
   });
 
   it("registers the project in the global registry", () => {

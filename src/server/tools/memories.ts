@@ -2,7 +2,7 @@ import type { IndexMemory } from "../../indexer/index-memory.js";
 import type { Memory, MemoryCategory } from "../../types/index.js";
 
 export const memoriesTool = {
-  name: "sverklo_memories",
+  name: "memories",
   description:
     "List all memories for the current project, or surface conflict candidates. " +
     "Default mode shows memory health (staleness, confidence, access frequency). " +
@@ -93,8 +93,8 @@ function formatConflicts(indexer: IndexMemory, limit: number): string {
     "",
     "_These are pairs of active memories that share at least one pin and live in a category " +
       "where contradiction is meaningful (decision / preference / pattern). The bi-temporal model " +
-      "preserves both — the agent or human picks which to invalidate via `sverklo_forget` or " +
-      "supersede via a fresh `sverklo_remember` call._",
+      "preserves both — the agent or human picks which to invalidate via `forget` or " +
+      "supersede via a fresh `remember` call._",
     "",
   ];
 

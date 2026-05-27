@@ -2,7 +2,7 @@ import type { IndexMemory } from "../../indexer/index-memory.js";
 import { cosineSimilarity } from "../../indexer/embedder.js";
 
 export const conceptsTool = {
-  name: "sverklo_concepts",
+  name: "concepts",
   description:
     "Semantic search over LLM-labeled subsystem concepts. Returns the clusters " +
     "whose label/summary best matches the query, along with each cluster's hub file. " +
@@ -31,7 +31,7 @@ export async function handleConcepts(
 ): Promise<string> {
   const query = args.query;
   if (typeof query !== "string" || query.trim() === "") {
-    return "sverklo_concepts requires a non-empty `query` string.";
+    return "concepts requires a non-empty `query` string.";
   }
   const limit = typeof args.limit === "number" ? args.limit : 5;
 
@@ -44,13 +44,13 @@ export async function handleConcepts(
       "install with a chat-capable model (default: qwen2.5-coder:7b). If you don't have",
       "Ollama yet: https://ollama.com — then `ollama pull qwen2.5-coder:7b`.",
       "",
-      "Until then, use `sverklo_clusters` for the raw, unlabeled cluster list.",
+      "Until then, use `clusters` for the raw, unlabeled cluster list.",
     ].join("\n");
   }
 
   const [qVec] = await indexer.embed([query]);
   if (!qVec) {
-    return "Embedding the query failed. Retry, or fall back to sverklo_search.";
+    return "Embedding the query failed. Retry, or fall back to search.";
   }
 
   const embeddings = indexer.conceptStore.getAllEmbeddings();
@@ -70,7 +70,7 @@ export async function handleConcepts(
       `No concept scored above 0.15 cosine similarity. Top candidate: ${top[0]?.score.toFixed(3) ?? "n/a"}.`
     );
     parts.push(
-      "Try a broader phrasing, or use `sverklo_investigate` — it fans out across multiple retrievers."
+      "Try a broader phrasing, or use `investigate` — it fans out across multiple retrievers."
     );
     return parts.join("\n");
   }
@@ -85,6 +85,6 @@ export async function handleConcepts(
     parts.push("");
   }
 
-  parts.push("_Use `sverklo_lookup` or `sverklo_refs` on the hub file's exported symbols to drill in._");
+  parts.push("_Use `lookup` or `refs` on the hub file's exported symbols to drill in._");
   return parts.join("\n");
 }

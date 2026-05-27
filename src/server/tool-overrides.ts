@@ -57,79 +57,83 @@ let cache: OverrideCache | null = null;
 // Pre-defined profiles. Names match Token Savior's convention.
 // `full` is the implicit default and intentionally absent — when no
 // profile is set we don't filter.
+//
+// v0.28.0: profile entries use canonical (short) tool names. The legacy
+// `sverklo_*` names are also accepted in SVERKLO_DISABLED_TOOLS (we strip
+// the prefix when matching), so users with cached config keep working.
 export const PROFILES: Record<string, string[]> = {
   core: [
     // The 6 tools an agent actually reaches for in 80% of code-intel sessions.
-    // sverklo_status is included so `sverklo doctor`'s tools/call probe and
+    // `status` is included so `sverklo doctor`'s tools/call probe and
     // first-session "is this alive?" checks work without re-flagging the
     // profile. Cost: +1 tool above the original 5; well below Claude Code's
     // tool-choke threshold (~12+).
-    "sverklo_status",
-    "sverklo_search",
-    "sverklo_lookup",
-    "sverklo_overview",
-    "sverklo_refs",
-    "sverklo_impact",
+    "status",
+    "search",
+    "lookup",
+    "overview",
+    "refs",
+    "impact",
   ],
   nav: [
-    "sverklo_search",
-    "sverklo_lookup",
-    "sverklo_overview",
-    "sverklo_refs",
-    "sverklo_impact",
-    "sverklo_deps",
-    "sverklo_context",
-    "sverklo_status",
+    "search",
+    "lookup",
+    "overview",
+    "refs",
+    "impact",
+    "deps",
+    "context",
+    "status",
   ],
   lean: [
-    "sverklo_search",
-    "sverklo_lookup",
-    "sverklo_overview",
-    "sverklo_refs",
-    "sverklo_impact",
-    "sverklo_deps",
-    "sverklo_context",
-    "sverklo_status",
-    "sverklo_remember",
-    "sverklo_recall",
-    "sverklo_review_diff",
+    "search",
+    "lookup",
+    "overview",
+    "refs",
+    "impact",
+    "deps",
+    "context",
+    "status",
+    "remember",
+    "recall",
+    "review_diff",
   ],
   // For agents doing open-ended code research / onboarding. Skips memory,
   // diff/review, audit — keeps the multi-signal investigation surface plus
   // ctx-handle ops for iterative refinement.
   research: [
-    "sverklo_search",
-    "sverklo_search_iterative",
-    "sverklo_investigate",
-    "sverklo_ask",
-    "sverklo_lookup",
-    "sverklo_overview",
-    "sverklo_refs",
-    "sverklo_impact",
-    "sverklo_deps",
-    "sverklo_concepts",
-    "sverklo_patterns",
-    "sverklo_clusters",
-    "sverklo_verify",
-    "sverklo_critique",
-    "sverklo_ctx_slice",
-    "sverklo_ctx_grep",
-    "sverklo_ctx_stats",
-    "sverklo_status",
+    "search",
+    "search_iterative",
+    "investigate",
+    "ask",
+    "lookup",
+    "overview",
+    "refs",
+    "impact",
+    "deps",
+    "concepts",
+    "patterns",
+    "clusters",
+    "verify",
+    "critique",
+    "ctx_slice",
+    "ctx_grep",
+    "ctx_stats",
+    "status",
   ],
   // PR/MR review focus — diff tools front-and-center, plus the impact/refs
   // graph to validate refactor safety.
   review: [
-    "sverklo_review_diff",
-    "sverklo_diff_search",
-    "sverklo_test_map",
-    "sverklo_impact",
-    "sverklo_refs",
-    "sverklo_lookup",
-    "sverklo_search",
-    "sverklo_investigate",
-    "sverklo_verify",
-    "sverklo_status",
+    "review_diff",
+    "diff_search",
+    "test_map",
+    "impact",
+    "refs",
+    "lookup",
+    "search",
+    "investigate",
+    "verify",
+    "status",
   ],
 };
 
@@ -141,6 +145,13 @@ function normalizeEnvSuffix(name: string): string {
   return stripped.toUpperCase();
 }
 
+// v0.28.0: tools advertise canonical (short) names but users may still have
+// SVERKLO_DISABLED_TOOLS=sverklo_forget,sverklo_recall in their config. Strip
+// the legacy prefix so both forms work during the deprecation window.
+function canonicalize(name: string): string {
+  return name.startsWith("sverklo_") ? name.slice("sverklo_".length) : name;
+}
+
 function buildCache(): OverrideCache {
   const disabled = new Set<string>();
   const descriptions = new Map<string, string>();
@@ -149,7 +160,7 @@ function buildCache(): OverrideCache {
   if (disabledList) {
     for (const raw of disabledList.split(",")) {
       const name = raw.trim();
-      if (name) disabled.add(name);
+      if (name) disabled.add(canonicalize(name));
     }
   }
 
@@ -232,7 +243,9 @@ export function __resetToolOverrideCache(): void {
  */
 export function isToolEnabled(name: string): boolean {
   const { disabled, profile } = getCache();
-  if (disabled.has(name)) return false;
-  if (profile && !profile.has(name)) return false;
+  // v0.28.0: callers may still pass legacy `sverklo_*` names. Canonicalize.
+  const canonical = canonicalize(name);
+  if (disabled.has(canonical)) return false;
+  if (profile && !profile.has(canonical)) return false;
   return true;
 }

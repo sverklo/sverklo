@@ -93,7 +93,7 @@ function isBinaryStale(): boolean {
 }
 
 export const indexStatusTool = {
-  name: "sverklo_status",
+  name: "status",
   description:
     "Project state + tool usage guide. Returns index health (files, chunks, languages), " +
     "memory summary, and specific tool recommendations tailored to this codebase. Call this " +
@@ -191,7 +191,7 @@ export function handleIndexStatus(indexer: Indexer): string {
     parts.push(`## Memory`);
     parts.push(`- ${memCount} active memories (${coreMemories.length} core, ${memCount - coreMemories.length} archive)`);
     if (staleMemories.length > 0) {
-      parts.push(`- ⚠️ ${staleMemories.length} stale memories (run \`sverklo_memories stale_only:true\` to review)`);
+      parts.push(`- ⚠️ ${staleMemories.length} stale memories (run \`memories stale_only:true\` to review)`);
     }
     parts.push("");
   }
@@ -203,39 +203,39 @@ export function handleIndexStatus(indexer: Indexer): string {
   const tips: string[] = [];
 
   // Issue #36 (HaleTom 2026-05-13): only recommend tools that are actually
-  // exposed in the current profile. The user reported sverklo_recall being
+  // exposed in the current profile. The user reported recall being
   // hinted while not loaded under SVERKLO_PROFILE=core — a confidence-
   // erosion bug because the agent then tries a non-existent tool.
   const has = isToolEnabled;
 
   if (status.fileCount === 0) {
-    tips.push("- Index is empty. Wait a moment for initial indexing, then call `sverklo_status` again.");
+    tips.push("- Index is empty. Wait a moment for initial indexing, then call `status` again.");
   } else {
-    if (has("sverklo_overview"))
-      tips.push("- **Starting work?** Call `sverklo_overview` to see the top files by PageRank");
-    if (has("sverklo_search"))
-      tips.push("- **Searching for code?** Use `sverklo_search \"natural language query\"` — preferred over Grep");
-    if (has("sverklo_impact"))
-      tips.push("- **Refactoring a function?** Call `sverklo_impact \"functionName\"` FIRST to see blast radius");
-    if (has("sverklo_deps"))
-      tips.push("- **Need to understand a file?** Call `sverklo_deps path:\"src/foo.ts\"` for its import graph");
+    if (has("overview"))
+      tips.push("- **Starting work?** Call `overview` to see the top files by PageRank");
+    if (has("search"))
+      tips.push("- **Searching for code?** Use `search \"natural language query\"` — preferred over Grep");
+    if (has("impact"))
+      tips.push("- **Refactoring a function?** Call `impact \"functionName\"` FIRST to see blast radius");
+    if (has("deps"))
+      tips.push("- **Need to understand a file?** Call `deps path:\"src/foo.ts\"` for its import graph");
   }
 
   if (memCount === 0) {
-    if (has("sverklo_remember")) {
-      tips.push("- **No memories yet.** Use `sverklo_remember` to save decisions, patterns, and preferences");
+    if (has("remember")) {
+      tips.push("- **No memories yet.** Use `remember` to save decisions, patterns, and preferences");
       tips.push("  Example: \"We chose Prisma over Drizzle for better TypeScript types\"");
     }
   } else {
-    if (has("sverklo_recall"))
-      tips.push("- **Check past decisions** with `sverklo_recall \"what did we decide about X\"` before re-inventing");
-    if (coreMemories.length === 0 && has("sverklo_promote")) {
-      tips.push("- No core memories yet. Promote important ones with `sverklo_promote id:<n>` — core memories auto-load each session");
+    if (has("recall"))
+      tips.push("- **Check past decisions** with `recall \"what did we decide about X\"` before re-inventing");
+    if (coreMemories.length === 0 && has("promote")) {
+      tips.push("- No core memories yet. Promote important ones with `promote id:<n>` — core memories auto-load each session");
     }
   }
 
-  if (status.fileCount > 20 && has("sverklo_audit")) {
-    tips.push("- **Curious about the whole project?** Run `sverklo_audit` for god nodes, hub files, and dead code candidates");
+  if (status.fileCount > 20 && has("audit")) {
+    tips.push("- **Curious about the whole project?** Run `audit` for god nodes, hub files, and dead code candidates");
   }
 
   // Inform the user when running on a slim profile so they know WHY
@@ -257,7 +257,7 @@ export function handleIndexStatus(indexer: Indexer): string {
       parts.push(`- [${m.category}] ${m.content}`);
     }
     if (coreMemories.length > 5) {
-      parts.push(`  _...and ${coreMemories.length - 5} more. See all with \`sverklo_memories\`_`);
+      parts.push(`  _...and ${coreMemories.length - 5} more. See all with \`memories\`_`);
     }
     parts.push("");
   }

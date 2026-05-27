@@ -3,14 +3,14 @@ import { runInvestigate, formatInvestigate } from "../../search/investigate.js";
 import { emitForHits } from "../../memory/evidence-emit.js";
 
 export const investigateTool = {
-  name: "sverklo_investigate",
+  name: "investigate",
   description:
     "Single-call research primitive: fans out to BM25, embeddings, symbol lookup, and " +
     "reference-expansion in parallel; RRF-fuses the candidates; returns one ranked bundle " +
     "with per-hit provenance (which retriever(s) found it). Cheaper than running " +
-    "sverklo_search + sverklo_refs + sverklo_lookup back-to-back. WORKS WELL for open-ended " +
+    "search + refs + lookup back-to-back. WORKS WELL for open-ended " +
     "questions where you don't yet know whether the answer lives in code, callers, or " +
-    "documentation — the `found_by` tags tell you which signal agreed. Use sverklo_search " +
+    "documentation — the `found_by` tags tell you which signal agreed. Use search " +
     "instead when you already know you want pure text/semantic retrieval.",
   inputSchema: {
     type: "object" as const,
@@ -22,7 +22,7 @@ export const investigateTool = {
       repo: {
         type: "string",
         description:
-          "Optional: name of a registered repo to investigate (see sverklo_list_repos). " +
+          "Optional: name of a registered repo to investigate (see list_repos). " +
           "Defaults to the current workspace. Use this to investigate a sibling project " +
           "that has been sverklo-init'd but isn't the current cwd.",
       },
@@ -58,7 +58,7 @@ export async function handleInvestigate(
 ): Promise<string> {
   const query = args.query as string;
   if (!query || typeof query !== "string") {
-    return "sverklo_investigate requires a `query` string.";
+    return "investigate requires a `query` string.";
   }
   const scope = args.scope as string | undefined;
   const budget = typeof args.budget === "number" ? args.budget : undefined;

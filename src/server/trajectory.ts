@@ -1,10 +1,10 @@
 // P2-18: tool-call trajectory ring buffer.
 //
-// Every dispatched sverklo_* call appends a {tool, args_summary, ts}
-// record into a per-process ring buffer. When sverklo_remember runs, it
-// pulls the recent trajectory and stores it as JSON on the memory row,
-// so future readers can ask "why did we decide this?" and get the
-// concrete sequence of retrievals that led to the decision.
+// Every dispatched first-party tool call appends a {tool, args_summary, ts}
+// record into a per-process ring buffer. When `remember` runs, it pulls the
+// recent trajectory and stores it as JSON on the memory row, so future
+// readers can ask "why did we decide this?" and get the concrete sequence
+// of retrievals that led to the decision.
 //
 // Buffer cap is intentionally small (16 entries) — a memory's
 // provenance is the immediate context, not the whole session.
@@ -18,12 +18,25 @@ export interface TrajectoryEntry {
 
 const MAX_ENTRIES = 16;
 
+// Zilliz claude-context compat names — recorded by their underlying handler
+// already, no point double-recording. Kept here so trajectory has no cyclic
+// import on mcp-server.
+const COMPAT_ALIAS_NAMES = new Set<string>([
+  "index_codebase",
+  "search_code",
+  "clear_index",
+  "get_indexing_status",
+]);
+
 class TrajectoryBuffer {
   private entries: TrajectoryEntry[] = [];
 
   record(tool: string, args: Record<string, unknown>, duration_ms: number): void {
-    if (!tool.startsWith("sverklo_")) return;
-    if (tool === "sverklo_remember") return; // don't record the consumer
+    // v0.28.0: tools no longer carry a `sverklo_` prefix. Skip Zilliz
+    // compat aliases (they're already counted via the underlying handler)
+    // and the `remember` consumer (don't record into our own provenance).
+    if (COMPAT_ALIAS_NAMES.has(tool)) return;
+    if (tool === "remember") return;
     this.entries.push({
       tool,
       args_summary: summariseArgs(args),

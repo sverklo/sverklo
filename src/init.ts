@@ -20,23 +20,23 @@ This project has the sverklo MCP server installed. Sverklo is a code-intelligenc
 
 ### Always Do
 
-- **MUST call \`sverklo_overview\` before exploring an unfamiliar directory.** It returns the PageRank-ranked map of the codebase in one call — much cheaper than \`ls\` + \`Read\` loops.
-- **MUST use \`sverklo_search\` instead of Grep for any query that is conceptual or fuzzy** ("how does auth work", "anything related to billing", "where do we handle retries"). Grep is for exact strings only.
-- **MUST use \`sverklo_lookup\` to find a symbol's definition** by name — never grep + Read for this.
-- **MUST run \`sverklo_impact\` before renaming, deleting, or changing the signature of any function/class/method** that may be called from elsewhere. Report the blast radius (callers, depth) to the user before editing.
-- **MUST use \`sverklo_refs\` to enumerate callers of a symbol.**
-- **MUST use \`sverklo_deps\` to see imports + importers of a file** before moving or splitting it.
-- **MUST call \`sverklo_remember\` when the user corrects you** with phrasing like "stop X", "never X", "always Y", "don't Y", "prefer Z", "remember that I want Q", "actually, do W". Save with \`category:correction\` (stop/never/don't) or \`category:preference\` (prefer/want/like), \`kind:semantic\`, and the user's instruction as content. Save before continuing the response. Do not ask permission — corrections are explicit instructions to persist behavior across sessions.
-- **MUST call \`sverklo_recall\` at the start of work** on a non-trivial task to surface prior decisions and corrections.
+- **MUST call \`overview\` before exploring an unfamiliar directory.** It returns the PageRank-ranked map of the codebase in one call — much cheaper than \`ls\` + \`Read\` loops.
+- **MUST use \`search\` instead of Grep for any query that is conceptual or fuzzy** ("how does auth work", "anything related to billing", "where do we handle retries"). Grep is for exact strings only.
+- **MUST use \`lookup\` to find a symbol's definition** by name — never grep + Read for this.
+- **MUST run \`impact\` before renaming, deleting, or changing the signature of any function/class/method** that may be called from elsewhere. Report the blast radius (callers, depth) to the user before editing.
+- **MUST use \`refs\` to enumerate callers of a symbol.**
+- **MUST use \`deps\` to see imports + importers of a file** before moving or splitting it.
+- **MUST call \`remember\` when the user corrects you** with phrasing like "stop X", "never X", "always Y", "don't Y", "prefer Z", "remember that I want Q", "actually, do W". Save with \`category:correction\` (stop/never/don't) or \`category:preference\` (prefer/want/like), \`kind:semantic\`, and the user's instruction as content. Save before continuing the response. Do not ask permission — corrections are explicit instructions to persist behavior across sessions.
+- **MUST call \`recall\` at the start of work** on a non-trivial task to surface prior decisions and corrections.
 
 ### Never Do
 
-- **NEVER use Grep when the query is conceptual.** Grep cannot find "the auth flow" — sverklo_search can.
-- **NEVER edit a function or class without first running \`sverklo_impact\`** on it. Silently breaking a caller is the most expensive bug this codebase produces.
+- **NEVER use Grep when the query is conceptual.** Grep cannot find "the auth flow" — sverklo's \`search\` can.
+- **NEVER edit a function or class without first running \`impact\`** on it. Silently breaking a caller is the most expensive bug this codebase produces.
 - **NEVER ignore HIGH or CRITICAL impact warnings** without surfacing them to the user.
-- **NEVER rename symbols with find-and-replace.** Use \`sverklo_refs\` first; it knows which "foo" is the function and which is a string.
-- **NEVER save routine task summaries to memory.** \`sverklo_recall\` is only useful when hits are signal-dense — save only (a) bugs that took >1h to debug, (b) recurring mistakes, (c) non-obvious architectural decisions, (d) audit findings needing user judgment.
-- **NEVER re-read a file sverklo just returned a path for.** Use \`sverklo_lookup\` for the specific symbol instead.
+- **NEVER rename symbols with find-and-replace.** Use \`refs\` first; it knows which "foo" is the function and which is a string.
+- **NEVER save routine task summaries to memory.** \`recall\` is only useful when hits are signal-dense — save only (a) bugs that took >1h to debug, (b) recurring mistakes, (c) non-obvious architectural decisions, (d) audit findings needing user judgment.
+- **NEVER re-read a file sverklo just returned a path for.** Use \`lookup\` for the specific symbol instead.
 
 ### When Grep / Read still wins
 
@@ -48,7 +48,7 @@ This project has the sverklo MCP server installed. Sverklo is a code-intelligenc
 
 ### Exploration order
 
-\`sverklo_overview\` (1 call) → \`sverklo_search\` (1 call) → \`sverklo_lookup\` on the top hit → \`sverklo_refs\` / \`sverklo_impact\` only if you need the blast radius. If you've made 5 sverklo calls and still don't have the answer, **stop and ask a clarifying question** — don't burn 10 more.
+\`overview\` (1 call) → \`search\` (1 call) → \`lookup\` on the top hit → \`refs\` / \`impact\` only if you need the blast radius. If you've made 5 sverklo calls and still don't have the answer, **stop and ask a clarifying question** — don't burn 10 more.
 
 ### Output discipline
 
@@ -100,10 +100,15 @@ export type AgentsFileAction =
 
 /**
  * Secondary sentinel for Finding 7: detects the snippet's heading even
- * when the user hand-edited the body and removed the literal
- * "sverklo_search" sentinel. Without this, re-running `sverklo init`
- * would re-append the entire 30+ line snippet on top of the existing
- * (modified) one.
+ * when the user hand-edited the body and removed the literal sentinel.
+ *
+ * v0.28.0 (issue #71): the canonical tool names dropped the `sverklo_`
+ * prefix, so the new SVERKLO_SNIPPET body does not contain
+ * "sverklo_search" any more. The literal-sentinel string passed in below
+ * is kept as "sverklo_search" to detect PRE-v0.28 snippets that users
+ * already have in their AGENTS.md / CLAUDE.md — those still need to
+ * count as "snippet already present" so we don't double-inject. For
+ * fresh installs the heading regex is what catches the new snippet.
  */
 const HEADING_SENTINEL_RE = /^##\s+Sverklo\b/m;
 
@@ -364,7 +369,7 @@ function resolveSverkloBinary(): string {
 
 function buildAutoCaptureHook() {
   // PostToolUse hook — nudge Claude to capture decisions after Edit/Write tool calls.
-  // The hook output is visible to Claude, who decides whether to call sverklo_remember.
+  // The hook output is visible to Claude, who decides whether to call the `remember` tool.
   // Cheap, non-blocking, model-driven (no heuristic false positives).
   return {
     matcher: "Edit|Write|NotebookEdit",
@@ -372,7 +377,7 @@ function buildAutoCaptureHook() {
       {
         type: "command",
         command:
-          "echo 'If this edit represents a design decision, architectural choice, or pattern worth remembering, call sverklo_remember to save it. Skip if it is a routine fix.'",
+          "echo 'If this edit represents a design decision, architectural choice, or pattern worth remembering, call sverklo `remember` to save it. Skip if it is a routine fix.'",
         timeout: 3,
       },
     ],
@@ -691,8 +696,16 @@ export async function initProject(
     if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
 
     const existingPost = settings.hooks.PostToolUse as Array<{ hooks?: Array<{ command?: string }> }>;
+    // v0.28.0: the buildAutoCaptureHook command was rewritten to refer to
+    // `remember` instead of `sverklo_remember`. Detect either form so the
+    // hook stays idempotent across the rename: old installs continue to
+    // match the legacy literal; new installs match the marker phrase.
     const alreadyHasAutoCapture = existingPost.some((h) =>
-      h.hooks?.some((hook) => hook.command?.includes("sverklo_remember"))
+      h.hooks?.some(
+        (hook) =>
+          hook.command?.includes("sverklo_remember") ||
+          hook.command?.includes("call sverklo `remember`")
+      )
     );
 
     if (!alreadyHasAutoCapture) {

@@ -4,11 +4,11 @@ import { resolve as resolvePath, sep } from "node:path";
 import type { IndexFiles } from "../../indexer/index-files.js";
 
 export const astGrepTool = {
-  name: "sverklo_ast_grep",
+  name: "ast_grep",
   description:
     "Find code by AST shape, not text — e.g. 'every console.log($X)', " +
     "'every catch (e) { return null }'. Requires ast-grep on PATH. Pick this " +
-    "over sverklo_search when you need exact structural matches (consistent " +
+    "over search when you need exact structural matches (consistent " +
     "transformations, lint-style queries) and over Grep when you need to " +
     "ignore identifier names or whitespace. Falls back to a clear error if " +
     "ast-grep is missing.",

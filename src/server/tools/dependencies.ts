@@ -3,7 +3,7 @@ import type { FileRecord } from "../../types/index.js";
 import { resolveBudget } from "../../utils/budget.js";
 
 export const dependenciesTool = {
-  name: "sverklo_deps",
+  name: "deps",
   description:
     "Show what a file imports/depends on and what depends on it. Helps understand the impact of changing a file.",
   inputSchema: {
@@ -48,8 +48,8 @@ export function handleDependencies(
 
   // Lenient path lookup: accept verbatim, "./prefixed", or
   // "projectName/src/..." forms. Without this, the path format the
-  // sverklo_audit output prints ("sverklo/src/foo.ts" when the project
-  // is in a workspace) doesn't paste into sverklo_deps. Dogfood T5.
+  // audit output prints ("sverklo/src/foo.ts" when the project
+  // is in a workspace) doesn't paste into deps. Dogfood T5.
   const file = indexer.fileStore.findByPath(path);
   if (!file) {
     return `File not found in index: ${path}`;

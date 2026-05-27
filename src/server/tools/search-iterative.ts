@@ -6,7 +6,7 @@ import { runInvestigate, formatInvestigate } from "../../search/investigate.js";
 import { buildHandleUri } from "../../storage/handle-store.js";
 import { getGitState } from "../../memory/git-state.js";
 
-// Iterative widened-pool search (v0.15, P1-14). Where sverklo_search returns
+// Iterative widened-pool search (v0.15, P1-14). Where search returns
 // the top ~10 hits packed into a token budget, search_iterative widens the
 // pool to ~200, stores the body behind a ctx:// handle, and surfaces
 // query-refinement hints (top co-occurring symbols, dominant directories,
@@ -14,13 +14,13 @@ import { getGitState } from "../../memory/git-state.js";
 // without rerunning retrieval.
 
 export const searchIterativeTool = {
-  name: "sverklo_search_iterative",
+  name: "search_iterative",
   description:
-    "Wider-pool, iterative-friendly variant of sverklo_search. Returns a ctx:// handle to the " +
+    "Wider-pool, iterative-friendly variant of search. Returns a ctx:// handle to the " +
     "top-200 candidate pool plus refinement hints (co-occurring symbols, dominant directories, " +
     "concept overlap). Use ctx_grep / ctx_slice to refine without firing another retrieval. " +
     "Worth the extra latency (~50ms) on hard multi-hop questions; for single-shot lookups " +
-    "use sverklo_search.",
+    "use search.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -33,7 +33,7 @@ export const searchIterativeTool = {
       repo: {
         type: "string",
         description:
-          "Optional: name of a registered repo to search (see sverklo_list_repos). " +
+          "Optional: name of a registered repo to search (see list_repos). " +
           "Defaults to the current workspace. Use this to widen the iterative search " +
           "over a sibling project that has been sverklo-init'd but isn't the current cwd.",
       },
@@ -109,8 +109,8 @@ export async function handleSearchIterative(
 
   // Persist the body as a ctx:// handle.
   const sha = getGitState(indexer.rootPath).sha;
-  const handle = indexer.handleStore.create("sverklo_search_iterative", fullBody, sha);
-  const uri = buildHandleUri("sverklo_search_iterative", handle.id);
+  const handle = indexer.handleStore.create("search_iterative", fullBody, sha);
+  const uri = buildHandleUri("search_iterative", handle.id);
 
   // Build the response: a short summary + hints + handle URI.
   const lines: string[] = [];
@@ -133,7 +133,7 @@ export async function handleSearchIterative(
   if (topSymbols.length > 0) {
     lines.push("### Refinement: co-occurring symbols");
     for (const [sym, n] of topSymbols) {
-      lines.push(`- \`${sym}\` (${n}× in pool) — try \`sverklo_lookup symbol:"${sym}"\``);
+      lines.push(`- \`${sym}\` (${n}× in pool) — try \`lookup symbol:"${sym}"\``);
     }
     lines.push("");
   }
@@ -149,13 +149,13 @@ export async function handleSearchIterative(
   if (conceptHints.length > 0) {
     lines.push("### Refinement: nearest concepts");
     for (const c of conceptHints) {
-      lines.push(`- ${c.label} (sim ${c.score.toFixed(3)}) — try \`sverklo_concepts query:"${c.label}"\``);
+      lines.push(`- ${c.label} (sim ${c.score.toFixed(3)}) — try \`concepts query:"${c.label}"\``);
     }
     lines.push("");
   }
 
   lines.push(
-    `_Drill in: \`sverklo_ctx_grep uri:"${uri}" pattern:"<regex>"\`, \`sverklo_ctx_slice uri:"${uri}" offset:0 length:4000\`._`
+    `_Drill in: \`ctx_grep uri:"${uri}" pattern:"<regex>"\`, \`ctx_slice uri:"${uri}" offset:0 length:4000\`._`
   );
 
   return lines.join("\n");

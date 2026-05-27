@@ -9,7 +9,7 @@ import { getGitState } from "../../memory/git-state.js";
 // survive across MCP sessions and detect git-SHA drift.
 
 export const ctxSliceTool = {
-  name: "sverklo_ctx_slice",
+  name: "ctx_slice",
   description:
     "Return a byte-slice of a context handle (ctx://<tool>/<id>). Use to drill into the body without " +
     "rerunning the original retrieval. Returns 'expired' if the handle's pinned SHA no longer matches.",
@@ -25,7 +25,7 @@ export const ctxSliceTool = {
 };
 
 export const ctxGrepTool = {
-  name: "sverklo_ctx_grep",
+  name: "ctx_grep",
   description:
     "Filter the result blocks of a context handle by regex. Operates on the cached body — no second " +
     "retrieval. Returns the narrowed body inline.",
@@ -41,7 +41,7 @@ export const ctxGrepTool = {
 };
 
 export const ctxStatsTool = {
-  name: "sverklo_ctx_stats",
+  name: "ctx_stats",
   description:
     "Inspect a context handle without consuming it: tool, age, block count, byte size, fresh/expired.",
   inputSchema: {
