@@ -28,6 +28,7 @@ export function logTiming(msg: string): void {
  * needing to opt into SVERKLO_DEBUG. Issue #54.
  */
 export function logSummary(msg: string): void {
+  if (process.env.SVERKLO_QUIET === "1") return;
   process.stderr.write(`${msg}\n`);
 }
 

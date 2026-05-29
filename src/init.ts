@@ -974,6 +974,7 @@ export async function initProject(
   console.log("");
   console.log("Try it now (repo-memory proof):");
   console.log("  sverklo prove                          # shows central files + a real caller graph");
+  console.log("  sverklo prove --markdown               # copy a shareable GitHub/Discord proof");
   console.log("  Then paste the \"Ask your agent\" line into Claude, Cursor, Codex, or Windsurf.");
   console.log("");
   console.log("Next steps:");

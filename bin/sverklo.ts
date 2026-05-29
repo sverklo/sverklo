@@ -44,6 +44,44 @@ async function resolveProjectPath(flags: string[]): Promise<string> {
   return target;
 }
 
+function parseProveArgs(rawArgs: string[]): {
+  format: "text" | "markdown";
+  pathArgs: string[];
+} {
+  let format: "text" | "markdown" = "text";
+  const pathArgs: string[] = [];
+
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+    if (arg === "--markdown" || arg === "--receipt") {
+      format = "markdown";
+      continue;
+    }
+    if (arg === "--format") {
+      const value = rawArgs[i + 1];
+      if (value !== "text" && value !== "plain" && value !== "markdown") {
+        console.error("✗ --format expects text, plain, or markdown");
+        process.exit(2);
+      }
+      format = value === "markdown" ? "markdown" : "text";
+      i++;
+      continue;
+    }
+    if (arg.startsWith("--format=")) {
+      const value = arg.slice("--format=".length);
+      if (value !== "text" && value !== "plain" && value !== "markdown") {
+        console.error("✗ --format expects text, plain, or markdown");
+        process.exit(2);
+      }
+      format = value === "markdown" ? "markdown" : "text";
+      continue;
+    }
+    pathArgs.push(arg);
+  }
+
+  return { format, pathArgs };
+}
+
 // Global --help / -h interceptor.
 //
 // Without this, `--help` falls through to whatever subcommand the user
@@ -59,7 +97,7 @@ if (command && command !== "--help" && command !== "-h") {
     const HELP_BLURBS: Record<string, string> = {
       init: "Set up sverklo in your project (.mcp.json + CLAUDE.md, auto-detects Claude Code/Cursor/Windsurf/Antigravity). With --global: one-time-per-machine setup — write SVERKLO_SNIPPET to ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md, register the project, gitignore .sverklo/, import memories. Skips per-project boilerplate.",
       doctor: "Diagnose MCP setup issues. Run after `init` to verify the agent can reach sverklo.",
-      prove: "Show a first-run repo-memory proof: central files, a real symbol with callers, and a paste-ready agent prompt.",
+      prove: "Show a first-run repo-memory proof: central files, a real symbol with callers, and a paste-ready agent prompt. Flags: --markdown, --receipt, --format text|markdown.",
       audit: "Run codebase audit and emit a graded report. Flags: --format markdown|html|json|graph|arch|obsidian, --output PATH, --open, --badge, --publish.",
       "audit-diff": "Incremental architectural quality gate. Audits `git diff` for new cycles + fan-in spikes. Flags: --against REF, --fan-in-threshold N, --format human|json, --show-existing, --verbose. Exits 1 on regression.",
       review: "Risk-scored diff review (CI-friendly). Flags: --ref REF, --ci, --format markdown|json, --max-files N, --fail-on low|medium|high.",
@@ -177,10 +215,10 @@ if (command === "register") {
 }
 
 if (command === "prove") {
-  const flags = args.slice(1);
-  const projectPath = await resolveProjectPath(flags);
+  const { format, pathArgs } = parseProveArgs(args.slice(1));
+  const projectPath = await resolveProjectPath(pathArgs);
   const { runProve } = await import("../src/prove.js");
-  const report = await runProve(projectPath);
+  const report = await runProve(projectPath, { format });
   process.stdout.write(report);
   process.exit(0);
 }
@@ -2819,6 +2857,7 @@ Usage:
   sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
   sverklo doctor             Diagnose MCP setup issues
   sverklo prove [path]       Show central files, a real caller graph, and an agent prompt
+                             Use --markdown or --receipt for a shareable artifact.
   sverklo reindex [path]     Incremental rebuild of the index (changed files only)
                              Use --force to clear and rebuild from scratch.
                              Use --timing to see per-phase elapsed ms.
@@ -2862,6 +2901,7 @@ Quick start (single project):
   npm install -g sverklo
   cd your-project && sverklo init
   sverklo prove
+  sverklo prove --markdown  # shareable proof for GitHub, Discord, Reddit, etc.
   claude   # start coding — sverklo tools are preferred automatically
 
 Quick start (multi-repo, global):

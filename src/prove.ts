@@ -40,6 +40,23 @@ interface ProofCandidate {
   distinctSourceFiles: number;
 }
 
+export type ProveFormat = "text" | "markdown";
+
+export interface ProveReportOptions {
+  format?: ProveFormat;
+}
+
+interface ProveSummary {
+  projectName: string;
+  fileCount: number;
+  chunkCount: number;
+  symbolRefCount: number;
+  languages: string[];
+  files: FileRecord[];
+  candidate: ProofCandidate | null;
+  fallback: (CodeChunk & { filePath: string; pagerank: number }) | null;
+}
+
 const NOISE_SEGMENTS = [
   "node_modules/",
   "dist/",
@@ -179,17 +196,43 @@ function fallbackSymbol(indexer: ProveIndex): (CodeChunk & { filePath: string; p
   );
 }
 
-export function buildProveReport(indexer: ProveIndex, projectPath: string): string {
-  const projectName = basename(projectPath) || "this repo";
-  const files = topFiles(indexer);
-  const languages = indexer.fileStore.getLanguages().filter(Boolean).slice(0, 6);
-  const candidate = chooseCandidate(indexer);
+function buildSummary(indexer: ProveIndex, projectPath: string): ProveSummary {
+  return {
+    projectName: basename(projectPath) || "this repo",
+    fileCount: indexer.fileStore.count(),
+    chunkCount: indexer.chunkStore.count(),
+    symbolRefCount: indexer.symbolRefStore.count(),
+    languages: indexer.fileStore.getLanguages().filter(Boolean).slice(0, 6),
+    files: topFiles(indexer),
+    candidate: chooseCandidate(indexer),
+    fallback: fallbackSymbol(indexer),
+  };
+}
+
+function agentPrompt(summary: ProveSummary): string {
+  if (summary.candidate) {
+    return `Use sverklo impact on ${summary.candidate.name} and tell me what would break if I changed its signature.`;
+  }
+  if (summary.fallback) {
+    return `Use sverklo lookup on ${summary.fallback.name}, then use sverklo overview to explain where it fits in this repo.`;
+  }
+  return "Use sverklo overview to map this repo and tell me the 5 most important files.";
+}
+
+function markdownCell(value: string): string {
+  return value.replace(/\|/g, "\\|");
+}
+
+function renderTextReport(summary: ProveSummary): string {
+  const { projectName, files, languages, candidate } = summary;
 
   const lines: string[] = [];
   lines.push("sverklo prove - repo memory check");
   lines.push("");
   lines.push(`Repo: ${projectName}`);
-  lines.push(`Indexed: ${formatNumber(indexer.fileStore.count())} files, ${formatNumber(indexer.chunkStore.count())} chunks, ${formatNumber(indexer.symbolRefStore.count())} symbol references`);
+  lines.push(
+    `Indexed: ${formatNumber(summary.fileCount)} files, ${formatNumber(summary.chunkCount)} chunks, ${formatNumber(summary.symbolRefCount)} symbol references`,
+  );
   if (languages.length > 0) lines.push(`Languages: ${languages.join(", ")}`);
   lines.push("");
 
@@ -220,20 +263,21 @@ export function buildProveReport(indexer: ProveIndex, projectPath: string): stri
     }
     lines.push("");
     lines.push("Ask your agent this:");
-    lines.push(`  Use sverklo impact on ${candidate.name} and tell me what would break if I changed its signature.`);
+    lines.push(`  ${agentPrompt(summary)}`);
   } else {
-    const fallback = fallbackSymbol(indexer);
     lines.push("Proof from your repo:");
-    if (fallback) {
-      lines.push(`  I found ${fallback.name} at ${fallback.filePath}:${fallback.start_line}, but not a strong caller graph yet.`);
+    if (summary.fallback) {
+      lines.push(
+        `  I found ${summary.fallback.name} at ${summary.fallback.filePath}:${summary.fallback.start_line}, but not a strong caller graph yet.`,
+      );
       lines.push("");
       lines.push("Ask your agent this:");
-      lines.push(`  Use sverklo lookup on ${fallback.name}, then use sverklo overview to explain where it fits in this repo.`);
+      lines.push(`  ${agentPrompt(summary)}`);
     } else {
       lines.push("  I found an index, but not enough named symbols to build a caller proof.");
       lines.push("");
       lines.push("Ask your agent this:");
-      lines.push("  Use sverklo overview to map this repo and tell me the 5 most important files.");
+      lines.push(`  ${agentPrompt(summary)}`);
     }
   }
 
@@ -244,21 +288,106 @@ export function buildProveReport(indexer: ProveIndex, projectPath: string): stri
   return lines.join("\n");
 }
 
-export async function runProve(projectPath: string): Promise<string> {
-  const modelDir = join(homedir(), ".sverklo", "models");
-  if (!existsSync(join(modelDir, "model.onnx")) || !existsSync(join(modelDir, "tokenizer.json"))) {
-    const { setupModels } = await import("./indexer/setup.js");
-    await setupModels();
+function renderMarkdownReport(summary: ProveSummary): string {
+  const lines: string[] = [];
+  lines.push(`# Sverklo repo-memory proof: ${summary.projectName}`);
+  lines.push("");
+  lines.push("Generated with `sverklo prove --markdown`.");
+  lines.push("");
+  lines.push("## Index");
+  lines.push("");
+  lines.push(`- Files: ${formatNumber(summary.fileCount)}`);
+  lines.push(`- Chunks: ${formatNumber(summary.chunkCount)}`);
+  lines.push(`- Symbol references: ${formatNumber(summary.symbolRefCount)}`);
+  if (summary.languages.length > 0) {
+    lines.push(`- Languages: ${summary.languages.map((language) => `\`${language}\``).join(", ")}`);
+  }
+  lines.push("");
+
+  if (summary.files.length > 0) {
+    lines.push("## Central files");
+    lines.push("");
+    lines.push("| File | PageRank |");
+    lines.push("| --- | ---: |");
+    for (const file of summary.files) {
+      lines.push(`| \`${markdownCell(file.path)}\` | ${file.pagerank.toFixed(4)} |`);
+    }
+    lines.push("");
   }
 
-  const { getProjectConfig } = await import("./utils/config.js");
-  const { Indexer } = await import("./indexer/indexer.js");
-  const config = getProjectConfig(projectPath);
-  const indexer = new Indexer(config);
+  lines.push("## Proof from this repo");
+  lines.push("");
+  if (summary.candidate) {
+    const def = summary.candidate.definition;
+    lines.push(`\`${summary.candidate.name}\` is defined at \`${def.filePath}:${def.start_line}\`.`);
+    lines.push("");
+    lines.push(
+      `Sverklo found ${formatNumber(summary.candidate.refCount)} references across ${formatNumber(summary.candidate.distinctSourceFiles)} files.`,
+    );
+    lines.push("");
+    lines.push("Sample callers:");
+    lines.push("");
+    for (const ref of summary.candidate.refs.slice(0, 5)) {
+      const line = ref.ref_line ?? ref.start_line;
+      const label = ref.chunk_name ? `${ref.chunk_type} ${ref.chunk_name}` : ref.chunk_type;
+      lines.push(`- \`${ref.file_path}:${line}\` (${label})`);
+    }
+  } else if (summary.fallback) {
+    lines.push(
+      `Sverklo found \`${summary.fallback.name}\` at \`${summary.fallback.filePath}:${summary.fallback.start_line}\`, but not a strong caller graph yet.`,
+    );
+  } else {
+    lines.push("Sverklo found an index, but not enough named symbols to build a caller proof.");
+  }
+  lines.push("");
+  lines.push("## Prompt to paste into your coding agent");
+  lines.push("");
+  lines.push("```text");
+  lines.push(agentPrompt(summary));
+  lines.push("```");
+  lines.push("");
+  lines.push("If this exposed useful repo context, star Sverklo so other agent-heavy teams find it:");
+  lines.push("");
+  lines.push("https://github.com/sverklo/sverklo");
+  lines.push("");
+  return lines.join("\n");
+}
+
+export function buildProveReport(
+  indexer: ProveIndex,
+  projectPath: string,
+  options: ProveReportOptions = {},
+): string {
+  const summary = buildSummary(indexer, projectPath);
+  return options.format === "markdown" ? renderMarkdownReport(summary) : renderTextReport(summary);
+}
+
+export async function runProve(
+  projectPath: string,
+  options: ProveReportOptions = {},
+): Promise<string> {
+  const previousQuiet = process.env.SVERKLO_QUIET;
+  if (options.format === "markdown") process.env.SVERKLO_QUIET = "1";
+
   try {
-    await indexer.index();
-    return buildProveReport(indexer, projectPath);
+    const modelDir = join(homedir(), ".sverklo", "models");
+    if (!existsSync(join(modelDir, "model.onnx")) || !existsSync(join(modelDir, "tokenizer.json"))) {
+      const { setupModels } = await import("./indexer/setup.js");
+      await setupModels();
+    }
+
+    const { getProjectConfig } = await import("./utils/config.js");
+    const { Indexer } = await import("./indexer/indexer.js");
+    const config = getProjectConfig(projectPath);
+    const indexer = new Indexer(config);
+    try {
+      await indexer.index();
+      return buildProveReport(indexer, projectPath, options);
+    } finally {
+      indexer.close();
+    }
   } finally {
-    indexer.close();
+    if (previousQuiet === undefined) delete process.env.SVERKLO_QUIET;
+    else process.env.SVERKLO_QUIET = previousQuiet;
   }
 }
