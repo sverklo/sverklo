@@ -10,15 +10,22 @@
 >
 > Training data is the map. Your codebase is the territory. **Sverklo gives the agent the territory.**
 
-**Local-first code intelligence.** Sverklo is the open-source MCP server that gives Claude Code, Cursor, Windsurf, and Zed a real symbol graph, blast-radius analysis, and git-pinned memory — so your AI coding agent stops hallucinating function names on large repos. The only code-intel MCP with a published benchmark and reproducible eval harness. MIT. Zero config. Your code never leaves the machine.
+# Give your coding agent repo memory.
 
-> **Local-first code intelligence** ◦ No cloud upload ◦ No embedding lottery ◦ Single MCP tool call
+Sverklo is the open-source local-first MCP server that gives Claude Code, Cursor, Windsurf, Codex CLI, and any MCP-speaking coding agent your repo's symbols, callers, diffs, blast radius, and git-pinned decisions before it edits.
 
-**43× fewer input tokens than naive grep**, single tool call vs grep's 7-12 — measured on 90 hand-verified tasks across sverklo, express, and lodash. F1 0.56 overall (leader), 0.73 on definition lookup. [bench:primitives](https://sverklo.com/bench/) is reproducible from a fresh clone with one npm script. Methodology + ground truth lives in its own repo: [sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench). [Paper](https://doi.org/10.5281/zenodo.19802051) · [bench:swe](https://sverklo.com/blog/bench-swe-first-results/) — 38/65 perfect recall on 5 OSS repos, **including the runs we lose**.
+**Local-first code intelligence** ◦ MIT ◦ no API keys ◦ no code upload ◦ first run downloads a local ONNX model
 
-`blind grep` returns 17,000 tokens of regex hits with no ranking, no semantic recall, no call-graph awareness. `embedding lottery` returns chunks ranked by cosine similarity without verifying any of them are load-bearing. Sverklo returns ~470 tokens of ranked, traceable, call-graph-aware results in a single tool call.
+Use grep when you know the exact string. Use Sverklo when the agent needs relationships: who calls this, what depends on it, what changed, and which project decisions still apply. The public bench covers 180 hand-verified tasks across 6 OSS codebases; the methodology and ground truth live in [sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench). [Bench](https://sverklo.com/bench/) · [paper](https://doi.org/10.5281/zenodo.19802051) · [90-second demo](https://www.youtube.com/watch?v=OX7aEgdlqhQ)
 
-### One-click install
+```bash
+npm install -g sverklo
+cd your-project && sverklo init
+```
+
+`sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. Your code stays on your machine.
+
+### Editor shortcuts
 
 [![Install in Claude Code](https://img.shields.io/badge/Claude_Code-Install_Plugin-CC785C?style=for-the-badge&logoColor=white)](#claude-code) [![Install in Cursor](https://img.shields.io/badge/Cursor-Install_MCP-F14C28?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=sverklo&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsInN2ZXJrbG8iXX0=) [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=sverklo&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22sverklo%22%5D%7D) [![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_MCP-24bfa5?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=sverklo&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22sverklo%22%5D%7D&quality=insiders) [![Install in Windsurf](https://img.shields.io/badge/Windsurf-sverklo_init-09B6A2?style=for-the-badge&logoColor=white)](#windsurf--zed--vs-code--jetbrains)
 
@@ -29,9 +36,9 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19802051.svg)](https://doi.org/10.5281/zenodo.19802051)
 [![GitHub stars](https://img.shields.io/github/stars/sverklo/sverklo?style=social)](https://github.com/sverklo/sverklo/stargazers)
 
-> ⭐ **If sverklo saved your AI from hallucinating, please star this repo** — it's the single most useful thing you can do to help others find it. Then [share with one teammate](https://twitter.com/intent/tweet?text=Local-first%20MCP%20code%20intelligence%20for%20AI%20coding%20agents%20%E2%80%94%20MIT%2C%20zero-deps%2C%20honest%20benchmark%20%40%20https%3A%2F%2Fsverklo.com%2Fbench%2F) who's tired of `getUserByEmail()` not existing in their codebase.
+> If Sverklo catches a real repo mistake for you, please star the repo. It is the fastest way to help other agent-heavy teams find it.
 
-![Sverklo cuts agent context by 65 % vs grep — bench:primitives, 60 retrieval tasks, peer-reviewable](./docs/hero-token-comparison.png)
+![Sverklo bench:primitives token comparison](./docs/hero-token-comparison.png)
 
 [![Watch the 90-second demo: terminal + Claude Code MCP integration](https://i.ytimg.com/vi/OX7aEgdlqhQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=OX7aEgdlqhQ)
 
@@ -81,7 +88,7 @@ That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Co
 
 Likely you've seen tools that look adjacent. The honest one-paragraph answers, with detailed comparisons linked.
 
-**…just grep with extra steps?** No, but tuned grep is genuinely competitive on F1. On the [90-task bench](https://sverklo.com/bench/), sverklo leads overall F1 (0.56 vs smart-grep's 0.49) — but smart-grep still wins P2 reference finding outright. Sverklo wins by 43× on input tokens and 4-7× on tool-call count vs naive grep. For an AI agent inside a 200K context window, that's the load-bearing axis. For a human at a terminal, smart grep is fine.
+**…just grep with extra steps?** No, but tuned grep is genuinely competitive when you know the exact string. On the [180-task bench](https://sverklo.com/bench/), sverklo leads overall F1 (0.58 vs smart-grep's 0.34) while using about 35× fewer input tokens than naive grep and one tool call per task. For an AI agent inside a 200K context window, that's the load-bearing axis. For a human at a terminal, grep is still fine.
 
 **…just Sourcegraph Cody?** Same retrieval surface (hybrid BM25 + vector + graph), different deployment model and license. Cody is source-available with enterprise per-developer pricing ($9-19/dev/mo); sverklo is MIT and runs on a laptop with no signup. [Full comparison →](https://sverklo.com/vs/sourcegraph-cody/)
 
@@ -103,7 +110,7 @@ If something is missing here that you'd ask about, [open an issue](https://githu
 
 ## What's new in 0.20
 
-- **Contradiction detection on the bi-temporal memory layer.** `sverklo_memories mode:"conflicts"` surfaces pairs of active memories that share a pin (file path or symbol name) and may contradict — e.g., "JWT in middleware" vs "JWT in route handler" both pinned to `src/auth.ts`. Restricted to decision/preference/pattern categories (procedural/context are additive, not contradicting). Same-SHA pairs are skipped. Sorted by shared-pin count and age. Conservative by design: surfaces *candidates* for the agent or human to review, not auto-resolution. The bi-temporal model already preserved both sides of the contradiction; this just makes them findable.
+- **Contradiction detection on the bi-temporal memory layer.** `memories mode:"conflicts"` surfaces pairs of active memories that share a pin (file path or symbol name) and may contradict — e.g., "JWT in middleware" vs "JWT in route handler" both pinned to `src/auth.ts`. Restricted to decision/preference/pattern categories (procedural/context are additive, not contradicting). Same-SHA pairs are skipped. Sorted by shared-pin count and age. Conservative by design: surfaces *candidates* for the agent or human to review, not auto-resolution. The bi-temporal model already preserved both sides of the contradiction; this just makes them findable.
 
 ## What's new in 0.19
 
@@ -116,7 +123,7 @@ If something is missing here that you'd ask about, [open an issue](https://githu
 - **Windows pathing fixed.** `sverklo init` and `sverklo doctor` now work on Windows — absolute paths go through `path.basename()` and stored `relativePath` is normalized to forward slashes so every downstream consumer is cross-platform.
 - **`npm run bench:swe`** — third-party-reproducible cross-repo eval. Clones 5 OSS repos (express, nestjs, vite, prisma, fastapi), runs 65 grounded questions, prints aggregated recall. PRs that add questions are welcome.
 - **Tree-sitter parser opt-in.** `sverklo grammars install` (~3.5 MB across 6 languages) + `SVERKLO_PARSER=tree-sitter` routes the indexer through real ASTs for TypeScript/TSX/JavaScript/Python/Go/Rust. Silent regex fallback when grammars aren't installed. Plan to flip the default lives in [docs/parser-parity.md](./docs/parser-parity.md).
-- **Workspace shared memory.** `sverklo workspace memory <name> add/list/search` plus `sverklo_remember scope:"workspace"` from the agent — write a decision once, query it from every other repo in the workspace. `sverklo_recall` blends workspace results under project ones with a `[ws]` badge.
+- **Workspace shared memory.** `sverklo workspace memory <name> add/list/search` plus `remember scope:"workspace"` from the agent — write a decision once, query it from every other repo in the workspace. `recall` blends workspace results under project ones with a `[ws]` badge.
 - **`sverklo memory export`** — markdown / Notion / JSON. Migrate your team's decision log to wherever it actually lives.
 - **PR-bot inline review.** `sverklo review --format github-review-json` + the action's new `inline-comments: true` default posts per-line review comments via `pulls.createReview`, alongside the existing sticky summary.
 - **VS Code extension scaffold** at [`extensions/vscode/`](./extensions/vscode/) with a pre-built `sverklo-vscode-0.1.0.vsix`. Inline caller-count decorations on every function header (`⟵ 47 callers`). Marketplace publish workflow ships dormant; install with `code --install-extension extensions/vscode/sverklo-vscode-0.1.0.vsix` today.
@@ -130,11 +137,11 @@ Every one of these is a query a real engineer asked a real AI assistant last wee
 
 | The question | With Grep | With Sverklo |
 |---|---|---|
-| "Where is auth handled in this repo?" | `grep -r 'auth' .` -- 847 matches across tests, comments, unrelated vars, and one 2021 TODO | `sverklo_search "authentication flow"` -- top 5 files ranked by PageRank: middleware, JWT verifier, session store, login route, logout route |
-| "Can I safely rename `BillingAccount.charge`?" | `grep '\.charge('` -- 312 matches polluted by `recharge`, `discharge`, `Battery.charge` fixtures | `sverklo_impact BillingAccount.charge` -- 14 real callers, depth-ranked, with file paths and line numbers |
-| "Is this helper actually used anywhere?" | `grep -r 'parseFoo' .` -- 4 matches in 3 files. Are any real, or just string mentions? Read each one. | `sverklo_refs parseFoo` -- 0 real callers. Zero. Walk the symbol graph, not the text. Delete the function. |
-| "What's load-bearing in this codebase?" | `find . -name '*.ts' \| xargs wc -l \| sort` -- the biggest files. Not the most important ones. | `sverklo_overview` -- PageRank over the dep graph. The files the rest of the repo depends on, not the ones someone wrote too much code in. |
-| "Review this 40-file PR — what should I read first?" | Read them in the order git diff printed them | `sverklo_review_diff` -- risk-scored per file (touched-symbol importance x coverage x churn), prioritized order, flagged production files with no test changes |
+| "Where is auth handled in this repo?" | `grep -r 'auth' .` -- 847 matches across tests, comments, unrelated vars, and one 2021 TODO | `search "authentication flow"` -- top 5 files ranked by PageRank: middleware, JWT verifier, session store, login route, logout route |
+| "Can I safely rename `BillingAccount.charge`?" | `grep '\.charge('` -- 312 matches polluted by `recharge`, `discharge`, `Battery.charge` fixtures | `impact BillingAccount.charge` -- 14 real callers, depth-ranked, with file paths and line numbers |
+| "Is this helper actually used anywhere?" | `grep -r 'parseFoo' .` -- 4 matches in 3 files. Are any real, or just string mentions? Read each one. | `refs parseFoo` -- 0 real callers. Zero. Walk the symbol graph, not the text. Delete the function. |
+| "What's load-bearing in this codebase?" | `find . -name '*.ts' \| xargs wc -l \| sort` -- the biggest files. Not the most important ones. | `overview` -- PageRank over the dep graph. The files the rest of the repo depends on, not the ones someone wrote too much code in. |
+| "Review this 40-file PR — what should I read first?" | Read them in the order git diff printed them | `review_diff` -- risk-scored per file (touched-symbol importance x coverage x churn), prioritized order, flagged production files with no test changes |
 
 If the answer to your question is "exact string X exists somewhere," grep wins. Use grep. If the answer is "which 5 files actually matter here, ranked by the graph," you need sverklo.
 
@@ -161,10 +168,10 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 
 | Tool | What it does |
 |------|-------------|
-| `sverklo_search` | Hybrid BM25 + vector + PageRank search. Find code without knowing the literal string. |
-| `sverklo_refs` | All references to a symbol, with caller context. Proves dead code with certainty. |
-| `sverklo_impact` | Walk the symbol graph, return ranked transitive callers — the real blast radius. |
-| `sverklo_review_diff` | Risk-scored review of `git diff`: touched-symbol importance x coverage x churn. |
+| `search` | Hybrid BM25 + vector + PageRank search. Find code without knowing the literal string. |
+| `refs` | All references to a symbol, with caller context. Proves dead code with certainty. |
+| `impact` | Walk the symbol graph, return ranked transitive callers — the real blast radius. |
+| `review_diff` | Risk-scored review of `git diff`: touched-symbol importance x coverage x churn. |
 
 [See all 37 tools below.](#full-tool-reference)
 
@@ -206,60 +213,60 @@ Pre-existing cycles and fan-in spikes don't trip the gate — only violations *i
 ### Search — find code without knowing the literal string
 | Tool | What |
 |------|------|
-| `sverklo_search` | Hybrid BM25 + ONNX vector + PageRank, fused with Reciprocal Rank Fusion |
-| `sverklo_search_iterative` | Wider candidate pool with refinement hints between rounds |
-| `sverklo_investigate` | Parallel multi-channel fan-out (FTS / vector / path / symbol) with per-channel RRF |
-| `sverklo_ask` | Natural-language router — concepts + investigate + refs in one call |
-| `sverklo_overview` | Structural codebase map ranked by PageRank importance |
-| `sverklo_lookup` | Find any function, class, or type by name (typo-tolerant) |
-| `sverklo_context` | One-call onboarding — combines overview, code, and saved memories |
-| `sverklo_ast_grep` | Structural pattern matching across the AST, not just text |
-| `sverklo_concepts` | Browse the LLM-derived concept index (themes across the codebase) |
-| `sverklo_clusters` | Semantic clusters of related symbols, computed offline |
-| `sverklo_patterns` | Query symbols tagged with a design pattern (observer, repository, validator, ...) |
+| `search` | Hybrid BM25 + ONNX vector + PageRank, fused with Reciprocal Rank Fusion |
+| `search_iterative` | Wider candidate pool with refinement hints between rounds |
+| `investigate` | Parallel multi-channel fan-out (FTS / vector / path / symbol) with per-channel RRF |
+| `ask` | Natural-language router — concepts + investigate + refs in one call |
+| `overview` | Structural codebase map ranked by PageRank importance |
+| `lookup` | Find any function, class, or type by name (typo-tolerant) |
+| `context` | One-call onboarding — combines overview, code, and saved memories |
+| `ast_grep` | Structural pattern matching across the AST, not just text |
+| `concepts` | Browse the LLM-derived concept index (themes across the codebase) |
+| `clusters` | Semantic clusters of related symbols, computed offline |
+| `patterns` | Query symbols tagged with a design pattern (observer, repository, validator, ...) |
 
 ### Impact — refactor without the regression
 | Tool | What |
 |------|------|
-| `sverklo_impact` | Walk the symbol graph, return ranked transitive callers (the real blast radius) |
-| `sverklo_refs` | Find all references to a symbol, with caller context |
-| `sverklo_deps` | File dependency graph — both directions, importers and imports |
-| `sverklo_audit` | **Lint your codebase for AI-readiness.** God nodes, hub files, dead code, circular deps, security smells, A-F health grade — all in one call |
+| `impact` | Walk the symbol graph, return ranked transitive callers (the real blast radius) |
+| `refs` | Find all references to a symbol, with caller context |
+| `deps` | File dependency graph — both directions, importers and imports |
+| `audit` | **Lint your codebase for AI-readiness.** God nodes, hub files, dead code, circular deps, security smells, A-F health grade — all in one call |
 
 ### Review — diff-aware MR review with risk scoring
 | Tool | What |
 |------|------|
-| `sverklo_review_diff` | Risk-scored review of `git diff` — touched-symbol importance x coverage x churn |
-| `sverklo_critique` | Second-pass critique of a review — what did the first read miss |
-| `sverklo_test_map` | Which tests cover which changed symbols; flag untested production changes |
-| `sverklo_diff_search` | Semantic search restricted to the changed surface of a diff |
-| `sverklo_verify` | Verify a quoted code span is still present at the cited SHA — citation gate |
+| `review_diff` | Risk-scored review of `git diff` — touched-symbol importance x coverage x churn |
+| `critique` | Second-pass critique of a review — what did the first read miss |
+| `test_map` | Which tests cover which changed symbols; flag untested production changes |
+| `diff_search` | Semantic search restricted to the changed surface of a diff |
+| `verify` | Verify a quoted code span is still present at the cited SHA — citation gate |
 
 ### Memory — bi-temporal, git-aware, never stale
 | Tool | What |
 |------|------|
-| `sverklo_remember` | Save decisions, patterns, invariants — pinned to the current git SHA |
-| `sverklo_recall` | Semantic search over saved memories with staleness detection |
-| `sverklo_memories` | List all memories with health metrics (still valid / stale / orphaned) |
-| `sverklo_forget` | Delete a memory |
-| `sverklo_promote` / `sverklo_demote` | Move memories between tiers (core / archive) |
-| `sverklo_pin` / `sverklo_unpin` | Pin a memory to a file path or symbol so recall surfaces it without semantic search |
+| `remember` | Save decisions, patterns, invariants — pinned to the current git SHA |
+| `recall` | Semantic search over saved memories with staleness detection |
+| `memories` | List all memories with health metrics (still valid / stale / orphaned) |
+| `forget` | Delete a memory |
+| `promote` / `demote` | Move memories between tiers (core / archive) |
+| `pin` / `unpin` | Pin a memory to a file path or symbol so recall surfaces it without semantic search |
 
 ### Post-filter primitives — refine the last response without re-querying
 | Tool | What |
 |------|------|
-| `sverklo_grep_results` | Grep inside the previous result block instead of re-running the search |
-| `sverklo_head_results` | Take the first N hits from the previous response |
-| `sverklo_ctx_peek` | Peek at a referenced span by its handle without expanding it fully |
-| `sverklo_ctx_slice` | Slice a stored response by line range |
-| `sverklo_ctx_grep` | Grep within a stored context window |
-| `sverklo_ctx_stats` | Token-budget stats for stored response handles |
+| `grep_results` | Grep inside the previous result block instead of re-running the search |
+| `head_results` | Take the first N hits from the previous response |
+| `ctx_peek` | Peek at a referenced span by its handle without expanding it fully |
+| `ctx_slice` | Slice a stored response by line range |
+| `ctx_grep` | Grep within a stored context window |
+| `ctx_stats` | Token-budget stats for stored response handles |
 
 ### Index health
 | Tool | What |
 |------|------|
-| `sverklo_status` | Index health check, file counts, last update |
-| `sverklo_wakeup` | 500-token codebase summary for system prompts on agents that can't run MCP |
+| `status` | Index health check, file counts, last update |
+| `wakeup` | 500-token codebase summary for system prompts on agents that can't run MCP |
 
 </details>
 
@@ -289,11 +296,11 @@ If a launch post tells you a tool is great for everything, close the tab.
 
 ### How do I stop Claude Code from hallucinating about my codebase?
 
-Claude generates code from training-data patterns, not your repo. Without a symbol graph, it invents `getUserByEmail()` when your code uses `findByEmail()`. Sverklo grounds the agent in your actual symbol graph — `sverklo_lookup` and `sverklo_refs` resolve names to `file:line` and prove existence before the agent writes the call. Verifiable retrieval (`sverklo_verify`) lets the agent re-check that a quoted span is still present at the cited SHA, so a stale citation gets caught instead of confabulated.
+Claude generates code from training-data patterns, not your repo. Without a symbol graph, it invents `getUserByEmail()` when your code uses `findByEmail()`. Sverklo grounds the agent in your actual symbol graph — `lookup` and `refs` resolve names to `file:line` and prove existence before the agent writes the call. Verifiable retrieval (`verify`) lets the agent re-check that a quoted span is still present at the cited SHA, so a stale citation gets caught instead of confabulated.
 
 ### Is there a local-first MCP server for codebase memory?
 
-Yes — sverklo. `sverklo_remember` and `sverklo_recall` ship a bi-temporal memory layer: every memory is pinned to the git SHA it was authored on, and `valid_until_sha` + `superseded_by` preserve a timeline of supersessions instead of overwriting. Recall is hybrid (FTS5 + cosine over an ONNX embedding) and runs entirely in embedded SQLite. No cloud, no API keys, no external vector database — unlike most "memory MCP" projects which require Zilliz, Milvus, or a managed Postgres+pgvector.
+Yes — sverklo. `remember` and `recall` ship a bi-temporal memory layer: every memory is pinned to the git SHA it was authored on, and `valid_until_sha` + `superseded_by` preserve a timeline of supersessions instead of overwriting. Recall is hybrid (FTS5 + cosine over an ONNX embedding) and runs entirely in embedded SQLite. No cloud, no API keys, no external vector database — unlike most "memory MCP" projects which require Zilliz, Milvus, or a managed Postgres+pgvector.
 
 ### Is there an open-source alternative to Sourcegraph Cody I can run locally?
 
@@ -395,23 +402,23 @@ Real measurements on real codebases. Reproducible via `npm run bench` ([methodol
 
 - **Search p95 stays under 26 ms** even on a 4k-file monorepo
 - **Impact analysis is sub-millisecond** — indexed SQL join, not a string scan
-- **12 languages:** TS, JS, Vue, Python, Go, Rust, Java, C, C++, Ruby, PHP, C#
+- **24 languages:** 10 first-class structural parsers plus 14 regex-fallback languages
 
 ### Retrieval benchmark — bench:primitives
 
-Hybrid retrieval F1 vs grep baselines on a 90-task hand-verified evaluation across three OSS codebases (express, lodash, sverklo). Public report at **[sverklo.com/bench/](https://sverklo.com/bench/)** — including every slice where sverklo *loses*. Methodology repo: **[github.com/sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench)**.
+Hybrid retrieval F1 vs grep baselines on a 180-task hand-verified evaluation across six OSS codebases (express, lodash, sverklo, requests, flask, fastapi). Public report at **[sverklo.com/bench/](https://sverklo.com/bench/)** — including every slice where sverklo *loses*. Methodology repo: **[github.com/sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench)**.
 
-Latest run (sverklo v0.20.2, May 2026):
+Latest published 180-task run (sverklo v0.20.21, May 2026):
 
-| baseline | F1 | P1 (def) | P2 (refs) | P4 (deps) | input tokens | tool calls |
-|---|---:|---:|---:|---:|---:|---:|
-| naive-grep | 0.29 | 0.10 | 0.18 | 0.53 | 20,278 | 6.5 |
-| smart-grep (tuned) | 0.49 | 0.43 | **0.40** | 0.59 | 1,220 | 4.9 |
-| **sverklo** | **0.56** | **0.73** | 0.25 | **0.71** | **469** | **1.0** |
-| jcodemunch-mcp | 0.32 | **0.73** | 0.00 | 0.46 | 1,267 | 1.2 |
-| GitNexus | 0.25 | 0.27 | 0.00 | 0.30 | **372** | 1.2 |
+| baseline | F1 | avg input tokens | tool calls |
+|---|---:|---:|---:|
+| naive-grep | 0.25 | 22,704 | 6.3 |
+| smart-grep (tuned) | 0.34 | 714 | 3.2 |
+| jcodemunch-mcp | 0.29 | 1,907 | 1.2 |
+| GitNexus | 0.30 | 630 | 1.2 |
+| **sverklo** | **0.58** | **652** | **1.0** |
 
-Sverklo leads overall F1 (0.56 vs smart-grep's 0.49); ties jcodemunch-mcp on P1 definition lookup; smart-grep still wins P2 reference finding (0.40 vs sverklo's 0.25). Token economy: 43× fewer than naive grep, ~2.6× fewer than smart-grep, single tool call per task vs grep's 4-7.
+Sverklo leads overall F1, dominates P4 file-dependency questions, and keeps the honest loss slice visible: dead-code detection is where grep-style baselines remain strongest. Token economy: about 35× fewer input tokens than naive grep, with a single tool call per task.
 
 Reproduce: `npm run bench:quick`. Filter with `BASELINES=sverklo,jcodemunch DATASETS=express npm run bench:quick`.
 
@@ -522,7 +529,7 @@ Inside Claude Code:
 /plugin install sverklo-skill@sverklo-marketplace
 ```
 
-Installs the bundled Skill (procedural instructions teaching Claude when to reach for `sverklo_search`, `sverklo_impact`, `sverklo_review_diff`, `sverklo_remember`, etc.) without touching your global skills directory.
+Installs the bundled Skill (procedural instructions teaching Claude when to reach for `search`, `impact`, `review_diff`, `remember`, etc.) without touching your global skills directory.
 
 > **First run note:** The ONNX embedding model (~90 MB) downloads automatically on first launch. Takes ~30 seconds, then every subsequent run is offline-capable.
 
@@ -554,7 +561,7 @@ sverklo audit --format sarif      # GitHub code-scanning alerts
 sverklo audit --format json       # machine-readable for CI gates
 ```
 
-Six formats: `markdown`, `html`, `json`, `sarif`, `csv`, `badges`. Pair with `sverklo_impact` (the MCP tool) when you want to see the per-symbol blast radius before refactoring.
+Six formats: `markdown`, `html`, `json`, `sarif`, `csv`, `badges`. Pair with `impact` (the MCP tool) when you want to see the per-symbol blast radius before refactoring.
 
 ---
 
