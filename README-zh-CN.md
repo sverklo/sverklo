@@ -2,10 +2,10 @@
   <img src="./docs/logo.svg" alt="sverklo" width="280" height="79"/>
 </p>
 
-> **首个公开发布检索基准的代码智能 MCP 服务器。**
-> 本地优先的 MCP 服务器，给 Claude Code、Cursor、Windsurf、Zed 提供真实的符号图、改动影响分析、git 锚定的记忆 —— AI 代理不再瞎猜。MIT 协议。零配置。代码不出本机。
+> **给你的 AI 编程代理一份仓库记忆。**
+> 本地优先的 MCP 服务器，给 Claude Code、Cursor、Windsurf、Zed 提供真实的符号图、调用关系、改动影响分析、git 锚定的记忆 —— AI 代理先查你的真实代码，再动手修改。MIT 协议。零配置。代码不出本机。
 >
-> [论文（Zenodo, CC BY 4.0）](https://doi.org/10.5281/zenodo.19802051) · [bench:primitives 评测](https://sverklo.com/bench/) —— 比朴素 grep 节省 **62 倍输入 token**，比调优 grep 节省 **2.9 倍**，单次工具调用即可拿到答案。
+> [论文（Zenodo, CC BY 4.0）](https://doi.org/10.5281/zenodo.19802051) · [bench:primitives 评测](https://sverklo.com/bench/) —— 180 道人工核验任务，整体 F1 **0.58**，smart-grep **0.34**；比朴素 grep 少约 **35 倍输入 token**，单次工具调用即可拿到答案。
 
 [![npm version](https://img.shields.io/npm/v/sverklo.svg?color=E85A2A)](https://www.npmjs.com/package/sverklo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-E85A2A.svg)](LICENSE)
@@ -21,7 +21,7 @@
 
 **根本原因：** 代理在拿到你的真实符号图之前，就开始"凭模式生成"了。Grep 给你的只是字符串匹配——comments、tests、字符串字面量混在一起，几百个噪音里夹着你想要的那一个。
 
-**Sverklo 的做法：** 在代理动手之前，先把你的仓库解析成真正的符号图、调用关系图、PageRank 加权的依赖图，再把这一切以 37 个 MCP 工具的形式暴露给代理。代理调用 `sverklo_lookup` 把名字解析到具体的 `file:line`，调用 `sverklo_refs` 列出所有真实调用点，调用 `sverklo_verify` 验证某段代码在指定 git SHA 上是否仍然存在。
+**Sverklo 的做法：** 在代理动手之前，先把你的仓库解析成真正的符号图、调用关系图、PageRank 加权的依赖图，再把这一切以 37 个 MCP 工具的形式暴露给代理。代理调用 `lookup` 把名字解析到具体的 `file:line`，调用 `refs` 列出所有真实调用点，调用 `verify` 验证某段代码在指定 git SHA 上是否仍然存在。
 
 整个过程跑在本地。嵌入式 SQLite + 本地 ONNX 模型（all-MiniLM-L6-v2，约 90 MB，首次运行下载并缓存）。**没有云。没有 API key。默认关闭遥测。代码一字节都不离开你的机器。**
 
@@ -44,17 +44,19 @@ cd your-project && sverklo init
 
 ## 公开发布的检索基准 — bench:primitives
 
-我们在两个真实开源仓库上跑了 60 道手工标注的检索任务，对比三种基线：
+我们在 6 个真实开源仓库上跑了 180 道手工标注的检索任务，对比 5 种基线：
 
 | 基线 | F1 | 输入 token 均值 | 工具调用次数 |
 |---|---:|---:|---:|
-| 朴素 grep | 0.35 | 15,814 | 7.6 |
-| 调优 grep（语言过滤、定义形态正则） | 0.67 | 731 | 11.8 |
-| **sverklo** | 0.58 | **255** | **1.0** |
+| 朴素 grep | 0.25 | 22,704 | 6.3 |
+| smart-grep（调优 grep） | 0.34 | 714 | 3.2 |
+| jcodemunch-mcp | 0.29 | 1,907 | 1.2 |
+| GitNexus | 0.30 | 630 | 1.2 |
+| **sverklo** | **0.58** | 652 | **1.0** |
 
-**老实说**：调优后的 grep 在 F1 上比 sverklo 高 9 个百分点。Sverklo 在 token 经济性和工具调用次数上压倒性胜出（比朴素 grep 少 62 倍 token，比调优 grep 少 2.9 倍，1 次调用 vs 7-12 次）。**对于上下文窗口有限的 AI 代理，"每个正确答案消耗的 token"才是真正承重的指标，而不是单纯的 F1。**
+**老实说**：smart-grep 在小仓库、明确字符串、零冷启动场景仍然很好用。Sverklo 的优势在跨文件关系：整体 F1 领先，P4 文件依赖问题 0.84 vs smart-grep 0.40，同时比朴素 grep 少约 35 倍输入 token。**对于上下文窗口有限的 AI 代理，"先拿到正确关系图"才是真正承重的指标。**
 
-我们把 sverklo 输的那部分（P5 死代码检测，F1 = 0.02——`sverklo_refs` 抓不到动态调用）公开放在同一份报告里，没有藏起来。
+我们把 sverklo 输的那部分公开放在同一份报告里，没有藏起来。当前弱项是 P2 引用查找：`refs` 在动态调用、代理对象、框架魔法上仍然有漏报。
 
 完整数据 + 复现命令 + 原始 JSONL：**[sverklo.com/bench](https://sverklo.com/bench/)**
 
@@ -62,7 +64,7 @@ cd your-project && sverklo init
 git clone https://github.com/sverklo/sverklo
 npm install
 npm run build
-npm run bench:primitives
+npm run bench:quick
 ```
 
 ---
@@ -71,11 +73,11 @@ npm run bench:primitives
 
 | 你想问的 | grep 给你的 | sverklo 给你的 |
 |---|---|---|
-| "这仓库哪里在做认证？" | `grep -r 'auth' .` —— 847 处匹配，掺杂注释、测试、无关变量、一条 2021 年的 TODO | `sverklo_search "authentication flow"` —— PageRank 排序的前 5 个文件：中间件、JWT 验证、session 存储、登录路由、登出路由 |
-| "我能安全地重命名 `BillingAccount.charge` 吗？" | `grep '\.charge('` —— 312 处匹配，被 `recharge`、`discharge`、`Battery.charge` fixtures 污染 | `sverklo_impact BillingAccount.charge` —— 14 个真实调用方，按深度排序，文件路径加行号 |
-| "这个辅助函数到底有没有人在用？" | `grep -r 'parseFoo' .` —— 4 处匹配，3 个文件。是真调用还是只是字符串？挨个读。 | `sverklo_refs parseFoo` —— 0 个真实调用方。零。走符号图，不走文本。可以删了。 |
-| "这个仓库里哪些文件最关键？" | `find . -name '*.ts' \| xargs wc -l \| sort` —— 最大的文件，但不一定最重要 | `sverklo_overview` —— 依赖图上的 PageRank 排序，是仓库其它部分依赖的核心文件，不是某人代码写多了的文件 |
-| "review 一个 40 文件的 PR，先看哪个？" | 按 git diff 输出的顺序读 | `sverklo_review_diff` —— 按风险分排序（涉及符号的重要性 × 测试覆盖 × 改动率），生产代码改了但测试没改的文件被红标 |
+| "这仓库哪里在做认证？" | `grep -r 'auth' .` —— 847 处匹配，掺杂注释、测试、无关变量、一条 2021 年的 TODO | `search "authentication flow"` —— PageRank 排序的前 5 个文件：中间件、JWT 验证、session 存储、登录路由、登出路由 |
+| "我能安全地重命名 `BillingAccount.charge` 吗？" | `grep '\.charge('` —— 312 处匹配，被 `recharge`、`discharge`、`Battery.charge` fixtures 污染 | `impact BillingAccount.charge` —— 14 个真实调用方，按深度排序，文件路径加行号 |
+| "这个辅助函数到底有没有人在用？" | `grep -r 'parseFoo' .` —— 4 处匹配，3 个文件。是真调用还是只是字符串？挨个读。 | `refs parseFoo` —— 0 个真实调用方。零。走符号图，不走文本。可以删了。 |
+| "这个仓库里哪些文件最关键？" | `find . -name '*.ts' \| xargs wc -l \| sort` —— 最大的文件，但不一定最重要 | `overview` —— 依赖图上的 PageRank 排序，是仓库其它部分依赖的核心文件，不是某人代码写多了的文件 |
+| "review 一个 40 文件的 PR，先看哪个？" | 按 git diff 输出的顺序读 | `review_diff` —— 按风险分排序（涉及符号的重要性 × 测试覆盖 × 改动率），生产代码改了但测试没改的文件被红标 |
 
 如果你的问题是"X 字符串到底存不存在"，用 grep。如果是"按图算，哪 5 个文件真的重要"，用 sverklo。
 
@@ -130,7 +132,7 @@ npm run bench:primitives
 
 ```bibtex
 @misc{sverklo_bench_primitives_2026,
-  title  = {Sverklo bench:primitives — a 60-task retrieval evaluation for AI coding agents},
+  title  = {Sverklo bench:primitives — a 180-task retrieval evaluation for AI coding agents},
   author = {Groshin, Nikita},
   year   = {2026},
   doi    = {10.5281/zenodo.19802051},

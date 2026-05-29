@@ -413,8 +413,8 @@ async function renderMemories() {
       '<span style="color: var(--accent);">&gt;</span> "remember we use Prisma for the ORM because of TypeScript types"' +
       '</div>' +
       '<div style="margin-top: 16px; color: var(--text-3);">' +
-      'Claude will call sverklo_remember with the content, category, and current git state.<br>' +
-      'Later, asking "what did we decide about the ORM?" triggers sverklo_recall.' +
+      'Claude will call remember with the content, category, and current git state.<br>' +
+      'Later, asking "what did we decide about the ORM?" triggers recall.' +
       '</div>' +
       '<div class="inspector-title" style="margin-top: 32px; margin-bottom: 12px;">memory categories</div>' +
       '<div style="display: grid; grid-template-columns: 80px 1fr; gap: 8px 16px;">' +

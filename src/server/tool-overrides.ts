@@ -12,13 +12,13 @@
 //      Comma-separated list of tool names to hide from the `tools/list`
 //      response. Useful when a project doesn't want memory tools exposed,
 //      or when a user wants to shrink the tool surface for a specific
-//      agent that gets overwhelmed by 23 options.
+//      agent that gets overwhelmed by 37 options.
 //
 //   3. Profile shortcut via `SVERKLO_PROFILE`
 //      Pre-defined named subsets — `core` keeps only the 5 hot search/graph
 //      tools (search, lookup, overview, refs, impact) and hides everything
 //      else. `nav` adds deps + context. `lean` adds the memory layer. `full`
-//      (default) exposes all 23 tools.
+//      (default) exposes all 37 tools.
 //      Inspired by mibayy/token-savior's profile system. The point is to
 //      keep the MCP `tools/list` payload small for token-conscious users
 //      who don't need the full surface.

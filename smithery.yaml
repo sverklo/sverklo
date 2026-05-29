@@ -7,17 +7,15 @@
 #  - Bump version in sync with package.json on every release.
 
 name: sverklo
-version: 0.19.0
+version: 0.28.0
 description: >-
-  Local-first code intelligence MCP for AI coding agents. 37 tools across
-  hybrid BM25 + ONNX vector search, symbol-level blast-radius analysis,
-  diff-aware PR review with risk scoring, and bi-temporal memory pinned to
-  git SHAs. Runs entirely on your machine — embedded SQLite + a local ONNX
-  model. No cloud. No API keys. No data leaves your laptop. Stops Claude
-  Code, Cursor, and other AI agents from hallucinating function names that
-  don't exist in your codebase. Published 60-task retrieval benchmark at
-  https://sverklo.com/bench/ — including the slice where sverklo loses to
-  grep.
+  Repo memory for coding agents. Local-first MCP server for Claude Code,
+  Cursor, Windsurf, and Codex CLI: symbol graph, blast-radius analysis,
+  diff-aware PR review with risk scoring, and git-pinned decisions. 37 MCP
+  tools available, compact core profile by default. Runs entirely on your
+  machine — embedded SQLite + a local ONNX model. No cloud. No API keys. No
+  code upload. Published 180-task retrieval benchmark at
+  https://sverklo.com/bench/ — including the slices where sverklo loses.
 
 homepage: https://sverklo.com
 repository: https://github.com/sverklo/sverklo
@@ -87,7 +85,7 @@ env:
 links:
   - label: Documentation
     url: https://sverklo.com
-  - label: 60-task retrieval benchmark
+  - label: 180-task retrieval benchmark
     url: https://sverklo.com/bench/
   - label: Performance benchmarks
     url: https://github.com/sverklo/sverklo/blob/main/BENCHMARKS.md

@@ -1,4 +1,4 @@
-// Minimal Ollama HTTP client. Uses Node 20's built-in fetch — no new deps.
+// Minimal Ollama HTTP client. Uses Node's built-in fetch — no new deps.
 // Used by P1-7 (concept labeling) and, later, P1-12 (symbol purpose
 // enrichment). The host process runs its own Ollama; sverklo is a client.
 

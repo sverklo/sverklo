@@ -2,8 +2,8 @@
   "$schema": "https://glama.ai/mcp/schemas/server.json",
   "name": "sverklo",
   "displayName": "Sverklo",
-  "description": "Local-first code intelligence MCP for AI coding agents. Hybrid search, symbol-level impact analysis, diff-aware PR review, cross-repo impact, pluggable embeddings, and bi-temporal memory. 20 tools, GitHub Action, CLI audit reports.",
-  "version": "0.5.1",
+  "description": "Repo memory for coding agents. Local-first MCP server for Claude Code, Cursor, Windsurf, and Codex CLI: symbol graph, blast radius, diff-aware review, and git-pinned decisions. 37 MCP tools available, compact core profile by default. MIT; no API keys or code upload.",
+  "version": "0.28.0",
   "author": "sverklo",
   "license": "MIT",
   "homepage": "https://sverklo.com",
@@ -22,8 +22,7 @@
   "tags": [
     "code-search",
     "semantic-search",
-    "pagerank",
-    "bm25",
+    "repo-memory",
     "onnx",
     "embeddings",
     "local-first",
@@ -33,6 +32,7 @@
     "antigravity",
     "diff-review",
     "impact-analysis",
+    "blast-radius",
     "refactor",
     "memory",
     "git-aware",
@@ -52,7 +52,7 @@
   "runtime": {
     "type": "node",
     "engines": {
-      "node": ">=20"
+      "node": ">=24"
     }
   },
   "transport": "stdio",
@@ -69,83 +69,83 @@
   },
   "tools": [
     {
-      "name": "sverklo_context",
+      "name": "context",
       "summary": "One-call onboarding: combines overview, saved memories, and codebase map."
     },
     {
-      "name": "sverklo_search",
+      "name": "search",
       "summary": "Hybrid BM25 + ONNX vector + PageRank search fused via Reciprocal Rank Fusion."
     },
     {
-      "name": "sverklo_overview",
+      "name": "overview",
       "summary": "Structural codebase map ranked by PageRank importance."
     },
     {
-      "name": "sverklo_lookup",
+      "name": "lookup",
       "summary": "Find any function, class, or type by name (typo-tolerant)."
     },
     {
-      "name": "sverklo_refs",
+      "name": "refs",
       "summary": "Find all references to a symbol, with caller context."
     },
     {
-      "name": "sverklo_deps",
+      "name": "deps",
       "summary": "File dependency graph — importers and imports, both directions."
     },
     {
-      "name": "sverklo_impact",
+      "name": "impact",
       "summary": "Walk the symbol graph, return ranked transitive callers (the real blast radius)."
     },
     {
-      "name": "sverklo_audit",
+      "name": "audit",
       "summary": "Surface god nodes, hub files, and dead-code candidates in one call."
     },
     {
-      "name": "sverklo_ast_grep",
+      "name": "ast_grep",
       "summary": "Structural pattern matching across the AST, not just text."
     },
     {
-      "name": "sverklo_review_diff",
+      "name": "review_diff",
       "summary": "Risk-scored review of git diff — touched-symbol importance × coverage × churn."
     },
     {
-      "name": "sverklo_test_map",
+      "name": "test_map",
       "summary": "Which tests cover which changed symbols; flag untested production changes."
     },
     {
-      "name": "sverklo_diff_search",
+      "name": "diff_search",
       "summary": "Semantic search restricted to the changed surface of a diff."
     },
     {
-      "name": "sverklo_remember",
+      "name": "remember",
       "summary": "Save decisions, patterns, invariants — pinned to the current git SHA."
     },
     {
-      "name": "sverklo_recall",
+      "name": "recall",
       "summary": "Semantic search over saved memories with staleness detection."
     },
     {
-      "name": "sverklo_memories",
+      "name": "memories",
       "summary": "List all memories with health metrics (still valid / stale / orphaned)."
     },
     {
-      "name": "sverklo_forget",
+      "name": "forget",
       "summary": "Delete a memory."
     },
     {
-      "name": "sverklo_promote",
+      "name": "promote",
       "summary": "Promote a memory to a higher tier (project / global)."
     },
     {
-      "name": "sverklo_demote",
+      "name": "demote",
       "summary": "Demote a memory to a lower tier or archive."
     },
     {
-      "name": "sverklo_status",
+      "name": "status",
       "summary": "Index health check, file counts, last update."
     },
     {
-      "name": "sverklo_wakeup",
+      "name": "wakeup",
       "summary": "Warm the index after a long pause; incremental refresh."
     }
   ],

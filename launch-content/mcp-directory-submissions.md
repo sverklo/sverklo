@@ -12,12 +12,12 @@
 |---|---|
 | **Name** | `Sverklo` |
 | **Slug / ID** | `sverklo` |
-| **One-liner (≤80 chars)** | `Local-first code intelligence MCP for Claude Code, Cursor, and Antigravity` |
-| **One-liner (≤120 chars)** | `Hybrid semantic code search, symbol-level impact analysis, diff-aware MR review, and bi-temporal memory — all local` |
-| **Short description (≤300 chars)** | `Sverklo is the open-source MCP server that gives AI coding agents hybrid semantic code search (BM25 + ONNX embeddings + PageRank), symbol-level impact analysis, diff-aware MR review with risk scoring, and bi-temporal memory tied to git state. Runs entirely on your laptop. No API keys, no cloud, MIT.` |
+| **One-liner (≤80 chars)** | `Repo memory for coding agents. Local-first MCP for Claude Code and Cursor` |
+| **One-liner (≤120 chars)** | `Local-first MCP repo memory: symbol graph, blast radius, diff-aware review, and git-pinned decisions` |
+| **Short description (≤300 chars)** | `Sverklo gives coding agents repo memory before they edit: symbols, callers, diffs, blast radius, and git-pinned decisions. Local-first MCP for Claude Code, Cursor, Windsurf, Codex CLI, and any MCP client. MIT; no API keys or code upload.` |
 | **Category** | `Code Search` (preferred) → `Developer Tools` → `Code Intelligence` |
 | **Subcategory** | `IDE Integration`, `Refactoring`, `MR Review` |
-| **Tags / topics** | `mcp` `mcp-server` `code-search` `semantic-search` `code-intelligence` `claude-code` `cursor` `antigravity` `local-first` `embeddings` `pagerank` `bm25` `rag` `developer-tools` `ai-agents` `refactor` |
+| **Tags / topics** | `mcp` `mcp-server` `repo-memory` `code-search` `semantic-search` `code-intelligence` `claude-code` `cursor` `windsurf` `local-first` `developer-tools` `ai-agents` `refactor` `blast-radius` |
 | **Author / Maintainer** | `Sverklo` |
 | **Author email / contact** | `nikita@groshin.com` |
 | **License** | `MIT` |
@@ -31,13 +31,13 @@
 | **Transport** | `stdio` |
 | **Authentication required** | `No` |
 | **Languages supported** | `TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP` |
-| **Compatible MCP clients** | `Claude Code, Cursor, Windsurf, VS Code, JetBrains, Google Antigravity` |
+| **Compatible MCP clients** | `Claude Code, Cursor, Windsurf, Codex CLI, VS Code, JetBrains, Google Antigravity` |
 | **Requires API key** | `No` |
 | **Requires cloud / external service** | `No` |
 | **Hosted version available** | `No (local only)` |
 | **Logo / icon URL** | `https://sverklo.com/og.png` (until you ship a dedicated icon) |
 | **Screenshot URL** | `https://sverklo.com/og.png` |
-| **Version (current)** | `0.2.11` |
+| **Version (current)** | `0.28.0` |
 | **First released** | `2026-04` |
 | **GitHub stars** | `[NIKITA: paste current count]` |
 
@@ -57,7 +57,7 @@ Form fields (best guess based on similar directories — verify on the actual pa
 
 If the form has a longer "About" field:
 
-> Sverklo is a local-first MCP server that gives AI coding agents (Claude Code, Cursor, Antigravity) four things their built-in tools don't: hybrid semantic code search (BM25 + ONNX embeddings + PageRank fused via Reciprocal Rank Fusion), symbol-level impact analysis for refactor blast radius, diff-aware MR review with risk scoring, and bi-temporal memory tied to git state. 20 tools, 10 languages via tree-sitter, MIT licensed, ~640ms cold index on a 100-file repo. Zero API keys, zero telemetry by default, runs entirely on the user's laptop. The whole client is one file under 250 lines and the source is auditable in 60 seconds.
+> Sverklo is a local-first MCP server that gives AI coding agents (Claude Code, Cursor, Windsurf, Codex CLI) repo memory before they edit: symbols, callers, diffs, blast radius, and git-pinned decisions. 37 MCP tools are available, with a compact core profile by default. MIT licensed, no API keys, no code upload, and an 180-task public retrieval benchmark with losses published next to wins.
 
 ---
 
@@ -74,7 +74,7 @@ Pulse uses GitHub-pull metadata heavily — most fields auto-populate from the r
 
 If they ask for a "Highlight" field (a single best feature):
 
-> `sverklo_impact <symbol>` walks the call graph and returns the real refactor blast radius — typically 14 callers instead of 312 noisy grep matches polluted by recharge, discharge, and unrelated test fixtures.
+> `impact <symbol>` walks the call graph and returns the real refactor blast radius — typically 14 callers instead of 312 noisy grep matches polluted by recharge, discharge, and unrelated test fixtures.
 
 ---
 
@@ -137,7 +137,7 @@ URL: https://mcpcat.io/submit (or open an issue in their repo if no form)
 
 If they have a "Why is this in the list" field:
 
-> The only local-first MCP server that combines hybrid code search, symbol-level impact analysis, diff-aware MR review, and git-aware memory in one tool. 20 tools, MIT, no telemetry by default, no API keys. Built for users who can't (or won't) ship their code to a vendor's cloud.
+> The local-first MCP server that combines hybrid code search, symbol-level blast-radius analysis, diff-aware review, and git-aware memory in one install. 37 MCP tools available, compact core profile by default, MIT, no API keys, no code upload.
 
 ---
 
@@ -227,7 +227,7 @@ Pitch in the email body if it's an email submission:
 >
 > I'd like to submit Sverklo (https://github.com/sverklo/sverklo) for inclusion in the official MCP server directory at https://www.anthropic.com/mcp.
 >
-> Sverklo is a local-first MCP server (MIT, npm) that gives Claude Code, Cursor, Windsurf, VS Code, JetBrains, and Google Antigravity hybrid semantic code search, symbol-level impact analysis, diff-aware MR review with risk scoring, and bi-temporal memory tied to git state — all running on the user's laptop with no API keys and no cloud calls. 20 tools, 10 languages via tree-sitter.
+> Sverklo is a local-first MCP server (MIT, npm) that gives Claude Code, Cursor, Windsurf, Codex CLI, VS Code, JetBrains, and Google Antigravity repo memory before they edit: symbols, callers, diffs, blast radius, and git-pinned decisions — all running on the user's laptop with no API keys and no code upload. 37 MCP tools available, compact core profile by default, 24 languages.
 >
 > Public launch is scheduled for Tuesday 2026-04-21 (Show HN). Happy to provide whatever metadata, screenshots, or additional info you need for the directory entry. Sverklo currently has [NIKITA: paste star count] GitHub stars and [NIKITA: paste npm weekly downloads] weekly npm downloads.
 >

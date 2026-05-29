@@ -6,15 +6,11 @@
   🇬🇧 <b>English</b> · 🇨🇳 <a href="./README-zh-CN.md">中文</a>
 </p>
 
-> *"The map is not the territory."* — Alfred Korzybski
->
-> Training data is the map. Your codebase is the territory. **Sverklo gives the agent the territory.**
-
 # Give your coding agent repo memory.
 
-Sverklo is the open-source local-first MCP server that gives Claude Code, Cursor, Windsurf, Codex CLI, and any MCP-speaking coding agent your repo's symbols, callers, diffs, blast radius, and git-pinned decisions before it edits.
+Sverklo gives coding agents repo memory: symbols, callers, diffs, blast radius, and git-pinned decisions before they edit. It is an open-source local-first MCP server for Claude Code, Cursor, Windsurf, Codex CLI, and any MCP-speaking coding agent.
 
-**Local-first code intelligence** ◦ MIT ◦ no API keys ◦ no code upload ◦ first run downloads a local ONNX model
+**Local-first** ◦ MIT ◦ no API keys ◦ no code upload ◦ first run downloads a local ONNX model
 
 Use grep when you know the exact string. Use Sverklo when the agent needs relationships: who calls this, what depends on it, what changed, and which project decisions still apply. The public bench covers 180 hand-verified tasks across 6 OSS codebases; the methodology and ground truth live in [sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench). [Bench](https://sverklo.com/bench/) · [paper](https://doi.org/10.5281/zenodo.19802051) · [90-second demo](https://www.youtube.com/watch?v=OX7aEgdlqhQ)
 
@@ -24,6 +20,10 @@ cd your-project && sverklo init
 ```
 
 `sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. Your code stays on your machine.
+
+> *"The map is not the territory."* — Alfred Korzybski
+>
+> Training data is the map. Your codebase is the territory. **Sverklo gives the agent the territory.**
 
 ### Editor shortcuts
 
@@ -493,7 +493,7 @@ Use this if you're contributing, debugging the indexer, or want to run a not-yet
 
 To run the bench:
 ```bash
-npm run bench:primitives
+npm run bench:quick
 ```
 
 Output lands in `benchmark/results/<timestamp>/`.

@@ -40,7 +40,7 @@ export function runDoctor(projectPath: string): void {
   // Captured from .mcp.json so the MCP probe (step 7 below) spawns the
   // server with the same env Claude Code would. Without this, the doctor
   // probe inherits the user's shell env — which typically lacks
-  // SVERKLO_PROFILE — and reports "36 tools advertised" even when
+  // SVERKLO_PROFILE — and reports "37 tools advertised" even when
   // .mcp.json explicitly sets profile=core. That's the silent contradiction
   // UX caught in the 2026-05-10 audit: headline v0.20.9 fix invisible in
   // the headline v0.20.9 diagnostic.
@@ -309,7 +309,7 @@ export function runDoctor(projectPath: string): void {
             checks.push({
               name: ".mcp.json (project root)",
               status: "warn",
-              message: `sverklo configured: ${cmd} — no SVERKLO_PROFILE set, Claude Code sees all 36 tools`,
+              message: `sverklo configured: ${cmd} — no SVERKLO_PROFILE set, Claude Code sees all 37 tools`,
               fix: "sverklo init (will add SVERKLO_PROFILE=core for 6-tool default)",
             });
           }

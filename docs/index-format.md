@@ -34,7 +34,7 @@ Total DB size scales roughly linearly at ~15 KB per source file on mixed-languag
 | `imports`        | File-level import edges: file → imported path/symbol                   |
 | `file_graph`     | Adjacency list used by PageRank over files                             |
 | `memories`       | Persistent memory rows with tier, git SHA, staleness flags             |
-| `memory_ix`      | FTS5 index over memory content for `sverklo_recall`                    |
+| `memory_ix`      | FTS5 index over memory content for `recall`                            |
 | `watchpoints`    | Last-known mtimes used by the file watcher to drive incremental updates |
 
 Full DDL lives in `src/storage/schema.ts`.
@@ -63,7 +63,7 @@ Embeddings are stored in the `embeddings` table as `BLOB` columns holding raw li
 
 ## Hybrid Search
 
-`sverklo_search` runs three subqueries in parallel and fuses them with **Reciprocal Rank Fusion (RRF)**:
+`search` runs three subqueries in parallel and fuses them with **Reciprocal Rank Fusion (RRF)**:
 
 1. **BM25** over `fts_chunks` for lexical match — catches exact identifiers and string literals.
 2. **Cosine similarity** over `embeddings` for semantic match — catches "authentication middleware" style queries.
@@ -75,7 +75,7 @@ PageRank is computed over the file-level dependency graph: file A → file B edg
 
 ## Symbol Graph and Impact Analysis
 
-`sverklo_impact` and `sverklo_refs` walk the symbol-level graph built from `symbol_refs`. Edges are directional: caller → called. We resolve references lazily — at indexing time we store target _names_, and at query time we join against `symbols` to find matching definitions. This lazy resolution means:
+`impact` and `refs` walk the symbol-level graph built from `symbol_refs`. Edges are directional: caller → called. We resolve references lazily — at indexing time we store target _names_, and at query time we join against `symbols` to find matching definitions. This lazy resolution means:
 
 - We don't blow up on polymorphism or duck typing (both common in TS, Python, Ruby)
 - We trade some false positives (same-name symbols in different files) for correctness on real-world code
@@ -87,7 +87,7 @@ Impact analysis is a bounded BFS with a configurable depth (default 3), ranked b
 
 Sverklo's memory is bi-temporal: each memory row carries both a **wall-clock timestamp** and the **git SHA** at the moment of save. Memories are also tagged with:
 
-- **Tier** (`core` / `project` / `archived`) — core memories are auto-injected on every session start, project memories are searchable via `sverklo_recall`, archived memories are out of the hot path.
+- **Tier** (`core` / `project` / `archived`) — core memories are auto-injected on every session start, project memories are searchable via `recall`, archived memories are out of the hot path.
 - **Staleness flag** — set at load time when the files mentioned in a memory have changed meaningfully since the memory's SHA. Staleness is advisory, not destructive; stale memories still surface but are flagged.
 
 The memory table is intentionally narrow. We do not store embeddings for memories in the main `embeddings` table; they live in `memory_ix` (FTS5) because memory recall is almost always lexical ("what did we decide about rate limits") rather than semantic.

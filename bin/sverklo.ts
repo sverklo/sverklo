@@ -1144,7 +1144,7 @@ if (command === "profile") {
       console.log(`             ${tools.map((t: string) => t.replace(/^sverklo_/, "")).join(", ")}`);
       console.log();
     }
-    console.log("  full        36 tools  (every first-party sverklo tool — default)");
+    console.log("  full        37 tools  (every first-party sverklo tool — default)");
     console.log("\n  Set with: SVERKLO_PROFILE=core sverklo init");
     console.log("  Or in .sverklo.yaml: profile: core");
     console.log("  See: https://sverklo.com/blog/we-already-shipped-mcp-code-mode/\n");
@@ -2411,10 +2411,10 @@ if (command === "memory") {
         `  --editor PATH    editor to invoke (default: $EDITOR or vi)\n\n` +
         `Safety:\n` +
         `  - Removing a memory's heading from the file does NOT delete it.\n` +
-        `    Use \`sverklo memory demote <id>\` (planned) or \`sverklo_demote\`\n` +
+        `    Use \`sverklo memory demote <id>\` (planned) or \`demote\`\n` +
         `    from MCP for explicit deletion.\n` +
         `  - Adding a new memory by hand is not supported here. Use\n` +
-        `    \`sverklo_remember\` from MCP or call the API directly.\n` +
+        `    \`remember\` from MCP or call the API directly.\n` +
         `  - If the parser can't make sense of your edits, the change\n` +
         `    is rejected and your SQLite store is left untouched.\n`
       );

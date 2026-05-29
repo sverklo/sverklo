@@ -621,7 +621,7 @@ export async function initProject(
   if (mcpConfig.mcpServers?.sverklo) {
     // Soft migration for users who ran `sverklo init` before v0.20.9 (when
     // we added the SVERKLO_PROFILE=core default). If the entry has no env
-    // block at all, add it — silent 36→5 tool reduction on next CC restart.
+    // block at all, add it — silent 37→6 tool reduction on next CC restart.
     // If env exists (even empty), respect it: the user may have intentionally
     // chosen full or some other profile.
     const existing = mcpConfig.mcpServers.sverklo;
@@ -629,7 +629,7 @@ export async function initProject(
       existing.env = { SVERKLO_PROFILE: "core" };
       writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2) + "\n");
       console.log(
-        "  .mcp.json — added SVERKLO_PROFILE=core to existing sverklo entry (was loading 36 tools, now 5)"
+        "  .mcp.json — added SVERKLO_PROFILE=core to existing sverklo entry (was loading 37 tools, now 6)"
       );
     } else {
       console.log("  .mcp.json — sverklo already configured, skipping");
@@ -637,8 +637,8 @@ export async function initProject(
   } else {
     if (!mcpConfig.mcpServers) mcpConfig.mcpServers = {};
     // SVERKLO_PROFILE=core ships 6 tools (status/search/lookup/overview/refs/impact)
-    // instead of the full 36. Claude Code stalls on tool selection when it
-    // sees 36 sverklo tools alongside its built-ins; users with full(36)
+    // instead of the full 37. Claude Code stalls on tool selection when it
+    // sees 37 sverklo tools alongside its built-ins; users with full(37)
     // report sverklo "doesn't get called" even after init succeeds. core
     // is the smallest set that still answers "find / understand / explore"
     // questions; users who need audit/diff/memory tools flip to lean/full via env.
