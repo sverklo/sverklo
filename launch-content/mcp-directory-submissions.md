@@ -27,7 +27,7 @@
 | **npm package URL** | `https://www.npmjs.com/package/sverklo` |
 | **Documentation URL** | `https://github.com/sverklo/sverklo#readme` |
 | **Install command** | `npm install -g sverklo` |
-| **Quick start** | `npm install -g sverklo && cd your-project && sverklo init` |
+| **Quick start** | `npm install -g sverklo && cd your-project && sverklo init && sverklo prove` |
 | **Transport** | `stdio` |
 | **Authentication required** | `No` |
 | **Languages supported** | `TypeScript, JavaScript, Python, Go, Rust, Java, C, C++, Ruby, PHP` |
@@ -235,7 +235,7 @@ Pitch in the email body if it's an email submission:
 > - Repo: https://github.com/sverklo/sverklo
 > - npm: https://www.npmjs.com/package/sverklo
 > - Site: https://sverklo.com
-> - Install: npm install -g sverklo && cd your-project && sverklo init
+> - Install: npm install -g sverklo && cd your-project && sverklo init && sverklo prove
 > - Transport: stdio
 > - License: MIT
 > - Telemetry: opt-in only, full privacy design at https://github.com/sverklo/sverklo/blob/main/TELEMETRY.md

@@ -970,11 +970,11 @@ export async function initProject(
   // crafted hybrid-workflow prompts that combine sverklo tools with
   // grep/read fallbacks. They're the most differentiated artifact in
   // the product but were buried before; promoting them to the top of
-  // post-init output gets the user a real audit in 30 seconds.
+  // post-init output gets the user a real repo-memory proof quickly.
   console.log("");
-  console.log("Try it now (30s codebase audit):");
-  console.log("  sverklo audit-prompt | claude         # paste the prompt into Claude — or any AI agent");
-  console.log("  sverklo audit                          # run a graded audit directly from the CLI");
+  console.log("Try it now (repo-memory proof):");
+  console.log("  sverklo prove                          # shows central files + a real caller graph");
+  console.log("  Then paste the \"Ask your agent\" line into Claude, Cursor, Codex, or Windsurf.");
   console.log("");
   console.log("Next steps:");
   console.log("  claude                                 # start coding — sverklo tools are preferred automatically");

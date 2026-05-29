@@ -59,6 +59,7 @@ if (command && command !== "--help" && command !== "-h") {
     const HELP_BLURBS: Record<string, string> = {
       init: "Set up sverklo in your project (.mcp.json + CLAUDE.md, auto-detects Claude Code/Cursor/Windsurf/Antigravity). With --global: one-time-per-machine setup — write SVERKLO_SNIPPET to ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md, register the project, gitignore .sverklo/, import memories. Skips per-project boilerplate.",
       doctor: "Diagnose MCP setup issues. Run after `init` to verify the agent can reach sverklo.",
+      prove: "Show a first-run repo-memory proof: central files, a real symbol with callers, and a paste-ready agent prompt.",
       audit: "Run codebase audit and emit a graded report. Flags: --format markdown|html|json|graph|arch|obsidian, --output PATH, --open, --badge, --publish.",
       "audit-diff": "Incremental architectural quality gate. Audits `git diff` for new cycles + fan-in spikes. Flags: --against REF, --fan-in-threshold N, --format human|json, --show-existing, --verbose. Exits 1 on regression.",
       review: "Risk-scored diff review (CI-friendly). Flags: --ref REF, --ci, --format markdown|json, --max-files N, --fail-on low|medium|high.",
@@ -172,6 +173,15 @@ if (command === "register") {
   registerRepo(repoName, targetPath);
   console.log(`Registered "${repoName}" -> ${targetPath}`);
   console.log(`Registry: ${getRegistryPath()}`);
+  process.exit(0);
+}
+
+if (command === "prove") {
+  const flags = args.slice(1);
+  const projectPath = await resolveProjectPath(flags);
+  const { runProve } = await import("../src/prove.js");
+  const report = await runProve(projectPath);
+  process.stdout.write(report);
   process.exit(0);
 }
 
@@ -2801,13 +2811,14 @@ sverklo — code intelligence for AI agents
 
 Just installed? Run these two:
   sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
-  sverklo doctor             Verify MCP dispatch end-to-end (initialize + tools/list + tools/call)
+  sverklo prove              Show a real repo-memory proof from your codebase
 
 Then restart your AI agent (Claude Code, Cursor, Windsurf, etc.) — sverklo tools become available automatically.
 
 Usage:
   sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
   sverklo doctor             Diagnose MCP setup issues
+  sverklo prove [path]       Show central files, a real caller graph, and an agent prompt
   sverklo reindex [path]     Incremental rebuild of the index (changed files only)
                              Use --force to clear and rebuild from scratch.
                              Use --timing to see per-phase elapsed ms.
@@ -2850,6 +2861,7 @@ Setup / runtime:
 Quick start (single project):
   npm install -g sverklo
   cd your-project && sverklo init
+  sverklo prove
   claude   # start coding — sverklo tools are preferred automatically
 
 Quick start (multi-repo, global):

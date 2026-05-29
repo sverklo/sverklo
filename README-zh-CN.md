@@ -36,9 +36,10 @@
 ```bash
 npm install -g sverklo
 cd your-project && sverklo init
+sverklo prove
 ```
 
-`sverklo init` 自动检测你已安装的 AI 代理（Claude Code、Cursor、Windsurf、Zed、Google Antigravity），写入正确的 MCP 配置，根据情况追加说明到 `AGENTS.md` 或 `CLAUDE.md`，并运行 `sverklo doctor` 验证握手。macOS、Linux、Windows 全平台支持。
+`sverklo init` 自动检测你已安装的 AI 代理（Claude Code、Cursor、Windsurf、Zed、Google Antigravity），写入正确的 MCP 配置，根据情况追加说明到 `AGENTS.md` 或 `CLAUDE.md`，并运行 `sverklo doctor` 验证握手。`sverklo prove` 会用你的真实仓库打印核心文件、一个真实调用图，以及可直接粘贴给代理的提示词。macOS、Linux、Windows 全平台支持。
 
 ---
 

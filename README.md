@@ -17,9 +17,10 @@ Use grep when you know the exact string. Use Sverklo when the agent needs relati
 ```bash
 npm install -g sverklo
 cd your-project && sverklo init
+sverklo prove
 ```
 
-`sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. Your code stays on your machine.
+`sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. `sverklo prove` then shows central files, a real symbol with callers, and the exact prompt to paste into your agent. Your code stays on your machine.
 
 > *"The map is not the territory."* — Alfred Korzybski
 >
@@ -36,7 +37,7 @@ cd your-project && sverklo init
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19802051.svg)](https://doi.org/10.5281/zenodo.19802051)
 [![GitHub stars](https://img.shields.io/github/stars/sverklo/sverklo?style=social)](https://github.com/sverklo/sverklo/stargazers)
 
-> If Sverklo catches a real repo mistake for you, please star the repo. It is the fastest way to help other agent-heavy teams find it.
+> If `sverklo prove` surfaces useful repo context, please star the repo. It is the fastest way to help other agent-heavy teams find it.
 
 ![Sverklo bench:primitives token comparison](./docs/hero-token-comparison.png)
 
@@ -74,9 +75,10 @@ Sverklo drills into your repo before the agent does — symbol graph, blast radi
 ```bash
 npm install -g sverklo
 cd your-project && sverklo init
+sverklo prove
 ```
 
-That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to `AGENTS.md` if present (otherwise `CLAUDE.md`), and runs `sverklo doctor` to verify the setup. Works on macOS, Linux, and Windows. **No API keys. No cloud. Telemetry off by default.**
+That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to `AGENTS.md` if present (otherwise `CLAUDE.md`), and runs `sverklo doctor` to verify the setup. `sverklo prove` shows the first useful repo-memory proof from your own codebase. Works on macOS, Linux, and Windows. **No API keys. No cloud. Telemetry off by default.**
 
 > The embedding model (`all-MiniLM-L6-v2` ONNX, ~86 MB) is downloaded from HuggingFace on first use into `~/.sverklo/models/` and cached forever — every subsequent run is fully offline.
 
@@ -447,9 +449,10 @@ Click the badge for your editor. Cursor / VS Code prompt to confirm, then sverkl
 ```bash
 npm install -g sverklo
 cd your-project && sverklo init
+sverklo prove
 ```
 
-`sverklo init` auto-detects which AI coding agents you have (Claude Code, Cursor, Windsurf, Zed, Antigravity) and writes the right MCP config files. Idempotent — safe to re-run. If sverklo doesn't appear in your agent after restart, run `sverklo doctor`.
+`sverklo init` auto-detects which AI coding agents you have (Claude Code, Cursor, Windsurf, Zed, Antigravity) and writes the right MCP config files. `sverklo prove` prints central files, a real caller graph, and a prompt to paste into your agent. Idempotent — safe to re-run. If sverklo doesn't appear in your agent after restart, run `sverklo doctor`.
 
 **Per-agent config locations** (`sverklo init` writes these for you):
 - Claude Code: `.mcp.json` at project root + appends to `CLAUDE.md` (or `AGENTS.md` if present)
