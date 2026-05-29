@@ -49,6 +49,8 @@ const NOISE_SEGMENTS = [
   "__fixtures__/",
   "fixtures/",
   "vendor/",
+  "benchmark/",
+  "benchmarks/",
   "benchmark/.cache/",
 ];
 

@@ -38,6 +38,7 @@ describe("buildProveReport", () => {
       file(2, "src/routes/login.ts", 0.7),
       file(3, "src/routes/session.ts", 0.6),
       file(4, "src/auth/service.test.ts", 0.1),
+      file(5, "benchmark/auth.ts", 1.0),
     ];
     const definition = {
       ...chunk(1, 1, "validateToken"),
@@ -93,5 +94,6 @@ describe("buildProveReport", () => {
     expect(report).toContain("referenced 7 times across 3 files");
     expect(report).toContain("Use sverklo impact on validateToken");
     expect(report).not.toContain("service.test.ts");
+    expect(report).not.toContain("benchmark/auth.ts");
   });
 });
