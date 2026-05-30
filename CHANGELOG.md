@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ## [Unreleased]
 
+---
+
+## [0.29.0] — 2026-05-30
+
 ### Added
 
 - **`sverklo marketing`: local-first Twitter/X agent-team workflow.** Imports operator-provided trend, profile, recent-post, and evidence snapshots; ranks guerrilla marketing opportunities; drafts local seed-content queues; scores profile health; records human decisions; and writes Markdown reports under `.sverklo/marketing/`. It does not post to X/Twitter, scrape X, auto-reply, send DMs, like/repost, follow/unfollow, or mutate the profile.
