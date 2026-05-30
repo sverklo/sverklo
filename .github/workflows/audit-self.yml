@@ -35,15 +35,15 @@ jobs:
 
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Audit reads diff against the base branch; need full enough
           # history. fetch-depth: 0 is the safe default — sverklo's repo
           # is small enough that the clone cost is irrelevant.
           fetch-depth: 0
 
-      - name: Setup Node 22
-        uses: actions/setup-node@v4
+      - name: Setup Node 24
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -155,7 +155,7 @@ jobs:
         # job summary above and the JSON artifact. Same pattern as
         # auto-bench.yml (sverklo/sverklo#35).
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require("node:fs");

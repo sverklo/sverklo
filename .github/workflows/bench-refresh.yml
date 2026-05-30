@@ -43,12 +43,12 @@ jobs:
 
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
-      - name: Setup Node 22
-        uses: actions/setup-node@v4
+      - name: Setup Node 24
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -57,7 +57,7 @@ jobs:
       # uvx ships with astral-sh/uv. Without this step the bench fails
       # with `Error: spawn uvx ENOENT` after the sverklo slice runs.
       - name: Setup uv (for jcodemunch baseline)
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v8.1.0
 
       # naive-grep/smart-grep are pure shell; rg is preinstalled on
       # ubuntu-latest. The other two baselines need explicit installs.
@@ -133,7 +133,7 @@ jobs:
           echo "::notice::Published to https://t.sverklo.com/v1/index.json"
 
       - name: Upload results as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bench-refresh-${{ github.run_id }}
           path: ${{ steps.results.outputs.dir }}

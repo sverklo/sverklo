@@ -40,10 +40,10 @@ jobs:
 
     steps:
       - name: Checkout PR
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: "npm"
@@ -67,7 +67,7 @@ jobs:
       # Also run against the base branch for comparison. We check out
       # the base ref in a sibling directory so the PR tree stays intact.
       - name: Checkout base
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.base_ref }}
           path: base-checkout
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload profile artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: latency-profiles
           path: |
