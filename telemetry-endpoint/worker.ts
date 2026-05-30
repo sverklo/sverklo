@@ -119,6 +119,7 @@ const ALLOWED_PAGE_PREFIXES = [
   "/report/",    // per-repo audit reports
   "/recipes/",   // integration recipes
   "/research/",  // research notes
+  "/intent/",    // privacy-safe CTA/copy events from sverklo.com
 ];
 
 function isAllowedPage(p: string): boolean {
