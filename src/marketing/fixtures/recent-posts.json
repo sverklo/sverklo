@@ -1,0 +1,24 @@
+{
+  "captured_at": "2026-05-30T15:00:00Z",
+  "account_handle": "@sverklo",
+  "posts": [
+    {
+      "id": "post-001",
+      "text": "Sverklo gives coding agents repo memory before they edit.",
+      "posted_at": "2026-05-29T15:00:00Z",
+      "theme": "memory"
+    },
+    {
+      "id": "post-002",
+      "text": "Local-first code intelligence means your code stays on your machine.",
+      "posted_at": "2026-05-28T15:00:00Z",
+      "theme": "local-first code intel"
+    },
+    {
+      "id": "post-003",
+      "text": "Release discipline keeps blast radius small.",
+      "posted_at": "2026-05-27T15:00:00Z",
+      "theme": "release discipline"
+    }
+  ]
+}

@@ -118,7 +118,6 @@ async function loadRuntime(): Promise<ParserCtor | null> {
     // before Parser.Language is populated. The 0.20-era shape exposed
     // Parser + Language as separate named exports — we cover both.
     const modName = "web-tree-sitter";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mod: any = await import(modName).catch(() => null);
     if (!mod) {
       runtimeInitFailed = true;

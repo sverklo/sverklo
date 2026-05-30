@@ -601,7 +601,6 @@ function getOldSymbols(rootPath: string, ref: string, filePath: string): OldSymb
   // Use sverklo's existing parser
   // Note: this is a sync import which is fine inside the handler since it's already loaded
   // by other tools. Avoid top-level import to keep this file isolated for testing.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   // We can't actually require here (ESM) — caller must pass parser.
   // Workaround: use a quick regex extraction for the most common cases.
   return quickExtractSymbols(oldContent, language);

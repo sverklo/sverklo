@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { SVERKLO_SNIPPET } from "./init.js";
+import { logSummary } from "./utils/logger.js";
 
 // Issue #72 (HaleTom 2026-05-25): a global-instructions workflow user
 // wants the "prefer sverklo" behavior baked in once per machine, plus
@@ -151,11 +152,11 @@ export async function initGlobal(
   options: InitGlobalOptions = {}
 ): Promise<InitGlobalResult> {
   const home = options.home ?? homedir();
-  console.log("Initializing Sverklo (global mode) for", targetPath);
-  console.log("");
+  logSummary(`Initializing Sverklo (global mode) for ${targetPath}`);
+  logSummary("");
 
   // 1. Global agent-instruction snippet — one-time per machine.
-  console.log("Global agent instructions:");
+  logSummary("Global agent instructions:");
   const targets = globalInstructionTargets(home);
   const globalWrites: GlobalWriteAction[] = [];
   for (const t of targets) {
@@ -163,13 +164,13 @@ export async function initGlobal(
     globalWrites.push(result);
     switch (result.action) {
       case "skip":
-        console.log(`  ${result.label} — already has sverklo instructions, skipping`);
+        logSummary(`  ${result.label} — already has sverklo instructions, skipping`);
         break;
       case "append":
-        console.log(`  ${result.label} — appended sverklo instructions`);
+        logSummary(`  ${result.label} — appended sverklo instructions`);
         break;
       case "create":
-        console.log(`  ${result.label} — created with sverklo instructions`);
+        logSummary(`  ${result.label} — created with sverklo instructions`);
         break;
     }
   }
@@ -178,20 +179,20 @@ export async function initGlobal(
   const { registerRepo, deriveRepoName } = await import("./registry/registry.js");
   const repoName = deriveRepoName(targetPath);
   registerRepo(repoName, targetPath);
-  console.log("");
-  console.log(`Registered "${repoName}" → ${targetPath}`);
+  logSummary("");
+  logSummary(`Registered "${repoName}" → ${targetPath}`);
 
   // 3. .gitignore: add .sverklo/ so per-project state doesn't get committed.
   const gitignore = addSverkloToGitignore(targetPath);
   switch (gitignore) {
     case "already":
-      console.log("  .gitignore — already excludes .sverklo/, skipping");
+      logSummary("  .gitignore — already excludes .sverklo/, skipping");
       break;
     case "added":
-      console.log("  .gitignore — added .sverklo/ entry");
+      logSummary("  .gitignore — added .sverklo/ entry");
       break;
     case "created":
-      console.log("  .gitignore — created with .sverklo/ entry");
+      logSummary("  .gitignore — created with .sverklo/ entry");
       break;
     case "no-git":
       // No-op: not a git repo. Match `initProject` — don't create a
@@ -201,13 +202,13 @@ export async function initGlobal(
 
   // 4. Memory import — same gating as `initProject`: only if the ONNX
   //    model is on disk. If not, memories will be imported on first run.
-  console.log("");
-  console.log("Scanning for existing project knowledge...");
+  logSummary("");
+  logSummary("Scanning for existing project knowledge...");
   let memoryImport: InitGlobalResult["memoryImport"] = { skipped: "error", error: "not-attempted" };
   try {
     const modelPath = join(home, ".sverklo", "models", "model.onnx");
     if (!existsSync(modelPath)) {
-      console.log("  model not yet downloaded — memories will be imported on first run");
+      logSummary("  model not yet downloaded — memories will be imported on first run");
       memoryImport = { skipped: "no-model" };
     } else {
       const { getProjectConfig } = await import("./utils/config.js");
@@ -222,32 +223,32 @@ export async function initGlobal(
       indexer.close();
 
       if (result.imported > 0) {
-        console.log(`  imported ${result.imported} memories from:`);
+        logSummary(`  imported ${result.imported} memories from:`);
         for (const src of result.sources) {
-          console.log(`    · ${src}`);
+          logSummary(`    · ${src}`);
         }
         if (result.skipped > 0) {
-          console.log(`  (${result.skipped} duplicates skipped)`);
+          logSummary(`  (${result.skipped} duplicates skipped)`);
         }
       } else {
         const hint = options.mineChats
           ? "  no CLAUDE.md, .cursorrules, ADRs, or matching Claude Code chats found — skipping"
           : "  no CLAUDE.md, .cursorrules, or ADRs found — skipping";
-        console.log(hint);
+        logSummary(hint);
       }
       memoryImport = result;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.log("  (memory import skipped)");
+    logSummary("  (memory import skipped)");
     memoryImport = { skipped: "error", error: msg };
   }
 
-  console.log("");
-  console.log("Global setup complete. Next steps:");
-  console.log("  - Your agent will now prefer sverklo tools by default (from global instructions).");
-  console.log("  - To wire sverklo's MCP server into a project, run `sverklo init` there.");
-  console.log("  - To re-import memories from another project later, run `sverklo memory import [path]`.");
+  logSummary("");
+  logSummary("Global setup complete. Next steps:");
+  logSummary("  - Your agent will now prefer sverklo tools by default (from global instructions).");
+  logSummary("  - To wire sverklo's MCP server into a project, run `sverklo init` there.");
+  logSummary("  - To re-import memories from another project later, run `sverklo memory import [path]`.");
 
   return {
     globalWrites,

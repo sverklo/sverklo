@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "evidence_id": "bench-readme-001",
+      "claim": "Sverklo benchmark methodology is public and reproducible",
+      "source_type": "benchmark",
+      "source_path_or_url": "sverklo/benchmark/README.md",
+      "verified_at": "2026-05-30T15:00:00Z",
+      "notes": "Use exact numbers only when the benchmark file contains them."
+    }
+  ]
+}

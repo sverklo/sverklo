@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`sverklo marketing`: local-first Twitter/X agent-team workflow.** Imports operator-provided trend, profile, recent-post, and evidence snapshots; ranks guerrilla marketing opportunities; drafts local seed-content queues; scores profile health; records human decisions; and writes Markdown reports under `.sverklo/marketing/`. It does not post to X/Twitter, scrape X, auto-reply, send DMs, like/repost, follow/unfollow, or mutate the profile.
+
+---
+
 ## [0.27.0]
 
 ### Added
@@ -309,4 +317,3 @@ The "v0.16 perfect-product" release. Sprint 9 features land in user-visible form
 The `bench:research` benchmark stays at **99.0 % recall (31/32)** across all changes — deterministic across runs. The single missed task (`sverklo-evidence-verify` finds 2 of 3 evidence files) is a known boundary-case ranking issue tracked for v0.17.
 
 Schema version bumped to 8. Migrations are additive and tested; existing v7 databases upgrade in place.
-

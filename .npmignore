@@ -9,9 +9,20 @@ tsconfig.json
 models/
 
 # Dev / local
+node_modules/
+coverage/
+benchmark/.cache/
+build/
 *.db
 *.db-journal
+*.log
 .env
+.env*
 .gitignore
 .DS_Store
+Thumbs.db
 grammars/
+*.tmp
+*.swp
+.vscode/
+.idea/

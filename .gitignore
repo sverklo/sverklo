@@ -1,10 +1,13 @@
 node_modules/
 dist/
+build/
 extensions/vscode/out/
 extensions/vscode/node_modules/
 *.db
 *.db-journal
 .env
+.env*
+*.log
 grammars/
 models/
 .DS_Store

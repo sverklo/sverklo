@@ -101,7 +101,9 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/picomatch": "^4.0.3",
+    "eslint": "^10.4.1",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.60.0",
     "vitest": "^3.0.0"
   }
 }

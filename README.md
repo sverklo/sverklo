@@ -24,6 +24,8 @@ sverklo prove
 
 Need something shareable? Run `sverklo prove --markdown` to print a GitHub/Discord-ready proof receipt from your repo, then [post it in the proof thread](https://github.com/sverklo/sverklo/discussions/79).
 
+Need local launch planning for the Sverklo account? `sverklo marketing` runs a local-first Twitter/X agent-team workflow from operator-provided snapshots. It ranks opportunities, drafts seed-content queues, checks profile health, and records human decisions without posting, scraping, replying, liking, reposting, following, or changing the profile.
+
 > *"The map is not the territory."* — Alfred Korzybski
 >
 > Training data is the map. Your codebase is the territory. **Sverklo gives the agent the territory.**

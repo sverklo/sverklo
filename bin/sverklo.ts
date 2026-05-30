@@ -115,6 +115,7 @@ if (command && command !== "--help" && command !== "-h") {
       digest: "5-line summary of what changed in this project. Flags: --since 7d, --format markdown|plain.",
       receipt: "Token-spend receipt for your recent Claude Code sessions. Shows where tokens went and projected yearly cost. Flags: --since 7d, --format plain|json.",
       memory: "Manage the memory store. Subcommands: show, edit, import, export.",
+      marketing: "Run the local-first Sverklo Twitter agent team workflow. Subcommands: init, run-cycle, decide, status.",
       grammars: "Manage tree-sitter grammars for the SVERKLO_PARSER=tree-sitter opt-in path. Subcommands: install.",
       weights: "Inspect .sverklo.yaml weight rules. Subcommands: explain <path> — show which glob matched and the effective weight.",
       "audit-prompt": "Print a ready-to-paste codebase-audit prompt (hybrid agent workflow).",
@@ -161,6 +162,166 @@ if (command === "--version" || command === "-v" || command === "-V") {
   }
   console.log("sverklo (version unknown)");
   process.exit(0);
+}
+
+if (command === "marketing") {
+  const subcommand = args[1];
+  const flags = args.slice(2);
+  const flagVal = (name: string): string | undefined => {
+    const idx = flags.indexOf(name);
+    if (idx !== -1 && flags[idx + 1]) return flags[idx + 1];
+    const prefixed = flags.find((f) => f.startsWith(`${name}=`));
+    return prefixed ? prefixed.slice(name.length + 1) : undefined;
+  };
+  const requireFlag = (name: string): string => {
+    const value = flagVal(name);
+    if (!value) {
+      console.error(`✗ ${name} is required`);
+      process.exit(2);
+    }
+    return value;
+  };
+  const format = flagVal("--format") ?? "text";
+  if (format !== "text" && format !== "json") {
+    console.error(`✗ --format must be text or json, got "${format}"`);
+    process.exit(2);
+  }
+
+  const {
+    appendOperatorDecision,
+    applyOperatorDecision,
+    assertEvidenceCatalog,
+    assertProfileSnapshot,
+    assertRecentPostsSnapshot,
+    assertTrendSnapshot,
+    buildStatusSummary,
+    createOperatorDecision,
+    initMarketingWorkspace,
+    jsonFile,
+    loadActiveCampaignCycle,
+    loadCampaignCycle,
+    loadMarketingWorkspace,
+    marketingPaths,
+    normalizeAccountHandle,
+    recomputeCampaignReadiness,
+    renderContentReport,
+    renderOpportunityReport,
+    renderProfileHealthReport,
+    renderStatusText,
+    resolveMarketingWorkspace,
+    runCampaignCycle,
+    saveCampaignCycle,
+    saveMarketingWorkspace,
+    writeReport,
+  } = await import("../src/marketing/index.js");
+  const { existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+
+  const workspacePath = flagVal("--workspace");
+  const readOptional = <T>(path: string | undefined): T | undefined => {
+    return path && existsSync(path) ? jsonFile<T>(path) : undefined;
+  };
+
+  if (!subcommand || subcommand === "--help" || subcommand === "-h") {
+    console.log(
+      `\nsverklo marketing — local-first Twitter agent team workflow\n\n` +
+        `Usage:\n` +
+        `  sverklo marketing init --account @sverklo [--workspace PATH]\n` +
+        `  sverklo marketing run-cycle [--workspace PATH] [--trends PATH] [--profile PATH] [--recent-posts PATH] [--evidence PATH] [--format text|json]\n` +
+        `  sverklo marketing decide --target-type TYPE --target-id ID --decision VALUE [--reason TEXT] [--future]\n` +
+        `  sverklo marketing status [--workspace PATH] [--format text|json]\n\n` +
+        `No command posts to X/Twitter, scrapes X, sends DMs, likes, reposts, follows, unfollows, or mutates the profile.\n`
+    );
+    process.exit(0);
+  }
+
+  try {
+    if (subcommand === "init") {
+      const account = normalizeAccountHandle(requireFlag("--account"));
+      const workspace = initMarketingWorkspace({ workspacePath, accountHandle: account });
+      console.log(`Initialized marketing workspace for ${workspace.account_handle} at ${resolveMarketingWorkspace(workspacePath)}`);
+      process.exit(0);
+    }
+
+    if (subcommand === "run-cycle") {
+      const workspace = loadMarketingWorkspace(workspacePath);
+      const root = resolveMarketingWorkspace(workspacePath);
+      const inputDir = marketingPaths(root).inputs;
+      const existing = loadActiveCampaignCycle(workspacePath, workspace);
+      const trends = readOptional<import("../src/marketing/index.js").TrendSnapshot>(
+        flagVal("--trends") ?? join(inputDir, "trend-snapshot.json"),
+      );
+      const profile = readOptional<import("../src/marketing/index.js").ProfileSnapshot>(
+        flagVal("--profile") ?? join(inputDir, "profile-snapshot.json"),
+      );
+      const recentPosts = readOptional<import("../src/marketing/index.js").RecentPostsSnapshot>(
+        flagVal("--recent-posts") ?? join(inputDir, "recent-posts.json"),
+      );
+      const evidence = readOptional<import("../src/marketing/index.js").EvidenceCatalog>(
+        flagVal("--evidence") ?? join(inputDir, "evidence.json"),
+      );
+      if (trends) assertTrendSnapshot(trends);
+      if (profile) assertProfileSnapshot(profile);
+      if (recentPosts) assertRecentPostsSnapshot(recentPosts);
+      if (evidence) assertEvidenceCatalog(evidence);
+      if (!trends && !profile && !recentPosts && !evidence && !existing) {
+        throw new Error("no local marketing inputs found; provide --trends, --profile, --recent-posts, or --evidence");
+      }
+      const cycle = runCampaignCycle({
+        workspace,
+        existingCycle: existing,
+        trendSnapshot: trends,
+        profileSnapshot: profile,
+        recentPosts,
+        evidence,
+        cycleId: flagVal("--cycle"),
+      });
+      saveMarketingWorkspace(workspacePath, workspace);
+      saveCampaignCycle(workspacePath, cycle);
+      writeReport(workspacePath, cycle.cycle_id, "opportunities", renderOpportunityReport(cycle));
+      writeReport(workspacePath, cycle.cycle_id, "content", renderContentReport(cycle));
+      writeReport(workspacePath, cycle.cycle_id, "profile-health", renderProfileHealthReport(cycle));
+      const summary = buildStatusSummary(cycle);
+      if (format === "json") console.log(JSON.stringify(summary, null, 2));
+      else process.stdout.write(renderStatusText(summary));
+      process.exit(0);
+    }
+
+    if (subcommand === "decide") {
+      const workspace = loadMarketingWorkspace(workspacePath);
+      if (!workspace.active_cycle_id) throw new Error("no active marketing cycle");
+      const cycle = loadCampaignCycle(workspacePath, workspace.active_cycle_id);
+      const decision = createOperatorDecision({
+        targetType: requireFlag("--target-type") as import("../src/marketing/index.js").DecisionTargetType,
+        targetId: requireFlag("--target-id"),
+        decision: requireFlag("--decision") as import("../src/marketing/index.js").DecisionValue,
+        reason: flagVal("--reason"),
+        future: flags.includes("--future"),
+      });
+      applyOperatorDecision(workspace, cycle, decision);
+      recomputeCampaignReadiness(cycle);
+      saveMarketingWorkspace(workspacePath, workspace);
+      saveCampaignCycle(workspacePath, cycle);
+      appendOperatorDecision(workspacePath, decision);
+      console.log(`Recorded decision ${decision.decision_id}`);
+      process.exit(0);
+    }
+
+    if (subcommand === "status") {
+      const workspace = loadMarketingWorkspace(workspacePath);
+      const cycle = loadActiveCampaignCycle(workspacePath, workspace);
+      const summary = buildStatusSummary(cycle);
+      if (format === "json") console.log(JSON.stringify(summary, null, 2));
+      else process.stdout.write(renderStatusText(summary));
+      process.exit(0);
+    }
+
+    console.error(`✗ unknown marketing subcommand: ${subcommand}`);
+    process.exit(2);
+  } catch (err) {
+    console.error(`✗ ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(2);
+  }
 }
 
 if (command === "init") {
@@ -2882,6 +3043,7 @@ Memory + offline maintenance:
   sverklo wiki               Generate a markdown wiki from the indexed codebase
   sverklo digest             5-line summary of what changed in this project (--since 7d)
   sverklo memory export      Export memories to markdown / Notion / JSON
+  sverklo marketing          Local Sverklo Twitter agent team workflow
   sverklo grammars install   Install tree-sitter grammars for the v0.17 opt-in parser
   sverklo prune              Decay stale memories + consolidate similar episodic ones
   sverklo concept-index      Label clusters with an LLM (requires Ollama)
