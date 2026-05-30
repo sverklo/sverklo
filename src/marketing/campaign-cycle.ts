@@ -110,7 +110,7 @@ function preserveOperatorStates(
 ): void {
   for (const opportunity of scout.opportunities) {
     const previous = existing.opportunities.find((item) => item.source_item_id === opportunity.source_item_id);
-    if (previous && ["approved", "archived"].includes(previous.status)) {
+    if (previous && ["approved", "archived", "rejected"].includes(previous.status)) {
       opportunity.status = previous.status;
     }
   }
@@ -133,7 +133,9 @@ function topBlocker(cycle: CampaignCycle): string | undefined {
   if (!cycle.content_queue?.items.some((item) => ["approved", "scheduled", "published"].includes(item.approval_status))) {
     return "No approved credibility content";
   }
-  const blockedContent = cycle.content_queue?.items.find((item) => item.blockers.length > 0);
+  const blockedContent = cycle.content_queue?.items.find(
+    (item) => item.approval_status !== "rejected" && item.blockers.length > 0,
+  );
   if (blockedContent) return `${blockedContent.content_id}: ${blockedContent.blockers[0]}`;
   if (cycle.opportunities.some((item) => item.status === "needs_review")) {
     return "One or more opportunities need operator review";
