@@ -46,9 +46,13 @@ async function resolveProjectPath(flags: string[]): Promise<string> {
 
 function parseProveArgs(rawArgs: string[]): {
   format: "text" | "markdown";
+  guided: boolean;
+  noWrite: boolean;
   pathArgs: string[];
 } {
   let format: "text" | "markdown" = "text";
+  let guided = false;
+  let noWrite = false;
   const pathArgs: string[] = [];
 
   for (let i = 0; i < rawArgs.length; i++) {
@@ -76,10 +80,18 @@ function parseProveArgs(rawArgs: string[]): {
       format = value === "markdown" ? "markdown" : "text";
       continue;
     }
+    if (arg === "--guided") {
+      guided = true;
+      continue;
+    }
+    if (arg === "--no-write" || arg === "--no-config-write") {
+      noWrite = true;
+      continue;
+    }
     pathArgs.push(arg);
   }
 
-  return { format, pathArgs };
+  return { format, guided, noWrite, pathArgs };
 }
 
 // Global --help / -h interceptor.
@@ -267,6 +279,11 @@ if (command === "marketing") {
       if (!trends && !profile && !recentPosts && !evidence && !existing) {
         throw new Error("no local marketing inputs found; provide --trends, --profile, --recent-posts, or --evidence");
       }
+      const cycleNow =
+        trends?.captured_at ??
+        profile?.captured_at ??
+        recentPosts?.captured_at ??
+        existing?.updated_at;
       const cycle = runCampaignCycle({
         workspace,
         existingCycle: existing,
@@ -275,6 +292,7 @@ if (command === "marketing") {
         recentPosts,
         evidence,
         cycleId: flagVal("--cycle"),
+        now: cycleNow,
       });
       saveMarketingWorkspace(workspacePath, workspace);
       saveCampaignCycle(workspacePath, cycle);
@@ -331,7 +349,19 @@ if (command === "init") {
   const autoCapture = flags.includes("--auto-capture");
   const mineChats = flags.includes("--mine-chats");
   const isGlobal = flags.includes("--global");
+  const dryRun = flags.includes("--dry-run");
   const projectPath = resolve(positional[1] || process.cwd());
+
+  if (dryRun) {
+    if (isGlobal) {
+      console.error("✗ sverklo init --dry-run does not support --global yet");
+      console.error("  Run `sverklo init --global` only after reviewing global instruction targets manually.");
+      process.exit(2);
+    }
+    const { renderInitDryRun } = await import("../src/init.js");
+    process.stdout.write(renderInitDryRun(projectPath, { autoCapture, mineChats }));
+    process.exit(0);
+  }
 
   if (isGlobal) {
     // Issue #72 — one-time-per-machine setup. Writes SVERKLO_SNIPPET to
@@ -376,10 +406,10 @@ if (command === "register") {
 }
 
 if (command === "prove") {
-  const { format, pathArgs } = parseProveArgs(args.slice(1));
+  const { format, guided, noWrite, pathArgs } = parseProveArgs(args.slice(1));
   const projectPath = await resolveProjectPath(pathArgs);
   const { runProve } = await import("../src/prove.js");
-  const report = await runProve(projectPath, { format });
+  const report = await runProve(projectPath, { format, guided, noWrite });
   process.stdout.write(report);
   process.exit(0);
 }
@@ -729,9 +759,24 @@ if (command === "audit-prompt" || command === "review-prompt") {
 }
 
 if (command === "doctor" || command === "diagnose" || command === "check") {
-  const projectPath = resolve(args[1] || process.cwd());
+  let agent: string | undefined;
+  const pathArgs: string[] = [];
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--agent") {
+      agent = args[i + 1];
+      i++;
+      continue;
+    }
+    if (arg.startsWith("--agent=")) {
+      agent = arg.slice("--agent=".length);
+      continue;
+    }
+    pathArgs.push(arg);
+  }
+  const projectPath = resolve(pathArgs[0] || process.cwd());
   const { runDoctor } = await import("../src/doctor.js");
-  runDoctor(projectPath);
+  runDoctor(projectPath, { agent });
   process.exit(0);
 }
 
@@ -3009,16 +3054,21 @@ if (command === "--help" || command === "-h") {
 sverklo — code intelligence for AI agents
 
 Just installed? Run these two:
-  sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
-  sverklo prove              Show a real repo-memory proof from your codebase
+  sverklo prove --no-write --guided
+                             Show proof before writing project or agent config files
+  sverklo init --dry-run     Preview the config files init would touch
 
 Then restart your AI agent (Claude Code, Cursor, Windsurf, etc.) — sverklo tools become available automatically.
 
 Usage:
   sverklo init               Set up sverklo in your project (.mcp.json + CLAUDE.md)
+  sverklo init --dry-run     Preview planned writes without changing files
   sverklo doctor             Diagnose MCP setup issues
+  sverklo doctor --agent codex
+                             Show agent-specific setup/check prompt guidance
   sverklo prove [path]       Show central files, a real caller graph, and an agent prompt
-                             Use --markdown or --receipt for a shareable artifact.
+                             Use --guided for selection notes, --no-write for trial mode,
+                             and --markdown or --receipt for a shareable artifact.
   sverklo reindex [path]     Incremental rebuild of the index (changed files only)
                              Use --force to clear and rebuild from scratch.
                              Use --timing to see per-phase elapsed ms.
@@ -3060,9 +3110,10 @@ Setup / runtime:
   sverklo --help             Show this help
 
 Quick start (single project):
-  npm install -g sverklo
-  cd your-project && sverklo init
-  sverklo prove
+  cd your-project
+  npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided
+  sverklo init --dry-run
+  npm install -g sverklo && sverklo init
   sverklo prove --markdown  # shareable proof for GitHub, Discord, Reddit, etc.
   claude   # start coding — sverklo tools are preferred automatically
 

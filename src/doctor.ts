@@ -34,8 +34,137 @@ interface CheckResult {
   fix?: string;
 }
 
-export function runDoctor(projectPath: string): void {
+type DoctorAgent =
+  | "claude-code"
+  | "cursor"
+  | "codex"
+  | "windsurf"
+  | "vscode"
+  | "copilot"
+  | "copilot-cli"
+  | "zed"
+  | "antigravity";
+
+export interface DoctorOptions {
+  agent?: string;
+}
+
+function normalizeAgent(agent: string | undefined): DoctorAgent | null {
+  if (!agent) return null;
+  const normalized = agent.toLowerCase();
+  switch (normalized) {
+    case "claude":
+    case "claude-code":
+      return "claude-code";
+    case "cursor":
+    case "codex":
+    case "windsurf":
+    case "vscode":
+    case "zed":
+    case "antigravity":
+      return normalized;
+    case "copilot":
+    case "github-copilot":
+      return "copilot";
+    case "copilot-cli":
+    case "github-copilot-cli":
+      return "copilot-cli";
+    default:
+      return null;
+  }
+}
+
+function renderAgentGuidance(agent: DoctorAgent, projectPath: string): string[] {
+  const prompt =
+    "Use sverklo impact on the symbol I am about to change, then tell me the caller/test blast radius before editing.";
+  switch (agent) {
+    case "claude-code":
+      return [
+        "Agent: Claude Code",
+        "  Config: .mcp.json at this project root",
+        "  Check: run `/mcp` after restarting Claude Code in this directory",
+        `  First prompt: ${prompt}`,
+      ];
+    case "cursor":
+      return [
+        "Agent: Cursor",
+        "  Config: .cursor/mcp.json or the Cursor one-click install badge",
+        "  Check: open Cursor MCP settings and confirm `sverklo` is enabled",
+        `  First prompt: ${prompt}`,
+      ];
+    case "codex":
+      return [
+        "Agent: Codex CLI",
+        "  Config: ~/.codex/config.toml",
+        `  Check: restart Codex in ${projectPath} and ask for available MCP tools`,
+        `  First prompt: ${prompt}`,
+      ];
+    case "windsurf":
+      return [
+        "Agent: Windsurf",
+        "  Config: ~/.windsurf/mcp.json",
+        "  Check: restart Windsurf and confirm the sverklo MCP server is listed",
+        `  First prompt: ${prompt}`,
+      ];
+    case "vscode":
+      return [
+        "Agent: VS Code / Copilot Chat",
+        "  Config: .vscode/mcp.json plus .github/copilot-instructions.md for prefer-sverklo guidance",
+        "  Check: restart VS Code and confirm the sverklo MCP server is available",
+        `  First prompt: ${prompt}`,
+      ];
+    case "copilot":
+      return [
+        "Agent: GitHub Copilot Chat",
+        "  Config: .github/copilot-instructions.md plus host MCP config",
+        "  Check: ensure github.copilot.chat.codeGeneration.useInstructionFiles is not false",
+        `  First prompt: ${prompt}`,
+      ];
+    case "copilot-cli":
+      return [
+        "Agent: GitHub Copilot CLI",
+        "  Config: ~/.copilot/mcp-config.json",
+        "  Check: run `gh copilot /mcp list` and confirm sverklo is present",
+        `  First prompt: ${prompt}`,
+      ];
+    case "zed":
+      return [
+        "Agent: Zed",
+        "  Config: configure sverklo as an MCP server in Zed settings",
+        "  Check: restart Zed and confirm sverklo appears in MCP tools",
+        `  First prompt: ${prompt}`,
+      ];
+    case "antigravity":
+      return [
+        "Agent: Google Antigravity",
+        "  Config: ~/.gemini/antigravity/mcp_config.json",
+        "  Check: restart Antigravity after `sverklo init` rewires the project path",
+        `  First prompt: ${prompt}`,
+      ];
+  }
+  const _exhaustive: never = agent;
+  return [`Agent: ${_exhaustive}`];
+}
+
+export function runDoctor(projectPath: string, options: DoctorOptions = {}): void {
+  const requestedAgent = options.agent;
+  const agent = normalizeAgent(requestedAgent);
   const checks: CheckResult[] = [];
+
+  if (requestedAgent && !agent) {
+    checks.push({
+      name: "selected agent",
+      status: "warn",
+      message: `${requestedAgent} is not recognized`,
+      fix: "use --agent claude, cursor, codex, windsurf, vscode, copilot, copilot-cli, zed, or antigravity",
+    });
+  } else if (agent) {
+    checks.push({
+      name: "selected agent",
+      status: "ok",
+      message: agent,
+    });
+  }
 
   // Captured from .mcp.json so the MCP probe (step 7 below) spawns the
   // server with the same env Claude Code would. Without this, the doctor
@@ -864,6 +993,14 @@ export function runDoctor(projectPath: string): void {
     console.log(`${failed} failure${failed === 1 ? "" : "s"}, ${warned} warning${warned === 1 ? "" : "s"}. Fix the failures above.`);
   }
   console.log("");
+
+  if (agent) {
+    console.log("Agent-specific next step:");
+    for (const line of renderAgentGuidance(agent, projectPath)) {
+      console.log(line);
+    }
+    console.log("");
+  }
 
   // Telemetry: one event per run, plus one event per failure (no detail).
   // The doctor.issue count tells us setup pain rate without leaking what failed.

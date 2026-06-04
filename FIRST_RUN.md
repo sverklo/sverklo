@@ -1,6 +1,14 @@
 # First Run — Sverklo in 5 minutes
 
-You installed sverklo and ran `sverklo init`. Your AI coding agent (Claude Code, Cursor, Antigravity, Windsurf) now has 20 new tools. Here's how to feel why they matter, in three prompts.
+You can try Sverklo before wiring it into your agent:
+
+```bash
+cd your-project
+npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided
+sverklo init --dry-run
+```
+
+`prove --no-write --guided` does not write project files, MCP config, or agent instruction files. It may cache the model/index under `~/.sverklo`. When the proof looks useful, run `sverklo init`, restart your agent, and use these prompts to feel why the tools matter.
 
 **Pick a real codebase you actually work in** — not a demo repo. Sverklo's value scales with codebase size and complexity. On a 30-file repo, grep is fine.
 

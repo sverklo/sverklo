@@ -15,12 +15,13 @@ Sverklo gives coding agents repo memory: symbols, callers, diffs, blast radius, 
 Use grep when you know the exact string. Use Sverklo when the agent needs relationships: who calls this, what depends on it, what changed, and which project decisions still apply. The public bench covers 180 hand-verified tasks across 6 OSS codebases; the methodology and ground truth live in [sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench). [Bench](https://sverklo.com/bench/) · [paper](https://doi.org/10.5281/zenodo.19802051) · [90-second demo](https://www.youtube.com/watch?v=OX7aEgdlqhQ)
 
 ```bash
-npm install -g sverklo
-cd your-project && sverklo init
-sverklo prove
+cd your-project
+npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided
+sverklo init --dry-run
+npm install -g sverklo && sverklo init
 ```
 
-`sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. `sverklo prove` then shows central files, a real symbol with callers, and the exact prompt to paste into your agent. Your code stays on your machine.
+`sverklo prove --no-write --guided` shows central files, a real symbol with callers, why that proof was selected, and the exact prompt to paste into your agent before any MCP config or instruction files are written. It may cache the local model/index under `~/.sverklo`, but it does not mutate your project. `sverklo init --dry-run` then previews the files `init` would touch; `sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. Your code stays on your machine.
 
 Need something shareable? Run `sverklo prove --markdown` to print a GitHub/Discord-ready proof receipt from your repo, then [post it in the proof thread](https://github.com/sverklo/sverklo/discussions/79).
 
@@ -77,12 +78,13 @@ Sverklo drills into your repo before the agent does — symbol graph, blast radi
 </table>
 
 ```bash
-npm install -g sverklo
-cd your-project && sverklo init
-sverklo prove
+cd your-project
+npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided
+sverklo init --dry-run
+npm install -g sverklo && sverklo init
 ```
 
-That's it. `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to `AGENTS.md` if present (otherwise `CLAUDE.md`), and runs `sverklo doctor` to verify the setup. `sverklo prove` shows the first useful repo-memory proof from your own codebase; `sverklo prove --markdown` makes that proof shareable in [the public proof thread](https://github.com/sverklo/sverklo/discussions/79). Works on macOS, Linux, and Windows. **No API keys. No cloud. Telemetry off by default.**
+That's it. `sverklo prove --no-write --guided` gives you the first useful repo-memory proof from your own codebase before project config changes; `sverklo init --dry-run` previews every setup target; `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to `AGENTS.md` if present (otherwise `CLAUDE.md`), and runs `sverklo doctor` to verify the setup. `sverklo prove --markdown` makes that proof shareable in [the public proof thread](https://github.com/sverklo/sverklo/discussions/79). Works on macOS, Linux, and Windows. **No API keys. No cloud. Telemetry off by default.**
 
 > The embedding model (`all-MiniLM-L6-v2` ONNX, ~86 MB) is downloaded from HuggingFace on first use into `~/.sverklo/models/` and cached forever — every subsequent run is fully offline.
 
@@ -451,12 +453,13 @@ Click the badge for your editor. Cursor / VS Code prompt to confirm, then sverkl
 <br/>
 
 ```bash
-npm install -g sverklo
-cd your-project && sverklo init
-sverklo prove
+cd your-project
+npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided
+sverklo init --dry-run
+npm install -g sverklo && sverklo init
 ```
 
-`sverklo init` auto-detects which AI coding agents you have (Claude Code, Cursor, Windsurf, Zed, Antigravity) and writes the right MCP config files. `sverklo prove` prints central files, a real caller graph, and a prompt to paste into your agent. Add `--markdown` or `--receipt` for a shareable proof artifact, then post it in [the proof thread](https://github.com/sverklo/sverklo/discussions/79). Idempotent — safe to re-run. If sverklo doesn't appear in your agent after restart, run `sverklo doctor`.
+Start with proof, then wire the agent. `sverklo prove --no-write --guided` prints central files, a real caller graph, why that symbol was selected, and a prompt to paste into your agent without writing MCP config or instruction files. `sverklo init --dry-run` previews setup targets. `sverklo init` auto-detects which AI coding agents you have (Claude Code, Cursor, Windsurf, Zed, Antigravity) and writes the right MCP config files. Add `--markdown` or `--receipt` for a shareable proof artifact, then post it in [the proof thread](https://github.com/sverklo/sverklo/discussions/79). Idempotent — safe to re-run. If sverklo doesn't appear in your agent after restart, run `sverklo doctor --agent claude` or the matching agent name.
 
 **Per-agent config locations** (`sverklo init` writes these for you):
 - Claude Code: `.mcp.json` at project root + appends to `CLAUDE.md` (or `AGENTS.md` if present)

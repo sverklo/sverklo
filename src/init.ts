@@ -367,6 +367,185 @@ function resolveSverkloBinary(): string {
   return findOnPath("sverklo") ?? "sverklo";
 }
 
+export interface InitDryRunOptions {
+  autoCapture?: boolean;
+  mineChats?: boolean;
+}
+
+function relProjectPath(projectPath: string, targetPath: string): string {
+  if (targetPath.startsWith(projectPath + "/")) return targetPath.slice(projectPath.length + 1);
+  return targetPath;
+}
+
+function plannedActionLine(target: string, action: string): string {
+  return `  - ${target}: ${action}`;
+}
+
+export function renderInitDryRun(
+  projectPath: string,
+  options: InitDryRunOptions = {},
+): string {
+  const lines: string[] = [];
+  const sverkloBin = resolveSverkloBinary();
+
+  lines.push(`sverklo init --dry-run`);
+  lines.push("");
+  lines.push(`Project: ${projectPath}`);
+  lines.push("");
+  lines.push("No files were written. Planned actions:");
+
+  const agentsTarget = resolveAgentsFileTarget({
+    projectPath,
+    claudeMd: findInstructionFile(projectPath, "CLAUDE.md"),
+    agentsMd: findInstructionFile(projectPath, "AGENTS.md"),
+    sentinel: "sverklo_search",
+  });
+  if (agentsTarget.action === "skip") {
+    lines.push(plannedActionLine(agentsTarget.fileName, "already has sverklo instructions"));
+  } else if (agentsTarget.action === "append") {
+    lines.push(plannedActionLine(agentsTarget.fileName, "would append sverklo instructions"));
+  } else {
+    lines.push(plannedActionLine("CLAUDE.md", "would create with sverklo instructions"));
+  }
+
+  const copilotInstructionsPath = join(projectPath, ".github", "copilot-instructions.md");
+  const copilotExtensionDetected = detectCopilotExtension();
+  const copilotTarget = resolveCopilotInstructionsTarget({
+    projectPath,
+    copilotFile: readFileMaybe(copilotInstructionsPath),
+    githubDirExists: existsSync(join(projectPath, ".github")),
+    vscodeDirExists: existsSync(join(projectPath, ".vscode")),
+    copilotExtensionDetected,
+    sentinel: "sverklo_search",
+  });
+  switch (copilotTarget.action) {
+    case "skip-no-signal":
+      lines.push(plannedActionLine(".github/copilot-instructions.md", "skip; no Copilot signal detected"));
+      break;
+    case "skip-already-present":
+      lines.push(plannedActionLine(".github/copilot-instructions.md", "already has sverklo instructions"));
+      break;
+    case "append":
+      lines.push(plannedActionLine(".github/copilot-instructions.md", "would append sverklo instructions"));
+      break;
+    case "create":
+      lines.push(plannedActionLine(".github/copilot-instructions.md", "would create with sverklo instructions"));
+      break;
+  }
+
+  const gitignorePath = join(projectPath, ".gitignore");
+  if (existsSync(gitignorePath)) {
+    const existing = readFileSync(gitignorePath, "utf-8");
+    const alreadyCovered = [/^\.sverklo\/?$/m, /^\/\.sverklo\/?$/m].some((re) =>
+      re.test(existing),
+    );
+    lines.push(
+      plannedActionLine(
+        ".gitignore",
+        alreadyCovered ? "already excludes .sverklo/" : "would append .sverklo/ exclusion",
+      ),
+    );
+  } else if (existsSync(join(projectPath, ".git"))) {
+    lines.push(plannedActionLine(".gitignore", "would create with .sverklo/ exclusion"));
+  } else {
+    lines.push(plannedActionLine(".gitignore", "skip; no .git directory detected"));
+  }
+
+  const mcpConfigPath = join(projectPath, ".mcp.json");
+  if (existsSync(mcpConfigPath)) {
+    try {
+      const mcpConfig = JSON.parse(readFileSync(mcpConfigPath, "utf-8")) as {
+        mcpServers?: Record<string, { env?: Record<string, string> }>;
+      };
+      if (mcpConfig.mcpServers?.sverklo) {
+        lines.push(
+          plannedActionLine(
+            ".mcp.json",
+            mcpConfig.mcpServers.sverklo.env
+              ? "sverklo already configured"
+              : "would add SVERKLO_PROFILE=core to existing sverklo entry",
+          ),
+        );
+      } else {
+        lines.push(plannedActionLine(".mcp.json", `would add sverklo MCP server (${sverkloBin})`));
+      }
+    } catch {
+      lines.push(plannedActionLine(".mcp.json", "invalid JSON; init would replace with a valid sverklo config"));
+    }
+  } else {
+    lines.push(plannedActionLine(".mcp.json", `would create sverklo MCP server (${sverkloBin})`));
+  }
+
+  const settingsPath = join(projectPath, ".claude", "settings.local.json");
+  if (existsSync(settingsPath)) {
+    try {
+      const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as {
+        permissions?: { allow?: string[] };
+        hooks?: Record<string, unknown[]>;
+      };
+      const allow = settings.permissions?.allow ?? [];
+      const hasSverklo = allow.some(
+        (p) => p === "mcp__sverklo__*" || p === "mcp__sverklo" || p.startsWith("mcp__sverklo__"),
+      );
+      const postHooks = settings.hooks?.PostToolUse as
+        | Array<{ hooks?: Array<{ command?: string }> }>
+        | undefined;
+      const hasReindex = postHooks?.some((h) =>
+        h.hooks?.some((hook) => hook.command?.includes("sverklo wakeup")),
+      );
+      const bits: string[] = [];
+      if (!hasSverklo) bits.push("auto-allow");
+      if (!hasReindex) bits.push("reindex hook");
+      if (options.autoCapture) bits.push("auto-capture hook");
+      lines.push(
+        plannedActionLine(
+          ".claude/settings.local.json",
+          bits.length > 0 ? `would update ${bits.join(" + ")}` : "already has sverklo permissions/hooks",
+        ),
+      );
+    } catch {
+      lines.push(plannedActionLine(".claude/settings.local.json", "invalid JSON; init would rewrite sverklo settings"));
+    }
+  } else {
+    lines.push(plannedActionLine(".claude/settings.local.json", "would create permissions and reindex hook"));
+  }
+
+  const antigravityDir = join(homedir(), ".gemini", "antigravity");
+  if (existsSync(antigravityDir)) {
+    lines.push(plannedActionLine("~/.gemini/antigravity/mcp_config.json", "would add or rewire sverklo to this project"));
+  }
+  if (existsSync(join(homedir(), ".codex"))) {
+    lines.push(plannedActionLine("~/.codex/config.toml", "would add or rewire sverklo to this project"));
+  }
+  if (existsSync(join(homedir(), ".copilot"))) {
+    lines.push(plannedActionLine("~/.copilot/mcp-config.json", "would add or rewire sverklo to this project"));
+  }
+
+  lines.push(plannedActionLine(".claude/skills/", "would install missing bundled skills"));
+  lines.push(plannedActionLine("global registry", "would register this project"));
+  lines.push(
+    plannedActionLine(
+      "existing memories",
+      options.mineChats
+        ? "would scan CLAUDE.md, .cursorrules, ADRs, and matching Claude Code chats if the model is cached"
+        : "would scan CLAUDE.md, .cursorrules, and ADRs if the model is cached",
+    ),
+  );
+  lines.push(plannedActionLine("doctor", "would run setup checks after writing"));
+
+  lines.push("");
+  lines.push("Trust boundary:");
+  lines.push("  - `init --dry-run` does not write project files, home-directory config, registry entries, or telemetry.");
+  lines.push("  - Run `sverklo init` only after the planned targets look right.");
+  lines.push("  - Run `sverklo prove --no-write --guided` first if you only want repo proof.");
+  lines.push("");
+  lines.push("Config targets are reported relative to the project when possible:");
+  lines.push(`  ${relProjectPath(projectPath, join(projectPath, ".mcp.json"))}`);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
 function buildAutoCaptureHook() {
   // PostToolUse hook — nudge Claude to capture decisions after Edit/Write tool calls.
   // The hook output is visible to Claude, who decides whether to call the `remember` tool.
@@ -973,9 +1152,10 @@ export async function initProject(
   // post-init output gets the user a real repo-memory proof quickly.
   console.log("");
   console.log("Try it now (repo-memory proof):");
-  console.log("  sverklo prove                          # shows central files + a real caller graph");
+  console.log("  sverklo prove --guided                 # shows central files + why this proof was selected");
   console.log("  sverklo prove --markdown               # copy a shareable GitHub/Discord proof");
   console.log("  Then paste the \"Ask your agent\" line into Claude, Cursor, Codex, or Windsurf.");
+  console.log("  Tip: `sverklo init --dry-run` previews setup writes before changing config.");
   console.log("");
   console.log("Next steps:");
   console.log("  claude                                 # start coding — sverklo tools are preferred automatically");

@@ -44,6 +44,8 @@ export type ProveFormat = "text" | "markdown";
 
 export interface ProveReportOptions {
   format?: ProveFormat;
+  guided?: boolean;
+  noWrite?: boolean;
 }
 
 interface ProveSummary {
@@ -55,6 +57,8 @@ interface ProveSummary {
   files: FileRecord[];
   candidate: ProofCandidate | null;
   fallback: (CodeChunk & { filePath: string; pagerank: number }) | null;
+  guided: boolean;
+  noWrite: boolean;
 }
 
 const NOISE_SEGMENTS = [
@@ -196,7 +200,11 @@ function fallbackSymbol(indexer: ProveIndex): (CodeChunk & { filePath: string; p
   );
 }
 
-function buildSummary(indexer: ProveIndex, projectPath: string): ProveSummary {
+function buildSummary(
+  indexer: ProveIndex,
+  projectPath: string,
+  options: ProveReportOptions = {},
+): ProveSummary {
   return {
     projectName: basename(projectPath) || "this repo",
     fileCount: indexer.fileStore.count(),
@@ -206,6 +214,8 @@ function buildSummary(indexer: ProveIndex, projectPath: string): ProveSummary {
     files: topFiles(indexer),
     candidate: chooseCandidate(indexer),
     fallback: fallbackSymbol(indexer),
+    guided: options.guided ?? false,
+    noWrite: options.noWrite ?? false,
   };
 }
 
@@ -223,6 +233,19 @@ function markdownCell(value: string): string {
   return value.replace(/\|/g, "\\|");
 }
 
+function proofSelectionText(summary: ProveSummary): string {
+  if (summary.candidate) {
+    return (
+      `Selected ${summary.candidate.name} because it has a non-test definition ` +
+      `and callers across ${formatNumber(summary.candidate.distinctSourceFiles)} files.`
+    );
+  }
+  if (summary.fallback) {
+    return `No strong caller graph yet; selected ${summary.fallback.name} as the best named non-test symbol.`;
+  }
+  return "No strong caller graph or named symbol was found; start with overview before trusting an edit.";
+}
+
 function renderTextReport(summary: ProveSummary): string {
   const { projectName, files, languages, candidate } = summary;
 
@@ -235,6 +258,19 @@ function renderTextReport(summary: ProveSummary): string {
   );
   if (languages.length > 0) lines.push(`Languages: ${languages.join(", ")}`);
   lines.push("");
+
+  if (summary.noWrite) {
+    lines.push("Trial mode:");
+    lines.push("  no project files, MCP configs, or agent instruction files were written");
+    lines.push("  model/index cache may still be stored under ~/.sverklo");
+    lines.push("");
+  }
+
+  if (summary.guided) {
+    lines.push("Guided proof selection:");
+    lines.push(`  ${proofSelectionText(summary)}`);
+    lines.push("");
+  }
 
   if (files.length > 0) {
     lines.push("Most central files by dependency PageRank:");
@@ -284,6 +320,12 @@ function renderTextReport(summary: ProveSummary): string {
   lines.push("");
   lines.push("If this exposed useful repo context, star Sverklo so other agent-heavy teams find it:");
   lines.push("  https://github.com/sverklo/sverklo");
+  if (summary.noWrite) {
+    lines.push("");
+    lines.push("To wire this repo into your agent after the proof looks useful:");
+    lines.push("  sverklo init --dry-run");
+    lines.push("  sverklo init");
+  }
   lines.push("");
   return lines.join("\n");
 }
@@ -302,7 +344,18 @@ function renderMarkdownReport(summary: ProveSummary): string {
   if (summary.languages.length > 0) {
     lines.push(`- Languages: ${summary.languages.map((language) => `\`${language}\``).join(", ")}`);
   }
+  if (summary.noWrite) {
+    lines.push("- Trial mode: no project files, MCP configs, or agent instruction files were written");
+    lines.push("- Cache note: model/index data may still be stored under `~/.sverklo`");
+  }
   lines.push("");
+
+  if (summary.guided) {
+    lines.push("## Why this proof");
+    lines.push("");
+    lines.push(proofSelectionText(summary));
+    lines.push("");
+  }
 
   if (summary.files.length > 0) {
     lines.push("## Central files");
@@ -358,7 +411,7 @@ export function buildProveReport(
   projectPath: string,
   options: ProveReportOptions = {},
 ): string {
-  const summary = buildSummary(indexer, projectPath);
+  const summary = buildSummary(indexer, projectPath, options);
   return options.format === "markdown" ? renderMarkdownReport(summary) : renderTextReport(summary);
 }
 

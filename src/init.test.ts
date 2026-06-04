@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   resolveAgentsFileTarget,
   resolveCopilotInstructionsTarget,
   mergeCodexToml,
   mergeCopilotJson,
+  renderInitDryRun,
 } from "./init.js";
 
 const SENTINEL = "sverklo_search";
@@ -366,5 +370,22 @@ describe("mergeCopilotJson — issue #50", () => {
     expect(r.previousProject).toBe("/repo/old");
     const parsed = JSON.parse(r.next);
     expect(parsed.mcpServers.sverklo.args[0]).toBe("/repo/new");
+  });
+});
+
+describe("renderInitDryRun", () => {
+  it("previews planned writes without mutating the project", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sverklo-init-dry-run-"));
+    mkdirSync(join(dir, ".git"));
+    writeFileSync(join(dir, "AGENTS.md"), "# project rules\n");
+
+    const report = renderInitDryRun(dir);
+
+    expect(report).toContain("sverklo init --dry-run");
+    expect(report).toContain("No files were written.");
+    expect(report).toContain("AGENTS.md: would append sverklo instructions");
+    expect(report).toContain(".mcp.json: would create sverklo MCP server");
+    expect(report).toContain(".claude/settings.local.json: would create permissions and reindex hook");
+    expect(report).toContain("Run `sverklo init` only after the planned targets look right.");
   });
 });
