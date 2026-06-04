@@ -10,6 +10,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.29.1] — 2026-06-03
+
+### Added
+
+- **Proof-first activation path.** `sverklo prove --no-write --guided` now makes the first trial safer by explaining that project files, MCP configs, and agent instruction files are not written, while still showing central files, a real caller graph, why that proof was selected, and a paste-ready agent prompt. `sverklo init --dry-run` previews setup targets before writing config. `sverklo doctor --agent <name>` adds agent-specific next-step guidance for Claude Code, Cursor, Codex CLI, Windsurf, VS Code/Copilot, GitHub Copilot CLI, Zed, and Antigravity.
+
+### Fixed
+
+- **Deterministic marketing report dates.** `sverklo marketing run-cycle` now derives cycle timestamps from local snapshot `captured_at` values when available, keeping generated report filenames stable in local/operator-provided workflows.
+
+---
+
 ## [0.29.0] — 2026-05-30
 
 ### Added
