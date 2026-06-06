@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.sverklo/sverklo",
-  "description": "Local-first MCP code intelligence: 37 tools — hybrid search, blast-radius, diff review, memory.",
+  "description": "Repo memory for coding agents. Local-first MCP for Claude Code, Cursor, Windsurf, Codex CLI, and any MCP client. Run a no-write proof receipt before setup. 37 tools: hybrid search, symbol impact, diff review, and git-pinned memory. MIT, no API keys, no code upload.",
   "repository": {
     "url": "https://github.com/sverklo/sverklo",
     "source": "github"
   },
-  "version": "0.20.0",
+  "version": "0.29.1",
   "websiteUrl": "https://sverklo.com",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "sverklo",
-      "version": "0.20.0",
+      "version": "0.29.1",
       "transport": {
         "type": "stdio"
       },

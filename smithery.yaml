@@ -7,14 +7,13 @@
 #  - Bump version in sync with package.json on every release.
 
 name: sverklo
-version: 0.28.0
+version: 0.29.1
 description: >-
-  Repo memory for coding agents. Local-first MCP server for Claude Code,
-  Cursor, Windsurf, and Codex CLI: symbol graph, blast-radius analysis,
-  diff-aware PR review with risk scoring, and git-pinned decisions. 37 MCP
-  tools available, compact core profile by default. Runs entirely on your
-  machine — embedded SQLite + a local ONNX model. No cloud. No API keys. No
-  code upload. Published 180-task retrieval benchmark at
+  Repo memory for coding agents. Local-first MCP for Claude Code, Cursor,
+  Windsurf, Codex CLI, and any MCP client. Run a no-write proof receipt before
+  setup. 37 tools: hybrid search, symbol impact, diff review, and git-pinned
+  memory. Runs entirely on your machine — embedded SQLite + a local ONNX model.
+  No cloud. No API keys. No code upload. Published 180-task retrieval benchmark at
   https://sverklo.com/bench/ — including the slices where sverklo loses.
 
 homepage: https://sverklo.com
@@ -34,11 +33,16 @@ categories:
 keywords:
   - code-search
   - semantic-search
+  - repo-memory
+  - codex-cli
+  - proof-first
+  - code-intelligence
   - pagerank
   - bm25
   - onnx
   - embeddings
   - local-first
+  - no-code-upload
   - claude-code
   - cursor
   - windsurf
