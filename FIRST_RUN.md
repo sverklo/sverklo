@@ -4,11 +4,11 @@ You can try Sverklo before wiring it into your agent:
 
 ```bash
 cd your-project
-npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided
+npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided --markdown
 sverklo init --dry-run
 ```
 
-`prove --no-write --guided` does not write project files, MCP config, or agent instruction files. It may cache the model/index under `~/.sverklo`. When the proof looks useful, run `sverklo init`, restart your agent, and use these prompts to feel why the tools matter.
+`prove --no-write --guided --markdown` does not write project files, MCP config, or agent instruction files. It may cache the model/index under `~/.sverklo`. It prints a shareable receipt plus a small feedback template for [the proof thread](https://github.com/sverklo/sverklo/discussions/79). When the proof looks useful, run `sverklo init`, restart your agent, and use these prompts to feel why the tools matter.
 
 **Pick a real codebase you actually work in** — not a demo repo. Sverklo's value scales with codebase size and complexity. On a 30-file repo, grep is fine.
 

@@ -16,14 +16,14 @@ Use grep when you know the exact string. Use Sverklo when the agent needs relati
 
 ```bash
 cd your-project
-npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided
+npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided --markdown
 sverklo init --dry-run
 npm install -g sverklo && sverklo init
 ```
 
-`sverklo prove --no-write --guided` shows central files, a real symbol with callers, why that proof was selected, and the exact prompt to paste into your agent before any MCP config or instruction files are written. It may cache the local model/index under `~/.sverklo`, but it does not mutate your project. `sverklo init --dry-run` then previews the files `init` would touch; `sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. Your code stays on your machine.
+`sverklo prove --no-write --guided --markdown` shows central files, a real symbol with callers, why that proof was selected, the exact prompt to paste into your agent, and a small feedback template before any MCP config or instruction files are written. It may cache the local model/index under `~/.sverklo`, but it does not mutate your project. `sverklo init --dry-run` then previews the files `init` would touch; `sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. Your code stays on your machine.
 
-Need something shareable? Run `sverklo prove --markdown` to print a GitHub/Discord-ready proof receipt from your repo, then [post it in the proof thread](https://github.com/sverklo/sverklo/discussions/79).
+Need something shareable? Run `sverklo prove --no-write --guided --markdown` to print a GitHub/Discord-ready proof receipt from your repo, then [post it in the proof thread](https://github.com/sverklo/sverklo/discussions/79).
 
 Need local launch planning for the Sverklo account? `sverklo marketing` runs a local-first Twitter/X agent-team workflow from operator-provided snapshots. It ranks opportunities, drafts seed-content queues, checks profile health, and records human decisions without posting, scraping, replying, liking, reposting, following, or changing the profile.
 
@@ -42,7 +42,7 @@ Need local launch planning for the Sverklo account? `sverklo marketing` runs a l
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19802051.svg)](https://doi.org/10.5281/zenodo.19802051)
 [![GitHub stars](https://img.shields.io/github/stars/sverklo/sverklo?style=social)](https://github.com/sverklo/sverklo/stargazers)
 
-> If `sverklo prove` surfaces useful repo context, please star the repo. It is the fastest way to help other agent-heavy teams find it.
+> If `sverklo prove` surfaces useful repo context, please post a receipt, correction, grep-better case, or setup-friction report in [the proof thread](https://github.com/sverklo/sverklo/discussions/79). If it helped, starring the repo also helps other agent-heavy teams find it.
 
 ![Sverklo bench:primitives token comparison](./docs/hero-token-comparison.png)
 

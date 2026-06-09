@@ -1152,8 +1152,8 @@ export async function initProject(
   // post-init output gets the user a real repo-memory proof quickly.
   console.log("");
   console.log("Try it now (repo-memory proof):");
-  console.log("  sverklo prove --guided                 # shows central files + why this proof was selected");
-  console.log("  sverklo prove --markdown               # copy a shareable GitHub/Discord proof");
+  console.log("  sverklo prove --no-write --guided      # shows central files + why this proof was selected");
+  console.log("  sverklo prove --no-write --guided --markdown  # copy a shareable proof receipt");
   console.log("  Then paste the \"Ask your agent\" line into Claude, Cursor, Codex, or Windsurf.");
   console.log("  Tip: `sverklo init --dry-run` previews setup writes before changing config.");
   console.log("");

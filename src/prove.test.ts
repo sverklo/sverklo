@@ -93,6 +93,9 @@ describe("buildProveReport", () => {
     expect(report).toContain("defined at src/auth/service.ts:11");
     expect(report).toContain("referenced 7 times across 3 files");
     expect(report).toContain("Use sverklo impact on validateToken");
+    expect(report).toContain("Share the outcome:");
+    expect(report).toContain("https://github.com/sverklo/sverklo/discussions/79");
+    expect(report).toContain("receipt, correction, grep-better, or setup friction");
     expect(report).not.toContain("service.test.ts");
     expect(report).not.toContain("benchmark/auth.ts");
   });
@@ -156,6 +159,8 @@ describe("buildProveReport", () => {
     expect(report).toContain("| `src/auth/service.ts` | 0.9000 |");
     expect(report).toContain("`validateToken` is defined at `src/auth/service.ts:11`.");
     expect(report).toContain("```text\nUse sverklo impact on validateToken");
+    expect(report).toContain("## Share the outcome");
+    expect(report).toContain("Outcome: receipt | correction | grep-better | setup friction");
   });
 
   it("explains guided no-write trial mode", () => {

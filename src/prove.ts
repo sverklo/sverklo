@@ -115,6 +115,9 @@ const SYMBOL_DENY = new Set([
   "write",
 ]);
 
+const GITHUB_REPO_URL = "https://github.com/sverklo/sverklo";
+const PROOF_THREAD_URL = "https://github.com/sverklo/sverklo/discussions/79";
+
 function isNoisePath(path: string): boolean {
   const normalized = path.replace(/\\/g, "/");
   if (TEST_RE.test(normalized)) return true;
@@ -246,6 +249,44 @@ function proofSelectionText(summary: ProveSummary): string {
   return "No strong caller graph or named symbol was found; start with overview before trusting an edit.";
 }
 
+function appendTextFeedbackFooter(lines: string[], summary: ProveSummary): void {
+  lines.push("");
+  lines.push("Share the outcome:");
+  lines.push(`  ${PROOF_THREAD_URL}`);
+  lines.push("  Pick one label: receipt, correction, grep-better, or setup friction.");
+  lines.push("  Paste the central files, selected symbol, and one sentence on what matched or failed.");
+  lines.push("");
+  lines.push("If this exposed useful repo context, starring Sverklo helps other agent-heavy teams find it:");
+  lines.push(`  ${GITHUB_REPO_URL}`);
+  if (summary.noWrite) {
+    lines.push("");
+    lines.push("To wire this repo into your agent after the proof looks useful:");
+    lines.push("  sverklo init --dry-run");
+    lines.push("  sverklo init");
+  }
+}
+
+function appendMarkdownFeedbackFooter(lines: string[]): void {
+  lines.push("## Share the outcome");
+  lines.push("");
+  lines.push("Please post one useful result in the proof thread:");
+  lines.push("");
+  lines.push(PROOF_THREAD_URL);
+  lines.push("");
+  lines.push("Use one label: `receipt`, `correction`, `grep-better`, or `setup friction`.");
+  lines.push("");
+  lines.push("```markdown");
+  lines.push("Outcome: receipt | correction | grep-better | setup friction");
+  lines.push("Repo shape:");
+  lines.push("Selected files/symbol:");
+  lines.push("What matched or failed:");
+  lines.push("```");
+  lines.push("");
+  lines.push("If this exposed useful repo context, starring Sverklo helps other agent-heavy teams find it:");
+  lines.push("");
+  lines.push(GITHUB_REPO_URL);
+}
+
 function renderTextReport(summary: ProveSummary): string {
   const { projectName, files, languages, candidate } = summary;
 
@@ -317,15 +358,7 @@ function renderTextReport(summary: ProveSummary): string {
     }
   }
 
-  lines.push("");
-  lines.push("If this exposed useful repo context, star Sverklo so other agent-heavy teams find it:");
-  lines.push("  https://github.com/sverklo/sverklo");
-  if (summary.noWrite) {
-    lines.push("");
-    lines.push("To wire this repo into your agent after the proof looks useful:");
-    lines.push("  sverklo init --dry-run");
-    lines.push("  sverklo init");
-  }
+  appendTextFeedbackFooter(lines, summary);
   lines.push("");
   return lines.join("\n");
 }
@@ -399,9 +432,7 @@ function renderMarkdownReport(summary: ProveSummary): string {
   lines.push(agentPrompt(summary));
   lines.push("```");
   lines.push("");
-  lines.push("If this exposed useful repo context, star Sverklo so other agent-heavy teams find it:");
-  lines.push("");
-  lines.push("https://github.com/sverklo/sverklo");
+  appendMarkdownFeedbackFooter(lines);
   lines.push("");
   return lines.join("\n");
 }
