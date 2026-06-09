@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { log, logError } from "../utils/logger.js";
 
-const MODEL_DIR = join(homedir(), ".sverklo", "models");
 const BUNDLED_MODEL_DIR = join(import.meta.dirname ?? ".", "..", "..", "models");
 
 const MODEL_DIM = 384;
@@ -79,11 +78,18 @@ async function initEmbedderWithFiles(modelPath: string, tokenizerPath: string): 
 }
 
 function findFile(filename: string): string | null {
-  // Check ~/.sverklo/models/ first, then bundled
-  const userPath = join(MODEL_DIR, filename);
-  if (existsSync(userPath)) return userPath;
-  const bundledPath = join(BUNDLED_MODEL_DIR, filename);
-  if (existsSync(bundledPath)) return bundledPath;
+  // Check an explicit override first (used by tests/packagers), then
+  // ~/.sverklo/models/, then bundled package models when present.
+  const dirs = [
+    process.env.SVERKLO_MODEL_DIR,
+    join(homedir(), ".sverklo", "models"),
+    BUNDLED_MODEL_DIR,
+  ].filter((dir): dir is string => Boolean(dir));
+
+  for (const dir of dirs) {
+    const path = join(dir, filename);
+    if (existsSync(path)) return path;
+  }
   return null;
 }
 

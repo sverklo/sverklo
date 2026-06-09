@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 ### Changed
 
 - **Proof receipts now ask for external evidence first.** `sverklo prove --no-write --guided --markdown` now ends with a proof-thread link, outcome labels, and a paste-ready feedback template for receipts, corrections, grep-better cases, or setup friction. README/FIRST_RUN/init copy now use the same canonical no-write guided markdown command.
+- **Model cache override.** `SVERKLO_MODEL_DIR` can point Sverklo at an existing `model.onnx` + `tokenizer.json` directory, which keeps CLI integration tests and packaged/offline environments from attempting fresh model downloads when the files are already available elsewhere.
 
 ---
 

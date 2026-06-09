@@ -4,7 +4,10 @@ import { homedir } from "node:os";
 import { log, logError } from "../utils/logger.js";
 import { verifyArtifact } from "../utils/integrity.js";
 
-const MODEL_DIR = join(homedir(), ".sverklo", "models");
+function modelDir(): string {
+  return process.env.SVERKLO_MODEL_DIR || join(homedir(), ".sverklo", "models");
+}
+
 const MODEL_URL =
   "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx";
 const TOKENIZER_URL =
@@ -15,6 +18,7 @@ const TOKENIZER_URL =
 // CI in PR #33 where these strings landed inside /tmp/audit.json and
 // broke the downstream JSON.parse check.
 export async function setupModels(): Promise<void> {
+  const MODEL_DIR = modelDir();
   mkdirSync(MODEL_DIR, { recursive: true });
 
   const modelPath = join(MODEL_DIR, "model.onnx");

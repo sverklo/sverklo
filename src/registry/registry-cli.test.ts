@@ -15,6 +15,16 @@ import { execFileSync } from "node:child_process";
 // for the duration of the test. Same pattern as workspace.test.ts.
 
 const SVERKLO_BIN = join(process.cwd(), "dist", "bin", "sverklo.js");
+const TEST_MODEL_DIR = join(process.cwd(), "models");
+
+function cliEnv(tmpHome: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME: tmpHome,
+    USERPROFILE: tmpHome,
+    SVERKLO_MODEL_DIR: TEST_MODEL_DIR,
+  };
+}
 
 describe("CLI: reindex updates registry.lastIndexed (#74)", () => {
   let tmpHome: string;
@@ -37,7 +47,7 @@ describe("CLI: reindex updates registry.lastIndexed (#74)", () => {
   });
 
   it("reindex on a registered repo updates registry.lastIndexed", () => {
-    const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
+    const env = cliEnv(tmpHome);
 
     // Step 1: register, capture the initial lastIndexed
     execFileSync("node", [SVERKLO_BIN, "register", projectDir], { env, stdio: "pipe" });
@@ -65,7 +75,7 @@ describe("CLI: reindex updates registry.lastIndexed (#74)", () => {
   });
 
   it("reindex on an unregistered path does not crash and leaves registry untouched", () => {
-    const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
+    const env = cliEnv(tmpHome);
     // No register call — reindex against a path not in the registry.
     execFileSync("node", [SVERKLO_BIN, "reindex", projectDir], { env, stdio: "pipe" });
     // Registry might not exist at all, OR exist as empty {}. Either is acceptable.
@@ -97,7 +107,7 @@ describe("CLI: unregister --by-path (#73)", () => {
   });
 
   it("--by-path removes the registered entry whose path matches", () => {
-    const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
+    const env = cliEnv(tmpHome);
     execFileSync("node", [SVERKLO_BIN, "register", projectDir], { env, stdio: "pipe" });
 
     const registryPath = join(tmpHome, ".sverklo", "registry.json");
@@ -115,7 +125,7 @@ describe("CLI: unregister --by-path (#73)", () => {
   });
 
   it("--by-path with no matching entry exits non-zero", () => {
-    const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
+    const env = cliEnv(tmpHome);
     execFileSync("node", [SVERKLO_BIN, "register", projectDir], { env, stdio: "pipe" });
 
     let threw = false;
@@ -135,7 +145,7 @@ describe("CLI: unregister --by-path (#73)", () => {
   });
 
   it("legacy positional form still works (backwards compat)", () => {
-    const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
+    const env = cliEnv(tmpHome);
     execFileSync("node", [SVERKLO_BIN, "register", projectDir], { env, stdio: "pipe" });
     const registryPath = join(tmpHome, ".sverklo", "registry.json");
     const repoName = Object.keys(JSON.parse(readFileSync(registryPath, "utf-8")).repos)[0];
