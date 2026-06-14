@@ -2,8 +2,9 @@
  * Extract symbol references from a chunk's content.
  *
  * This is a cheap, language-agnostic heuristic: find identifier-shaped tokens
- * that look like function calls (`foo(`) or class instantiations (`new Foo`).
- * We skip language keywords and self-references.
+ * that look like function calls (`foo(`), class instantiations (`new Foo`),
+ * decorators, JSX components, or Java/C#-style type usages. We skip language
+ * keywords and self-references.
  *
  * It's not a type resolver — matches are by name. Multiple functions with the
  * same name across files will all appear as "impacted" when queried. That's
@@ -22,10 +23,15 @@ const KEYWORDS = new Set([
   "try", "catch", "finally", "throw", "throws", "raise", "except", "with",
   "pub", "use", "mod", "crate", "mut", "ref", "extern", "unsafe",
   "let", "end", "begin", "module", "object", "case", "match", "when", "then",
+  "package", "extends", "implements", "record",
   "print", "println", "echo", "log", "require", "include", "namespace",
   // Common built-ins (avoid false positives)
   "console", "process", "Array", "Object", "String", "Number", "Boolean",
   "Map", "Set", "Promise", "Error", "Date", "Math", "JSON", "RegExp",
+  "Integer", "Long", "Double", "Float", "Short", "Byte", "Character", "Void",
+  "List", "ArrayList", "LinkedList", "HashMap", "HashSet", "Optional",
+  "Stream", "Consumer", "Supplier", "Function", "Runnable", "Thread",
+  "Exception", "RuntimeException", "Override", "Deprecated", "SuppressWarnings",
   "length", "push", "pop", "map", "filter", "reduce", "forEach", "slice",
   "split", "join", "concat", "includes", "indexOf", "find", "some", "every",
 ]);
@@ -49,6 +55,8 @@ const JSX_RE = /<([A-Z][a-zA-Z0-9_]{2,})\b/g;
 const CALLBACK_RE = /(?:,\s*|\(\s*|,\s*['"][^'"]*['"]\s*,\s*)([a-z_][a-zA-Z0-9_]{2,})\s*[,)]/g;
 // Decorator usage: @MyDecorator
 const DECORATOR_RE = /@([A-Z][a-zA-Z0-9_]{2,})/g;
+// Uppercase tokens that may be type references in Java/C#/Kotlin-style syntax.
+const TYPE_TOKEN_RE = /\b([A-Z][a-zA-Z0-9_]{2,})\b/g;
 
 /**
  * Extract referenced symbol names from a chunk's body.
@@ -129,9 +137,51 @@ export function extractReferences(
       seenOnLine.add(name);
       refs.push({ name, line: i });
     }
+
+    // Type references: Java fields/params/generics/imports/class literals.
+    TYPE_TOKEN_RE.lastIndex = 0;
+    while ((m = TYPE_TOKEN_RE.exec(stripped)) !== null) {
+      const name = m[1];
+      if (
+        name === selfName ||
+        KEYWORDS.has(name) ||
+        COMMON_BUILTINS.has(name) ||
+        seenOnLine.has(name) ||
+        !isLikelyTypeUsage(stripped, m.index, name)
+      ) continue;
+      seenOnLine.add(name);
+      refs.push({ name, line: i });
+    }
   }
 
   return refs;
+}
+
+function isLikelyTypeUsage(line: string, index: number, name: string): boolean {
+  const before = line.slice(0, index);
+  const after = line.slice(index + name.length);
+
+  if (/\b(?:class|interface|enum|record|@interface)\s+$/.test(before)) {
+    return false;
+  }
+
+  if (/\bimport\s+(?:static\s+)?(?:[a-z_][a-zA-Z0-9_]*\.)+$/.test(before)) {
+    return true;
+  }
+
+  if (/^\s*(?:<|\[\]|\.\s*(?:class\b|[A-Z][a-zA-Z0-9_]*\b))/.test(after)) {
+    return true;
+  }
+
+  if (/^\s+[a-z_][a-zA-Z0-9_]*\b/.test(after)) {
+    return true;
+  }
+
+  if (/\b(?:extends|implements|throws|instanceof|catch)\s+(?:[\w$.,<>\s?&]*\s)?$/.test(before)) {
+    return true;
+  }
+
+  return /[<,]\s*$/.test(before) && /^\s*(?:[>,?&]|extends\b|super\b)/.test(after);
 }
 
 /**

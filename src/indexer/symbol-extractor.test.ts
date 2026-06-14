@@ -99,3 +99,26 @@ describe("extractReferences — issue #13 regression", () => {
     expect(refs.some((r) => r.name === "bar")).toBe(true);
   });
 });
+
+describe("extractReferences — issue #83 Java type usage regression", () => {
+  it("records Java type-only usages for impact analysis", () => {
+    const refs = extractReferences(
+      [
+        "import com.example.core.context.PartitionedHandler;",
+        "public class ScheduleConfig {",
+        "  @Nullable PartitionedHandler<ProcessTask> calculationService;",
+        "  private final PartitionedHandler<ProcessTask> service;",
+        "  public class Worker extends PartitionedHandler<Action> {",
+        "  public class WorkerCallback implements PartitionedHandler.Callback<Message> {",
+        "  PartitionedHandler<ProcessTask> handler = mock(PartitionedHandler.class);",
+        "}",
+      ].join("\n"),
+      "ScheduleConfig",
+    );
+
+    expect(refs.filter((ref) => ref.name === "PartitionedHandler").map((ref) => ref.line)).toEqual([
+      0, 2, 3, 4, 5, 6,
+    ]);
+    expect(refs.some((ref) => ref.name === "ScheduleConfig")).toBe(false);
+  });
+});
