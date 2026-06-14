@@ -9,8 +9,18 @@ export function parseJava(content: string, lines: string[]): ParseResult {
     const trimmed = lines[i].trimStart();
 
     if (/^import\s+/.test(trimmed)) {
-      const source = trimmed.match(/import\s+(?:static\s+)?([^;]+)/)?.[1] || "";
-      imports.push({ source, names: [], isRelative: false });
+      const match = trimmed.match(/^import\s+(static\s+)?([^;]+);?/);
+      if (match) {
+        const isStatic = Boolean(match[1]);
+        const rawSource = match[2].trim();
+        const parts = rawSource.split(".");
+        const importedName = parts[parts.length - 1] || "";
+        const classIndex = isStatic ? parts.length - 2 : parts.length - 1;
+        const className = parts[classIndex] || "";
+        const source = isStatic ? parts.slice(0, classIndex + 1).join(".") : rawSource;
+        const name = importedName === "*" ? null : isStatic ? importedName : className;
+        imports.push({ source, names: name ? [name] : [], isRelative: false });
+      }
       continue;
     }
 

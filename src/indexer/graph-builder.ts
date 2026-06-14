@@ -57,6 +57,8 @@ const EXTENSIONS = [
   ".php",
 ];
 
+const PACKAGE_IMPORT_EXTENSIONS = [".java", ".kt", ".kts", ".scala", ".groovy"];
+
 export function buildGraph(
   fileImports: Map<string, ImportRef[]>, // relativePath -> imports
   fileStore: FileStore,
@@ -68,6 +70,7 @@ export function buildGraph(
   for (const f of allFiles) {
     pathToId.set(f.path, f.id);
   }
+  const packageImportToId = buildPackageImportIndex(pathToId);
 
   // Clear outgoing edges for every file that was just re-parsed. The
   // incremental reindexFile() path already does this before calling
@@ -95,10 +98,10 @@ export function buildGraph(
     const fileDir = dirname(filePath);
 
     for (const imp of imports) {
-      if (!imp.isRelative) continue;
-
       // Try to resolve the import to a file in the index
-      const resolved = resolveImport(imp.source, fileDir, pathToId);
+      const resolved = imp.isRelative
+        ? resolveImport(imp.source, fileDir, pathToId)
+        : resolvePackageImport(imp.source, packageImportToId);
       if (resolved !== undefined) {
         graphStore.upsert(sourceId, resolved, imp.names.length || 1);
         edges.push({ source: sourceId, target: resolved });
@@ -150,6 +153,43 @@ function resolveImport(
       const id = pathToId.get(normalized);
       if (id !== undefined) return id;
     }
+  }
+
+  return undefined;
+}
+
+function buildPackageImportIndex(pathToId: Map<string, number>): Map<string, number> {
+  const suffixToId = new Map<string, number>();
+
+  for (const [filePath, id] of pathToId) {
+    const normalized = filePath.replace(/\\/g, "/");
+    const extension = PACKAGE_IMPORT_EXTENSIONS.find((ext) => normalized.endsWith(ext));
+    if (!extension) continue;
+
+    const withoutExtension = normalized.slice(0, -extension.length);
+    const parts = withoutExtension.split("/");
+    for (let i = 0; i < parts.length; i++) {
+      const suffix = `${parts.slice(i).join("/")}${extension}`;
+      if (!suffixToId.has(suffix)) {
+        suffixToId.set(suffix, id);
+      }
+    }
+  }
+
+  return suffixToId;
+}
+
+function resolvePackageImport(
+  importPath: string,
+  packageImportToId: Map<string, number>
+): number | undefined {
+  const source = importPath.trim();
+  if (!source || source.endsWith(".*")) return undefined;
+
+  const basePath = source.replace(/\./g, "/");
+  for (const extension of PACKAGE_IMPORT_EXTENSIONS) {
+    const id = packageImportToId.get(`${basePath}${extension}`);
+    if (id !== undefined) return id;
   }
 
   return undefined;
