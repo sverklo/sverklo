@@ -1,0 +1,98 @@
+name: Proof-run feedback
+description: Report a no-write proof receipt, correction, grep-better case, or setup friction
+labels: [proof-run, feedback]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when `sverklo prove --no-write --guided --markdown` produces a useful receipt, a wrong/noisy receipt, a grep-better case, or setup friction.
+
+        If you only want to share a successful receipt publicly, the proof thread is preferred:
+        https://github.com/sverklo/sverklo/discussions/79
+
+  - type: dropdown
+    id: feedback-type
+    attributes:
+      label: Feedback type
+      description: Pick the closest outcome.
+      options:
+        - receipt: useful proof
+        - correction: wrong or noisy proof
+        - grep-better: ripgrep/grep was the better tool
+        - setup-friction: install/runtime/MCP setup got in the way
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command run
+      description: Paste the exact command you ran.
+      value: npm exec --yes --package=sverklo@latest -- sverklo prove --no-write --guided --markdown
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: receipt
+    attributes:
+      label: Receipt or output
+      description: Paste the proof receipt or the relevant failure output. Redact private paths or names if needed.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should Sverklo have done?
+      description: For corrections, describe the files, symbols, callers, tests, or repo center that would have been more useful.
+    validations:
+      required: false
+
+  - type: textarea
+    id: grep-better
+    attributes:
+      label: If grep was better, what was the exact grep/ripgrep query?
+      description: This helps us keep the positioning honest.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: repo-shape
+    attributes:
+      label: Repo shape
+      description: Language/framework and approximate size, if you can share it.
+      placeholder: TypeScript monorepo, ~2k files
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Sverklo version
+      placeholder: 0.29.1
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "24.x"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: false
