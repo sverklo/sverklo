@@ -9,12 +9,13 @@
 name: sverklo
 version: 0.29.1
 description: >-
-  Repo memory for coding agents. Local-first MCP for Claude Code, Cursor,
-  Windsurf, Codex CLI, and any MCP client. Run a no-write proof receipt before
-  setup. 37 tools: hybrid search, symbol impact, diff review, and git-pinned
-  memory. Runs entirely on your machine — embedded SQLite + a local ONNX model.
-  No cloud. No API keys. No code upload. Published 180-task retrieval benchmark at
-  https://sverklo.com/bench/ — including the slices where sverklo loses.
+  Local-first repo-memory MCP for coding agents. Best for relationship-heavy
+  edits: symbols, callers, dependencies, diff review, and git-pinned decisions
+  before code changes. Start with a no-write proof receipt; use grep/ripgrep for
+  exact strings. Runs entirely on your machine — embedded SQLite + a local ONNX
+  model. No cloud. No API keys. No code upload. Published 180-task retrieval
+  benchmark at https://sverklo.com/bench/ — including the slices where sverklo
+  loses.
 
 homepage: https://sverklo.com
 repository: https://github.com/sverklo/sverklo

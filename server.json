@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.sverklo/sverklo",
-  "description": "Repo memory for coding agents. Local-first MCP for Claude Code, Cursor, Windsurf, Codex CLI, and any MCP client. Run a no-write proof receipt before setup. 37 tools: hybrid search, symbol impact, diff review, and git-pinned memory. MIT, no API keys, no code upload.",
+  "description": "Local-first repo-memory MCP for coding agents. Best for relationship-heavy edits: symbols, callers, dependencies, diff review, and git-pinned decisions before code changes. Start with a no-write proof receipt; use grep/ripgrep for exact strings. MIT, no API keys, no code upload.",
   "repository": {
     "url": "https://github.com/sverklo/sverklo",
     "source": "github"

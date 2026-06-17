@@ -12,7 +12,11 @@ Sverklo gives coding agents repo memory: symbols, callers, diffs, blast radius, 
 
 **Local-first** ◦ MIT ◦ no API keys ◦ no code upload ◦ first run downloads a local ONNX model
 
-Use grep when you know the exact string. Use Sverklo when the agent needs relationships: who calls this, what depends on it, what changed, and which project decisions still apply. The public bench covers 180 hand-verified tasks across 6 OSS codebases; the methodology and ground truth live in [sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench). [Bench](https://sverklo.com/bench/) · [paper](https://doi.org/10.5281/zenodo.19802051) · [90-second demo](https://www.youtube.com/watch?v=OX7aEgdlqhQ)
+**Use Sverklo when** your agent needs relationships before editing: callers, dependencies, tests, diff risk, or prior repo decisions.
+
+**Use grep/ripgrep when** you know the exact string, the repo is tiny, or the change is one file.
+
+Start with the no-write proof command before installing MCP config. The public bench covers 180 hand-verified tasks across 6 OSS codebases; the methodology and ground truth live in [sverklo/sverklo-bench](https://github.com/sverklo/sverklo-bench). [Bench](https://sverklo.com/bench/) · [paper](https://doi.org/10.5281/zenodo.19802051) · [90-second demo](https://www.youtube.com/watch?v=OX7aEgdlqhQ)
 
 ```bash
 cd your-project
@@ -177,7 +181,7 @@ If the answer to your question is "exact string X exists somewhere," grep wins. 
 | Tool | What it does |
 |------|-------------|
 | `search` | Hybrid BM25 + vector + PageRank search. Find code without knowing the literal string. |
-| `refs` | All references to a symbol, with caller context. Proves dead code with certainty. |
+| `refs` | All references to a symbol, with caller context. Flags likely dead-code candidates from the current reference graph. |
 | `impact` | Walk the symbol graph, return ranked transitive callers — the real blast radius. |
 | `review_diff` | Risk-scored review of `git diff`: touched-symbol importance x coverage x churn. |
 
