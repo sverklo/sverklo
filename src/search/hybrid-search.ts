@@ -9,6 +9,7 @@ import {
   currentFileDistancePenalty,
 } from "./boost.js";
 import { dedupChunks, groupByDirectory, middleTruncate } from "./compact.js";
+import { formatEnoughness, type EnoughnessConfidence } from "./enoughness.js";
 
 interface SearchOptions {
   query: string;
@@ -443,7 +444,16 @@ export function packResults(
 
 export function formatResults(
   results: SearchResult[],
-  opts: { compact?: boolean; format?: "compact" | "full"; group?: boolean } = {}
+  opts: {
+    compact?: boolean;
+    format?: "compact" | "full";
+    group?: boolean;
+    enoughness?: {
+      query?: string;
+      confidence?: EnoughnessConfidence;
+      tokenBudget?: number;
+    };
+  } = {}
 ): string {
   if (results.length === 0) {
     return "No matches.";
@@ -512,6 +522,23 @@ export function formatResults(
   if (overflow) {
     parts.push(
       `_+${overflow.count} more (~${overflow.totalNeeded} tok). Pass token_budget:${overflow.totalNeeded} for all._`
+    );
+  }
+
+  if (opts.enoughness) {
+    const overflowCount = overflow?.count ?? 0;
+    parts.push(
+      formatEnoughness({
+        kind: "search",
+        subject: opts.enoughness.query,
+        shown: results.length,
+        total: results.length + overflowCount,
+        tokenBudget: opts.enoughness.tokenBudget,
+        totalNeeded: overflow?.totalNeeded,
+        confidence: opts.enoughness.confidence,
+        refsChecked: false,
+        testsChecked: false,
+      })
     );
   }
 

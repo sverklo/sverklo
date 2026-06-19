@@ -108,6 +108,9 @@ describe("handleLookup — issue #15 regression", () => {
     // The "too large" explanation should be present so the caller
     // knows the body was skipped on purpose, not missing.
     expect(out).toMatch(/too large|exceed|token_budget/i);
+    expect(out).toContain("Enoughness:");
+    expect(out).toContain("refs checked: no");
+    expect(out).toContain("likely test surface: not checked");
   });
 
   it("surfaces all matches as locations when none fit", async () => {
@@ -123,6 +126,7 @@ describe("handleLookup — issue #15 regression", () => {
     const out = await handleLookup(indexer, { symbol: "Indexer", token_budget: 20000 });
     expect(out).toContain("fakeIndexerWithCore");
     expect(out).toContain("class Indexer");
+    expect(out).toContain("confidence: high");
     // With full bodies rendered, the "too large" warning should not
     // appear.
     expect(out).not.toMatch(/too large/i);

@@ -124,5 +124,5 @@ export async function handleLookup(
   // chunk itself doesn't carry filePath. Since our JOIN provides it,
   // we can pass an empty map and avoid the scan.
   const emptyFileMap = new Map<number, FileRecord>();
-  return formatLookup(chunks, emptyFileMap, tokenBudget);
+  return formatLookup(chunks, emptyFileMap, tokenBudget, { symbol });
 }

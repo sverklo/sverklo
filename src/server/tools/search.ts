@@ -116,7 +116,14 @@ export async function handleSearch(
   let body =
     mode === "refs"
       ? formatRefsOnly(response.results)
-      : formatResults(response.results, { format });
+      : formatResults(response.results, {
+          format,
+          enoughness: {
+            query: queryArg.value,
+            confidence: response.confidence,
+            tokenBudget,
+          },
+        });
 
   // P1-13: optional context bundling. Appends an "Extra context" appendix
   // when the caller asked for it, leaving the main ranked body unchanged.

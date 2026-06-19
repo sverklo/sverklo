@@ -1,4 +1,5 @@
 import type { FileRecord, CodeChunk } from "../types/index.js";
+import { formatEnoughness, type EnoughnessConfidence } from "./enoughness.js";
 
 export interface OverviewEntry {
   file: FileRecord;
@@ -116,13 +117,16 @@ export function formatOverview(
 export function formatLookup(
   chunks: (CodeChunk & { filePath?: string; pagerank?: number; fileLanguage?: string })[],
   files: Map<number, FileRecord>,
-  tokenBudget: number
+  tokenBudget: number,
+  opts: { symbol?: string } = {}
 ): string {
   if (chunks.length === 0) return "No results found.";
 
   const parts: string[] = [];
   let remaining = tokenBudget;
   let fittedAny = false;
+  let renderedCount = 0;
+  let locationOnlyCount = 0;
 
   // Bug B (issue #15 investigation): chunks that didn't fit the
   // budget used to be silently dropped if ANY other chunk fit. On
@@ -161,6 +165,7 @@ export function formatLookup(
     parts.push("```\n");
     remaining -= totalCost;
     fittedAny = true;
+    renderedCount++;
   }
 
   // Two cases that both produce a "location-only" section:
@@ -192,6 +197,7 @@ export function formatLookup(
         `- **${filePath}:${chunk.start_line}-${chunk.end_line}** (${chunk.type}: ${chunk.name}, ~${chunk.token_count} tokens)${sig}`
       );
     }
+    locationOnlyCount = Math.min(chunks.length, 10);
   } else if (skipped.length > 0) {
     const skippedTokens = skipped.reduce((sum, c) => sum + c.token_count + 10, 0);
     const totalNeeded = tokenBudget - remaining + skippedTokens;
@@ -208,10 +214,36 @@ export function formatLookup(
         `- **${filePath}:${chunk.start_line}-${chunk.end_line}** (${chunk.type}: ${chunk.name}, ~${chunk.token_count} tokens)${sig}`
       );
     }
+    locationOnlyCount = Math.min(skipped.length, 10);
     if (skipped.length > 10) {
       parts.push(`- _...and ${skipped.length - 10} more_`);
     }
   }
+
+  const symbolLower = opts.symbol?.toLowerCase();
+  const exactMatch =
+    symbolLower !== undefined &&
+    chunks.some((c) => c.name?.toLowerCase() === symbolLower);
+  const confidence: EnoughnessConfidence =
+    fittedAny && exactMatch && skipped.length === 0 ? "high" : "medium";
+  parts.push("");
+  parts.push(
+    formatEnoughness({
+      kind: "lookup",
+      subject: opts.symbol,
+      shown: renderedCount + locationOnlyCount,
+      total: chunks.length,
+      locationOnly: locationOnlyCount,
+      tokenBudget,
+      totalNeeded:
+        skipped.length > 0 || !fittedAny
+          ? chunks.reduce((sum, c) => sum + Math.ceil(80 / 3.5) + c.token_count + 10, 0)
+          : undefined,
+      confidence,
+      refsChecked: false,
+      testsChecked: false,
+    })
+  );
 
   return parts.join("\n");
 }

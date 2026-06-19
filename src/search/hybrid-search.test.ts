@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { formatResults } from "./hybrid-search.js";
 
 // Issue #4: test the public contract of hybridSearchWithConfidence via
 // the classifier + confidence helpers. We don't spin up a full index
@@ -139,5 +140,24 @@ describe("query-shape classifier", () => {
     // Either a framework-wiring hit or a low-confidence-no-results hit;
     // both should return a hint.
     expect(result.fallbackHint).not.toBeNull();
+  });
+});
+
+describe("formatResults enoughness hint", () => {
+  it("summarizes coverage, confidence, and expansion advice", () => {
+    const out = formatResults([mkResult(0.2)], {
+      enoughness: {
+        query: "retry logic",
+        confidence: "high",
+        tokenBudget: 1000,
+      },
+    });
+
+    expect(out).toContain("Enoughness:");
+    expect(out).toContain("matches found: yes");
+    expect(out).toContain("refs checked: no");
+    expect(out).toContain("likely test surface: not checked");
+    expect(out).toContain("confidence: high");
+    expect(out).toContain("token_budget=1000");
   });
 });
