@@ -29,6 +29,8 @@ npm install -g sverklo && sverklo init
 
 Need something shareable? Run `sverklo prove --no-write --guided --markdown` to print a GitHub/Discord-ready proof receipt from your repo, then [post it in the proof thread](https://github.com/sverklo/sverklo/discussions/79).
 
+**Latest no-write proof run:** on `calesthio/OpenMontage@9066dcb` (1,284 indexed files), Sverklo selected `ToolResult` at `tools/base_tool.py:120` and found 475 references across 81 files. The legacy token-efficiency demo on the same checkout used 21.9× fewer estimated input tokens than grep+reading the top 10 matched files, with one miss called out plainly. [Read the receipt](https://github.com/sverklo/sverklo/discussions/79#discussioncomment-17375794) · [OpenMontage discussion](https://github.com/calesthio/OpenMontage/discussions/110)
+
 Need local launch planning for the Sverklo account? `sverklo marketing` runs a local-first Twitter/X agent-team workflow from operator-provided snapshots. It ranks opportunities, drafts seed-content queues, checks profile health, and records human decisions without posting, scraping, replying, liking, reposting, following, or changing the profile.
 
 > *"The map is not the territory."* — Alfred Korzybski
