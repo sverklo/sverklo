@@ -159,5 +159,30 @@ describe("formatResults enoughness hint", () => {
     expect(out).toContain("likely test surface: not checked");
     expect(out).toContain("confidence: high");
     expect(out).toContain("token_budget=1000");
+    expect(out).toContain("budget request: needs_more_budget=false");
+    expect(out).toContain("proof_gap=none");
+    expect(out).toContain("approval=not_requested");
+  });
+
+  it("emits a bounded budget request when results are hidden by budget", () => {
+    const results = [mkResult(0.2)] as SearchResult[] & {
+      __overflow?: { count: number; totalNeeded: number };
+    };
+    results.__overflow = { count: 2, totalNeeded: 2500 };
+
+    const out = formatResults(results, {
+      enoughness: {
+        query: "retry logic",
+        confidence: "medium",
+        tokenBudget: 1000,
+      },
+    });
+
+    expect(out).toContain("budget request: needs_more_budget=true");
+    expect(out).toContain("proof_gap=hidden_by_budget");
+    expect(out).toContain('bounded_next_call=search query:"retry logic" token_budget:2500');
+    expect(out).toContain("suggested_budget=2500");
+    expect(out).toContain("approval=harness_required");
+    expect(out).toContain("on_reject=log budget_request_rejected");
   });
 });

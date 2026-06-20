@@ -111,6 +111,11 @@ describe("handleLookup — issue #15 regression", () => {
     expect(out).toContain("Enoughness:");
     expect(out).toContain("refs checked: no");
     expect(out).toContain("likely test surface: not checked");
+    expect(out).toContain("budget request: needs_more_budget=true");
+    expect(out).toContain("proof_gap=hidden_by_budget");
+    expect(out).toContain('bounded_next_call=lookup symbol:"Indexer" token_budget:');
+    expect(out).toContain("approval=harness_required");
+    expect(out).toContain("on_reject=log budget_request_rejected");
   });
 
   it("surfaces all matches as locations when none fit", async () => {
@@ -127,6 +132,8 @@ describe("handleLookup — issue #15 regression", () => {
     expect(out).toContain("fakeIndexerWithCore");
     expect(out).toContain("class Indexer");
     expect(out).toContain("confidence: high");
+    expect(out).toContain("budget request: needs_more_budget=false");
+    expect(out).toContain("proof_gap=refs_or_test_surface_not_checked");
     // With full bodies rendered, the "too large" warning should not
     // appear.
     expect(out).not.toMatch(/too large/i);

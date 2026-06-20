@@ -13,6 +13,15 @@ export interface EnoughnessOptions {
   testsChecked?: boolean;
 }
 
+interface BudgetRequest {
+  needsMoreBudget: boolean;
+  proofGap: string;
+  boundedNextCall: string;
+  suggestedBudget?: number;
+  approval: "harness_required" | "not_requested";
+  onReject: string;
+}
+
 function formatCoverage(opts: EnoughnessOptions): string {
   const locationOnly = opts.locationOnly ?? 0;
   const bodyShown = Math.max(0, opts.shown - locationOnly);
@@ -30,6 +39,81 @@ function formatCoverage(opts: EnoughnessOptions): string {
   }
   parts.push(`${opts.total} total`);
   return parts.join(", ");
+}
+
+function buildBudgetRequest(opts: EnoughnessOptions): BudgetRequest {
+  const needsMoreBudget =
+    opts.tokenBudget !== undefined &&
+    opts.totalNeeded !== undefined &&
+    opts.totalNeeded > opts.tokenBudget;
+
+  if (needsMoreBudget) {
+    const suggestedBudget = opts.totalNeeded!;
+    const subject =
+      opts.subject && opts.subject.trim().length > 0
+        ? ` ${opts.kind === "lookup" ? "symbol" : "query"}:"${opts.subject}"`
+        : "";
+    return {
+      needsMoreBudget: true,
+      proofGap: "hidden_by_budget",
+      boundedNextCall: `${opts.kind}${subject} token_budget:${suggestedBudget}`,
+      suggestedBudget,
+      approval: "harness_required",
+      onReject:
+        "log budget_request_rejected with proof_gap, bounded_next_call, and rejection_reason",
+    };
+  }
+
+  if (opts.total === 0) {
+    return {
+      needsMoreBudget: false,
+      proofGap: "no_matches",
+      boundedNextCall:
+        opts.kind === "lookup"
+          ? "check the symbol name or search by related terms"
+          : "refine the query/scope or use exact string search",
+      approval: "not_requested",
+      onReject: "n/a",
+    };
+  }
+
+  if (opts.kind === "lookup") {
+    const subject = opts.subject ? ` symbol:"${opts.subject}"` : "";
+    return {
+      needsMoreBudget: false,
+      proofGap: "refs_or_test_surface_not_checked",
+      boundedNextCall: `refs${subject} before editing then test_map after a diff`,
+      approval: "not_requested",
+      onReject: "n/a",
+    };
+  }
+
+  const confidence = opts.confidence ?? "medium";
+  return {
+    needsMoreBudget: false,
+    proofGap: confidence === "high" ? "none" : "ranking_uncertain",
+    boundedNextCall:
+      confidence === "high"
+        ? "stop if answered; otherwise refine query/scope"
+        : "read top hits or refine query/scope",
+    approval: "not_requested",
+    onReject: "n/a",
+  };
+}
+
+function formatBudgetRequest(opts: EnoughnessOptions): string {
+  const request = buildBudgetRequest(opts);
+  const fields = [
+    `needs_more_budget=${request.needsMoreBudget ? "true" : "false"}`,
+    `proof_gap=${request.proofGap}`,
+    `bounded_next_call=${request.boundedNextCall}`,
+  ];
+  if (request.suggestedBudget !== undefined) {
+    fields.push(`suggested_budget=${request.suggestedBudget}`);
+  }
+  fields.push(`approval=${request.approval}`);
+  fields.push(`on_reject=${request.onReject}`);
+  return `budget request: ${fields.join("; ")}`;
 }
 
 function formatBudget(opts: EnoughnessOptions): string {
@@ -59,6 +143,6 @@ export function formatEnoughness(opts: EnoughnessOptions): string {
   return (
     `_Enoughness: ${label}: ${found} (${formatCoverage(opts)}); ` +
     `refs checked: ${refs}; likely test surface: ${tests}; confidence: ${confidence}; ` +
-    `${formatBudget(opts)}. ${formatNextStep(opts)}_`
+    `${formatBudget(opts)}; ${formatBudgetRequest(opts)}. ${formatNextStep(opts)}_`
   );
 }
