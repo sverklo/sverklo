@@ -1,7 +1,7 @@
 {
   "name": "sverklo",
   "mcpName": "io.github.sverklo/sverklo",
-  "version": "0.29.1",
+  "version": "0.29.2",
   "description": "Local-first repo-memory MCP for coding agents. Best for relationship-heavy edits: symbols, callers, dependencies, diff review, and git-pinned decisions before code changes. Start with a no-write proof receipt; use grep/ripgrep for exact strings. MIT; no API keys or code upload.",
   "type": "module",
   "bin": {
