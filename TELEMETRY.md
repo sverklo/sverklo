@@ -16,7 +16,7 @@ This is the user-facing summary. The full design rationale lives in [`TELEMETRY_
 | Where does it go? | A Cloudflare Worker we own at `t.sverklo.com`. Source in this repo. |
 | How long is it kept? | 90 days. Auto-deleted after that. |
 | Can I see what it sends? | Yes — `sverklo telemetry log` tails a local mirror of every event. |
-| Will my code be sent anywhere? | **No.** That's the whole point. |
+| Will telemetry send my code? | **No.** An explicitly configured remote embedding provider may receive code chunks, but telemetry never does. |
 
 ---
 

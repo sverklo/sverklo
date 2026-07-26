@@ -6,11 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
-## [Unreleased]
+## [0.29.3] — 2026-07-26
 
 ### Changed
 
-- **Proof receipts now ask for external evidence first.** `sverklo prove --no-write --guided --markdown` now ends with a proof-thread link, outcome labels, and a paste-ready feedback template for receipts, corrections, grep-better cases, or setup friction. README/FIRST_RUN/init copy now use the same canonical no-write guided markdown command.
+- **Proof feedback is optional and privacy-aware.** `sverklo prove --no-write --guided --markdown` now asks people to reply in the channel that invited them, treats the proof thread as an opt-in fallback, and labels feedback as `external-receipt`, `correction`, `grep-better`, or `setup-friction`. It no longer asks for stars and warns against posting private identifiers.
+- **Privacy copy now reflects provider configuration.** The bundled ONNX embedding provider runs locally by default; explicitly configured remote embedding providers receive the code chunks they embed. Telemetry remains opt-in and excludes code, queries, file paths, symbol names, and memory contents.
 - **Model cache override.** `SVERKLO_MODEL_DIR` can point Sverklo at an existing `model.onnx` + `tokenizer.json` directory, which keeps CLI integration tests and packaged/offline environments from attempting fresh model downloads when the files are already available elsewhere.
 
 ---

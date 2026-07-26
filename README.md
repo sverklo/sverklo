@@ -10,7 +10,7 @@
 
 Sverklo gives coding agents repo memory: symbols, callers, diffs, blast radius, and git-pinned decisions before they edit. It is an open-source local-first MCP server for Claude Code, Cursor, Windsurf, Codex CLI, and any MCP-speaking coding agent.
 
-**Local-first** ◦ MIT ◦ no API keys ◦ no code upload ◦ first run downloads a local ONNX model
+**Local-first** ◦ MIT ◦ bundled local embeddings by default ◦ remote embeddings only when explicitly configured ◦ telemetry opt-in and off by default
 
 **Use Sverklo when** your agent needs relationships before editing: callers, dependencies, tests, diff risk, or prior repo decisions.
 
@@ -25,7 +25,7 @@ sverklo init --dry-run
 npm install -g sverklo && sverklo init
 ```
 
-`sverklo prove --no-write --guided --markdown` shows central files, a real symbol with callers, why that proof was selected, the exact prompt to paste into your agent, and a small feedback template before any MCP config or instruction files are written. It may cache the local model/index under `~/.sverklo`, but it does not mutate your project. `sverklo init --dry-run` then previews the files `init` would touch; `sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. Your code stays on your machine.
+`sverklo prove --no-write --guided --markdown` shows central files, a real symbol with callers, why that proof was selected, the exact prompt to paste into your agent, and a small feedback template before any MCP config or instruction files are written. It may cache the local model/index under `~/.sverklo`, but it does not mutate your project. `sverklo init --dry-run` then previews the files `init` would touch; `sverklo init` writes the MCP config for your agent, appends local instructions to `AGENTS.md` or `CLAUDE.md`, and runs `sverklo doctor` to verify the handshake. With the bundled provider, code indexing and embeddings stay on your machine. An explicitly configured remote embedding provider receives the code chunks it embeds.
 
 Need something shareable? Run `sverklo prove --no-write --guided --markdown` to print a GitHub/Discord-ready proof receipt from your repo, then [post it in the proof thread](https://github.com/sverklo/sverklo/discussions/79).
 
@@ -79,7 +79,7 @@ Sverklo drills into your repo before the agent does — symbol graph, blast radi
 <tr>
 <td align="center"><b>37</b><br/>MCP tools your agent uses</td>
 <td align="center"><b>&lt; 1 s</b><br/>incremental refresh after each edit</td>
-<td align="center"><b>0 bytes</b><br/>of your code leave the machine</td>
+<td align="center"><b>local-first</b><br/>bundled embeddings stay on-device by default</td>
 </tr>
 </table>
 
@@ -90,9 +90,9 @@ sverklo init --dry-run
 npm install -g sverklo && sverklo init
 ```
 
-That's it. `sverklo prove --no-write --guided` gives you the first useful repo-memory proof from your own codebase before project config changes; `sverklo init --dry-run` previews every setup target; `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to `AGENTS.md` if present (otherwise `CLAUDE.md`), and runs `sverklo doctor` to verify the setup. `sverklo prove --markdown` makes that proof shareable in [the public proof thread](https://github.com/sverklo/sverklo/discussions/79). Works on macOS, Linux, and Windows. **No API keys. No cloud. Telemetry off by default.**
+That's it. `sverklo prove --no-write --guided` gives you the first useful repo-memory proof from your own codebase before project config changes; `sverklo init --dry-run` previews every setup target; `sverklo init` auto-detects your installed AI coding agent (Claude Code, Cursor, Windsurf, Zed), writes the right MCP config, appends instructions to `AGENTS.md` if present (otherwise `CLAUDE.md`), and runs `sverklo doctor` to verify the setup. `sverklo prove --markdown` makes that proof shareable in [the public proof thread](https://github.com/sverklo/sverklo/discussions/79). Works on macOS, Linux, and Windows. **Bundled local embeddings by default. Remote embeddings only when explicitly configured. Telemetry opt-in and off by default.**
 
-> The embedding model (`all-MiniLM-L6-v2` ONNX, ~86 MB) is downloaded from HuggingFace on first use into `~/.sverklo/models/` and cached forever — every subsequent run is fully offline.
+> The bundled embedding model (`all-MiniLM-L6-v2` ONNX, ~86 MB) is downloaded from HuggingFace on first use into `~/.sverklo/models/`. After that download, the bundled embedding provider can run from the cached local model. An explicitly configured remote provider uses its remote endpoint instead.
 
 **Want proof before installing?** Browse the [/report leaderboard](https://sverklo.com/report) — Sverklo audits of 47 popular OSS repos (express, react-hook-form, vite, lodash, prisma, …) with grade cards for dead code, circular deps, coupling, and security.
 
@@ -314,7 +314,7 @@ Claude generates code from training-data patterns, not your repo. Without a symb
 
 ### Is there a local-first MCP server for codebase memory?
 
-Yes — sverklo. `remember` and `recall` ship a bi-temporal memory layer: every memory is pinned to the git SHA it was authored on, and `valid_until_sha` + `superseded_by` preserve a timeline of supersessions instead of overwriting. Recall is hybrid (FTS5 + cosine over an ONNX embedding) and runs entirely in embedded SQLite. No cloud, no API keys, no external vector database — unlike most "memory MCP" projects which require Zilliz, Milvus, or a managed Postgres+pgvector.
+Yes — sverklo. `remember` and `recall` ship a bi-temporal memory layer: every memory is pinned to the git SHA it was authored on, and `valid_until_sha` + `superseded_by` preserve a timeline of supersessions instead of overwriting. Recall defaults to hybrid FTS5 + cosine over the bundled ONNX embedding model, with its index stored in embedded SQLite. No external vector database is required. An explicitly configured remote embedding provider receives the text it embeds.
 
 ### Is there an open-source alternative to Sourcegraph Cody I can run locally?
 
@@ -322,7 +322,7 @@ Sverklo is the open-source local alternative to Sourcegraph Cody for codebase Q&
 
 ### Where does my code go when I use sverklo?
 
-Nowhere. Sverklo runs entirely on your machine. Indexing, search, embeddings, audits, and PR review all execute locally with embedded SQLite plus a local ONNX embedding model. The model itself is downloaded from HuggingFace on first run (~86 MB), cached in `~/.sverklo/models/`, and never touched again. Telemetry is opt-in and off by default — sverklo makes zero network calls unless you explicitly run `sverklo telemetry enable`.
+By default, Sverklo indexes locally with embedded SQLite and the bundled ONNX embedding model. The model is downloaded from HuggingFace on first use (~86 MB), then cached in `~/.sverklo/models/`. If you explicitly select a remote embedding provider, Sverklo sends that provider the code chunks it needs to embed; the index remains local. Telemetry is separate, opt-in, and off by default. Its fixed event schema excludes code, queries, file paths, symbol names, and memory contents.
 
 ### Does sverklo work with Cursor's @codebase or Cursor Tab?
 
@@ -396,7 +396,7 @@ Your codebase                                              Agent query
 ```
 
 1. **Parse** your codebase into functions, classes, types (TS, JS, Vue, Python, Go, Rust, Java, C, C++, Ruby, PHP, C#)
-2. **Embed** code using all-MiniLM-L6-v2 ONNX (384d, fully local) — or any Ollama model via config
+2. **Embed** code using all-MiniLM-L6-v2 ONNX (384d, bundled and local by default), a local Ollama model, or an explicitly selected remote provider that receives the code chunks it embeds
 3. **Graph** dependencies and compute PageRank (structurally important files rank higher)
 4. **Retrieve** via channelized RRF — per-channel rank fusion with channel-specific weights, the architectural choice that closes the private-helper-function recall gap
 5. **Remember** decisions across sessions, pinned to git SHAs (bi-temporal memory)
@@ -547,7 +547,7 @@ Inside Claude Code:
 
 Installs the bundled Skill (procedural instructions teaching Claude when to reach for `search`, `impact`, `review_diff`, `remember`, etc.) without touching your global skills directory.
 
-> **First run note:** The ONNX embedding model (~90 MB) downloads automatically on first launch. Takes ~30 seconds, then every subsequent run is offline-capable.
+> **First run note:** The bundled ONNX embedding model (~90 MB) downloads automatically on first launch. It takes ~30 seconds; after that, the bundled embedding provider can run from the cached local model.
 
 ---
 
@@ -615,13 +615,13 @@ The trailing `|| true` keeps the hook from blocking edits when sverklo isn't ins
 
 ## Telemetry
 
-**Off by default.** Sverklo makes zero network calls unless you explicitly run `sverklo telemetry enable`. If you opt in, we collect only anonymous usage metrics (no code, no queries, no file paths). Full schema and implementation details in [`TELEMETRY.md`](./TELEMETRY.md).
+**Opt-in and off by default.** When telemetry is disabled, it sends nothing. If you opt in, it sends only anonymous usage metrics (no code, queries, file paths, symbol names, or memory contents). Telemetry is separate from the bundled model's first-use download and any explicitly configured remote embedding provider. Full schema and implementation details are in [`TELEMETRY.md`](./TELEMETRY.md).
 
 ---
 
 ## Open Source, Open Core
 
-The full MCP server is **free and open source** (MIT). All 37 tools, no limits, no telemetry, no "free tier" — that's not where the line is.
+The full MCP server is **free and open source** (MIT). All 37 tools, no limits, telemetry opt-in and off by default, no "free tier" — that's not where the line is.
 
 **Sverklo Pro** (later this year) adds smart auto-capture of decisions, cross-project pattern learning, and larger embedding models. **Sverklo Team** adds shared team memory and on-prem deployment.
 

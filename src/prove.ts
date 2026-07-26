@@ -115,7 +115,6 @@ const SYMBOL_DENY = new Set([
   "write",
 ]);
 
-const GITHUB_REPO_URL = "https://github.com/sverklo/sverklo";
 const PROOF_THREAD_URL = "https://github.com/sverklo/sverklo/discussions/79";
 
 function isNoisePath(path: string): boolean {
@@ -251,13 +250,19 @@ function proofSelectionText(summary: ProveSummary): string {
 
 function appendTextFeedbackFooter(lines: string[], summary: ProveSummary): void {
   lines.push("");
-  lines.push("Share the outcome:");
+  lines.push("Feedback is optional. You can keep this receipt private.");
+  lines.push(
+    "If you choose to share feedback after an invitation, reply in the feedback channel named in that invitation.",
+  );
+  lines.push("If no feedback channel was named and you choose to share publicly, use the proof thread:");
   lines.push(`  ${PROOF_THREAD_URL}`);
-  lines.push("  Pick one label: receipt, correction, grep-better, or setup friction.");
-  lines.push("  Paste the central files, selected symbol, and one sentence on what matched or failed.");
-  lines.push("");
-  lines.push("If this exposed useful repo context, starring Sverklo helps other agent-heavy teams find it:");
-  lines.push(`  ${GITHUB_REPO_URL}`);
+  lines.push(
+    "  Use a public repo, or redact private file, symbol, caller, and repo identifiers before posting.",
+  );
+  lines.push(
+    "  Pick one label: external-receipt, correction, grep-better, or setup-friction.",
+  );
+  lines.push("  Share only the redacted proof details and one sentence on what matched or failed.");
   if (summary.noWrite) {
     lines.push("");
     lines.push("To wire this repo into your agent after the proof looks useful:");
@@ -267,24 +272,32 @@ function appendTextFeedbackFooter(lines: string[], summary: ProveSummary): void 
 }
 
 function appendMarkdownFeedbackFooter(lines: string[]): void {
-  lines.push("## Share the outcome");
+  lines.push("## Optional feedback");
   lines.push("");
-  lines.push("Please post one useful result in the proof thread:");
+  lines.push("You can keep this receipt private.");
+  lines.push("");
+  lines.push(
+    "If you choose to share feedback after an invitation, reply in the feedback channel named in that invitation.",
+  );
+  lines.push("");
+  lines.push("If no feedback channel was named and you choose to share publicly, use the proof thread:");
   lines.push("");
   lines.push(PROOF_THREAD_URL);
   lines.push("");
-  lines.push("Use one label: `receipt`, `correction`, `grep-better`, or `setup friction`.");
+  lines.push(
+    "Use a public repo, or redact private file, symbol, caller, and repo identifiers before posting.",
+  );
+  lines.push("");
+  lines.push(
+    "Use one label: `external-receipt`, `correction`, `grep-better`, or `setup-friction`.",
+  );
   lines.push("");
   lines.push("```markdown");
-  lines.push("Outcome: receipt | correction | grep-better | setup friction");
-  lines.push("Repo shape:");
-  lines.push("Selected files/symbol:");
+  lines.push("Outcome: external-receipt | correction | grep-better | setup-friction");
+  lines.push("Repo shape (redact if private):");
+  lines.push("Selected files/symbol (redact if private):");
   lines.push("What matched or failed:");
   lines.push("```");
-  lines.push("");
-  lines.push("If this exposed useful repo context, starring Sverklo helps other agent-heavy teams find it:");
-  lines.push("");
-  lines.push(GITHUB_REPO_URL);
 }
 
 function renderTextReport(summary: ProveSummary): string {
