@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.29.4] — 2026-08-11
+
+### Fixed
+
+- **Proof receipts now avoid misleading caller evidence.** `sverklo prove` excludes playground files, skips ambiguous symbol definitions, and only selects structurally distinctive names for its name-based caller graph. This prevents example configuration and generic calls from being presented as proof of a specific production symbol.
+
+---
+
 ## [0.29.3] — 2026-07-26
 
 ### Changed
