@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { extractSymbolTokens, formatInvestigate } from "./investigate.js";
+import { extractSymbolTokens, formatInvestigate, runInvestigate } from "./investigate.js";
 import type { InvestigateResult } from "./investigate.js";
+import type { CodeChunk, FileRecord } from "../types/index.js";
 
 describe("extractSymbolTokens", () => {
   it("extracts short quoted identifiers and drops stopwords", () => {
@@ -78,5 +79,43 @@ describe("formatInvestigate", () => {
     };
     const out = formatInvestigate(empty);
     expect(out).toContain("No candidates");
+  });
+});
+
+describe("runInvestigate — path-definition selection", () => {
+  it("keeps later flow functions from an acronym-matched file", async () => {
+    const file: FileRecord = {
+      id: 1, path: "src/server/hmr.ts", language: "typescript", hash: "h",
+      last_modified: 0, size_bytes: 100, pagerank: 0, indexed_at: 0,
+    };
+    const names = [
+      "HmrOptions", "HmrContext", "HotUpdateOptions", "HotChannel", "HmrPayload",
+      "handleHMRUpdate", "updateModules", "propagateUpdate", "normalizeHmrUrl",
+      "lexAcceptedHmrDeps", "createChannel",
+    ];
+    const chunks: CodeChunk[] = names.map((name, index) => ({
+      id: index + 1, file_id: file.id, type: "function", name, signature: null,
+      start_line: (index + 1) * 10, end_line: (index + 1) * 10 + 4,
+      content: name, description: null, token_count: 5,
+    }));
+    const byId = new Map(chunks.map((chunk) => [chunk.id, chunk]));
+    const indexer = {
+      fileStore: { getAll: () => [file] },
+      chunkStore: {
+        searchFts: () => [], getByName: () => [], getByFile: () => chunks,
+        getById: (id: number) => byId.get(id),
+      },
+      symbolRefStore: { getImpact: () => [] },
+      embed: async () => [],
+    } as never;
+
+    const result = await runInvestigate(indexer, {
+      query: "How does HMR change a module after a reload?",
+    });
+
+    expect(result.hits.map((hit) => hit.chunk.name)).toEqual(expect.arrayContaining([
+      "handleHMRUpdate", "updateModules", "propagateUpdate",
+    ]));
+    expect(result.hits[0]?.chunk.name).toBe("handleHMRUpdate");
   });
 });

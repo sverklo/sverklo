@@ -527,8 +527,10 @@ function runDefinitionsByPathTokens(
 ): number[] {
   const repoName = guessRepoName(fileCache);
   const originalsRaw = extractSymbolTokens(query)
+    // Three-letter acronyms such as HMR are high-signal path tokens even
+    // though ordinary three-letter words are too broad for this lane.
+    .filter((t) => t.length >= 4 || /^[A-Z]{3,}$/.test(t))
     .map((t) => t.toLowerCase())
-    .filter((t) => t.length >= 4)
     .filter((t) => t !== repoName);
   // Drop trivial inflections so "tests" → "test", "validates" → "validate".
   // Conservative: only -s and -es endings; doesn't try to handle irregulars.
@@ -590,12 +592,12 @@ function runDefinitionsByPathTokens(
   const matched: FileRecord[] = allCandidates.slice(0, 12).map((c) => c.file);
   const seenFiles = new Set<number>(matched.map((f) => f.id));
 
-  // Emit defs file-by-file in matched order (specificity-sorted), with a
-  // per-file cap so a single noisy file with many helpers can't push a
-  // later file's defs past the eval cutoff. Cap chosen to keep a 7-symbol
-  // file like compact.ts contributing every public def, while limiting a
-  // 30-symbol mega-file to its top fraction.
-  const PER_FILE_CAP = 8;
+  // Emit defs file-by-file in matched order (specificity-sorted). A path
+  // match identifies the file, but source order alone would make leading
+  // type declarations hide later flow functions. Prefer definition names
+  // that echo the query vocabulary, then preserve source order as a stable
+  // tiebreaker. The cap still keeps a noisy file from owning the lane.
+  const PER_FILE_CAP = 16;
   const out: number[] = [];
   const seen = new Set<number>();
   for (const f of matched) {
@@ -610,15 +612,46 @@ function runDefinitionsByPathTokens(
           c.type === "interface" ||
           c.type === "module")
       )
-      .sort((a, b) => a.start_line - b.start_line)
-      .slice(0, PER_FILE_CAP);
-    for (const c of defs) {
+    const selected = rankPathDefinitions(defs, originalsSet, synSet).slice(0, PER_FILE_CAP);
+    for (const c of selected) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       out.push(c.id);
     }
   }
   return out;
+}
+
+function rankPathDefinitions(
+  definitions: CodeChunk[],
+  originalTokens: Set<string>,
+  synonymTokens: Set<string>
+): CodeChunk[] {
+  return definitions.slice().sort((a, b) => {
+    const scoreDelta = pathDefinitionScore(b.name, originalTokens, synonymTokens) -
+      pathDefinitionScore(a.name, originalTokens, synonymTokens);
+    return scoreDelta || a.start_line - b.start_line;
+  });
+}
+
+function pathDefinitionScore(
+  name: string | null,
+  originalTokens: Set<string>,
+  synonymTokens: Set<string>
+): number {
+  if (!name) return 0;
+  const words = name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .map((word) => word.toLowerCase());
+
+  let score = 0;
+  for (const word of new Set(words)) {
+    if (originalTokens.has(word)) score += 100;
+    else if (synonymTokens.has(word)) score += 10;
+  }
+  return score;
 }
 
 function basename(path: string): string {
@@ -649,11 +682,11 @@ function runRefs(indexer: IndexFiles & IndexCode & IndexGraph, tokens: string[],
 }
 
 // Per-channel weight applied on top of the standard 1/(K+rank+1) RRF score.
-// Path is 1.5× because path-token matches are deliberately precision-skewed
+// Path is 2× because path-token matches are deliberately precision-skewed
 // (they only fire when the question's vocabulary aligns with file naming),
-// so a hit there is a strong signal that vector/FTS may have missed.
+// and path-selected definitions also preserve the user's named mechanism.
 const CHANNEL_WEIGHTS: Partial<Record<RetrievalMethod, number>> = {
-  path: 1.5,
+  path: 2,
 };
 
 function accumulate(
