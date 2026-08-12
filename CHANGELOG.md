@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 
 ---
 
+## [0.29.5] — 2026-08-12
+
+### Fixed
+
+- **Investigation path matches now surface the relevant flow, not only leading declarations.** Three-letter mechanism acronyms such as `HMR` can select a matching source file; its definitions are then ranked by the question’s vocabulary before source order. This keeps later flow functions visible in large matched files and improves precision for mechanism-tracing questions.
+
+---
+
 ## [0.29.4] — 2026-08-11
 
 ### Fixed
