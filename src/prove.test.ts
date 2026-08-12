@@ -39,6 +39,7 @@ describe("buildProveReport", () => {
       file(3, "src/routes/session.ts", 0.6),
       file(4, "src/auth/service.test.ts", 0.1),
       file(5, "benchmark/auth.ts", 1.0),
+      file(6, "playground/vite.config.ts", 1.0),
     ];
     const definition = {
       ...chunk(1, 1, "validateToken"),
@@ -55,14 +56,21 @@ describe("buildProveReport", () => {
       },
       chunkStore: {
         count: () => 12,
-        getByNameWithFile: () => [definition],
+        getByNameWithFile: (name) =>
+          name === "resolve"
+            ? [{ ...definition, name: "resolve", signature: "resolve()" }]
+            : [definition],
         getAllWithFile: () => [definition],
       },
       symbolRefStore: {
         count: () => 42,
-        getGodNodeStats: () => [
-          { target_name: "validateToken", ref_count: 7, distinct_source_files: 3 },
-        ],
+        getGodNodeStats: (excluded) => {
+          expect(excluded).toEqual(new Set([4, 5, 6]));
+          return [
+            { target_name: "resolve", ref_count: 20, distinct_source_files: 10 },
+            { target_name: "validateToken", ref_count: 7, distinct_source_files: 3 },
+          ];
+        },
         getImpact: () => [
           {
             chunk_id: 2,
@@ -81,6 +89,15 @@ describe("buildProveReport", () => {
             start_line: 22,
             end_line: 30,
             ref_line: 25,
+          },
+          {
+            chunk_id: 6,
+            chunk_name: "vite.config",
+            chunk_type: "block",
+            file_path: "playground/vite.config.ts",
+            start_line: 1,
+            end_line: 5,
+            ref_line: 2,
           },
         ],
       },
@@ -110,6 +127,7 @@ describe("buildProveReport", () => {
     expect(report).not.toMatch(/\bstar(?:ring)?\b/i);
     expect(report).not.toContain("service.test.ts");
     expect(report).not.toContain("benchmark/auth.ts");
+    expect(report).not.toContain("playground/vite.config.ts");
   });
 
   it("can render a shareable markdown receipt", () => {
@@ -186,6 +204,71 @@ describe("buildProveReport", () => {
       "Outcome: external-receipt | correction | grep-better | setup-friction",
     );
     expect(report).not.toMatch(/\bstar(?:ring)?\b/i);
+  });
+
+  it("skips caller graphs with ambiguous symbol definitions", () => {
+    const files = [
+      file(1, "src/first.ts", 0.9),
+      file(2, "src/second.ts", 0.8),
+      file(3, "src/config.ts", 0.7),
+      file(4, "src/consumer.ts", 0.6),
+    ];
+    const ambiguousDefinitions = [
+      { ...chunk(1, 1, "resolveConfig"), filePath: "src/first.ts", pagerank: 0.9, fileLanguage: "typescript" },
+      { ...chunk(2, 2, "resolveConfig"), filePath: "src/second.ts", pagerank: 0.8, fileLanguage: "typescript" },
+    ];
+    const uniqueDefinition = {
+      ...chunk(3, 3, "validateToken"),
+      filePath: "src/config.ts",
+      pagerank: 0.7,
+      fileLanguage: "typescript",
+    };
+
+    const indexer: ProveIndex = {
+      fileStore: {
+        getAll: () => files,
+        count: () => files.length,
+        getLanguages: () => ["typescript"],
+      },
+      chunkStore: {
+        count: () => 4,
+        getByNameWithFile: (name) =>
+          name === "resolveConfig" ? ambiguousDefinitions : [uniqueDefinition],
+        getAllWithFile: () => [uniqueDefinition],
+      },
+      symbolRefStore: {
+        count: () => 4,
+        getGodNodeStats: () => [
+          { target_name: "resolveConfig", ref_count: 12, distinct_source_files: 4 },
+          { target_name: "validateToken", ref_count: 3, distinct_source_files: 2 },
+        ],
+        getImpact: (name) => [
+          {
+            chunk_id: 4,
+            chunk_name: "consumer",
+            chunk_type: "function",
+            file_path: "src/consumer.ts",
+            start_line: 1,
+            end_line: 5,
+            ref_line: 2,
+          },
+          {
+            chunk_id: 3,
+            chunk_name: "config",
+            chunk_type: "function",
+            file_path: "src/config.ts",
+            start_line: 1,
+            end_line: 5,
+            ref_line: 2,
+          },
+        ],
+      },
+    };
+
+    const report = buildProveReport(indexer, "/tmp/product");
+
+    expect(report).toContain("validateToken");
+    expect(report).not.toContain("Use sverklo impact on resolveConfig");
   });
 
   it("explains guided no-write trial mode", () => {

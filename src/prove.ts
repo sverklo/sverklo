@@ -73,6 +73,7 @@ const NOISE_SEGMENTS = [
   "benchmark/",
   "benchmarks/",
   "benchmark/.cache/",
+  "playground/",
 ];
 
 const TEST_RE = /(^|\/)(test|tests|__tests__|spec|fixtures)(\/|$)|\.(test|spec)\.[cm]?[jt]sx?$/i;
@@ -130,6 +131,13 @@ function isGoodSymbol(name: string | null): name is string {
   return /^[A-Za-z_$][A-Za-z0-9_$.:#-]*$/.test(name);
 }
 
+function isProofSafeSymbol(name: string | null): name is string {
+  // The reference graph is name-based. Restrict public proof candidates to
+  // structurally distinctive names so common calls such as `resolve()` do not
+  // get presented as callers of an unrelated local definition.
+  return isGoodSymbol(name) && /[A-Z_]/.test(name);
+}
+
 function formatNumber(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
@@ -152,7 +160,7 @@ function chooseCandidate(indexer: ProveIndex): ProofCandidate | null {
 
   const stats = indexer.symbolRefStore
     .getGodNodeStats(excluded)
-    .filter((row) => isGoodSymbol(row.target_name))
+    .filter((row) => isProofSafeSymbol(row.target_name))
     .sort(
       (a, b) =>
         b.distinct_source_files - a.distinct_source_files ||
@@ -169,7 +177,10 @@ function chooseCandidate(indexer: ProveIndex): ProofCandidate | null {
           !isNoisePath(chunk.filePath) &&
           ["function", "class", "method", "interface", "type"].includes(chunk.type),
       );
-    if (definitions.length === 0) continue;
+    // References are resolved by name, not type information. A duplicated
+    // definition would make the caller list ambiguous, so it is not safe for
+    // a proof receipt to present one definition as the graph's target.
+    if (definitions.length !== 1) continue;
 
     const refs = indexer.symbolRefStore
       .getImpact(row.target_name, 30)
